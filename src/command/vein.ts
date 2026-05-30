@@ -32,6 +32,7 @@ import type { ModelProvider, ProjectConfig } from '../config/type'
 import * as store from '../store'
 import { mdToTree } from '../tree/markdown_split'
 import { md5 } from '../utils/common'
+import { segmentText } from '../utils/segment'
 
 const log = logger.child({ module: 'vein' })
 
@@ -326,11 +327,19 @@ async function importMarkdownFile(
 
         s.message(`${prefix}Writing to database...`)
         const nodeCount = await store.insertTree([tree], docId)
-        await store.insertDoc(docId, {
-            title: docName,
-            sourcePath: relativePath,
-            nodeCount,
-        })
+        const rootSummary = tree.value.summary
+        const bodySummary = rootSummary
+            ? await segmentText(rootSummary)
+            : undefined
+        await store.insertDoc(
+            docId,
+            {
+                title: docName,
+                sourcePath: relativePath,
+                nodeCount,
+            },
+            bodySummary
+        )
 
         if (nodeCount <= 1) {
             note(
@@ -338,7 +347,6 @@ async function importMarkdownFile(
             )
         }
 
-        const rootSummary = tree.value.summary
         if (rootSummary) {
             s.message(`${prefix}Extracting tags...`)
             let tagCount = 0
@@ -404,11 +412,17 @@ async function importMarkdownFile(
     const insertSpinner = spinner()
     insertSpinner.start('Saving to database...')
     const nodeCount = await store.insertTree([tree], docId)
-    await store.insertDoc(docId, {
-        title: docName,
-        sourcePath: relativePath,
-        nodeCount,
-    })
+    const rootSummary = tree.value.summary
+    const bodySummary = rootSummary ? await segmentText(rootSummary) : undefined
+    await store.insertDoc(
+        docId,
+        {
+            title: docName,
+            sourcePath: relativePath,
+            nodeCount,
+        },
+        bodySummary
+    )
     insertSpinner.stop('Saved to database')
 
     if (nodeCount <= 1) {
@@ -417,7 +431,6 @@ async function importMarkdownFile(
         )
     }
 
-    const rootSummary = tree.value.summary
     if (rootSummary) {
         const tagSpinner = spinner()
         tagSpinner.start('Tagging: fetching categories...')

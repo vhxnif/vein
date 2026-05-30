@@ -113,5 +113,10 @@ export const configSchema = {
                 },
             },
         },
+        sqliteLibPath: {
+            type: 'string',
+            description:
+                'Path to a custom libsqlite3 shared library for loading extensions (sqlite-vec). Set via env var VEIN_SQLITE_LIB_PATH for the global default, or configure per-project here. Example (Homebrew): /opt/homebrew/opt/sqlite/lib/libsqlite3.dylib',
+        },
     },
 }

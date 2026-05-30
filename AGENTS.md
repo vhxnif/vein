@@ -8,7 +8,9 @@ Vein 是一个基于 AI Agent 的文档管理与智能检索系统。核心理�
 
 - **运行时**: Bun
 - **数据库**: SQLite (bun:sqlite), ORM 用 Drizzle (`drizzle-orm/bun-sqlite`)
-- **向量搜索**: sqlite-vec (vec0 虚拟表, 通过 bun:sqlite 的 `loadExtension` 加载)
+- **全文搜索**: FTS5 (BM25 排序)，作为向量查询的补充和兜底
+- **向量搜索**: sqlite-vec (vec0 虚拟表, 通过 Homebrew SQLite 加载，macOS 上 Bun 内置 SQLite 不支持扩展)
+- **中文分词**: LLM 切词 + FTS5 空格分词（写入侧），trigram（标签侧）
 - **AI 模型**: 通过 @earendil-works/pi-ai 调用，可在 .vein/config.json 中配置
 - **Embedding**: OpenRouter embeddings API (`POST /api/v1/embeddings`)
 - **代码风格**: Biome (lint + format)
@@ -20,8 +22,10 @@ library (逻辑概念，无实体表，对应 nodes 子树)
   └── categories (分类)
         └── tags (标签，通过 categorie_tags 关联)
               ├── docs (文档，通过 doc_tags 关联)
-              │     └── nodes (文档内节点，树形结构)
+              │     ├── nodes (文档内节点，树形结构)
+              │     └── docs_fts (FTS5，索引文档摘要，LLM 分词后空格分隔)
               └── tag_embeddings (vec0 虚拟表，向量搜索)
+              │   tags_fts (FTS5 trigram，索引标签名)
 ```
 
 ### 实体关系
@@ -30,8 +34,9 @@ library (逻辑概念，无实体表，对应 nodes 子树)
 nodes ──(tree_closure)──→ nodes (树形层级)
   │
   └──(doc_id)──→ docs ──(doc_tags)──→ tags ──(categorie_tags)──→ categories
-                                          │
-                                          └──(tag_id)──→ tag_embeddings (vec0)
+                      │                    │
+                      ├── docs_fts (FTS5)  └── tags_fts (FTS5)
+                      │                    └── tag_embeddings (vec0)
 ```
 
 ### 表说明
@@ -45,6 +50,8 @@ nodes ──(tree_closure)──→ nodes (树形层级)
 | `categories` | 宏观分类（仿图书馆分类法） |
 | `categorie_tags` | 分类-标签多对多 |
 | `model_cache` | 模型响应缓存（按输入 MD5 + 模型名索引，含命中次数） |
+| `docs_fts` | **FTS5 虚拟表**，索引文档根摘要（rootSummary），写入时经 LLM 分词后用空格连接，查询时同样分词后搜索。支持 BM25 排序 |
+| `tags_fts` | **FTS5 虚拟表（trigram tokenizer）**，索引标签名，查询时用原生中文 n-gram 匹配。作为 vec0 向量搜索的并行兜底 |
 | `tag_embeddings` | **vec0 虚拟表**，存储标签的向量 embedding，支持 KNN 语义搜索。首次 `upsertTagEmbedding` 时懒创建，维度自动匹配当前 embedding 模型 |
 
 ### 预设分类体系
@@ -58,21 +65,24 @@ src/
 ├── ai/           # AI 模型调用与 Agent 工具
 │   ├── base.ts       # 模型调用基础设施（call 函数 + ToolDef 类型 + onToolCall 进度回调）
 │   ├── embedding.ts  # Embedding 生成（OpenRouter API）
-│   ├── librarian.ts  # 文档检索 Librarian Agent（渐进式查找 + 自检审查）
+│   ├── librarian.ts  # 文档检索 Librarian Agent（渐进式查找 + 自检审查，三条检索链路）
 │   ├── reviewer.ts   # 检索结果审查 Agent（无工具纯评估）
 │   ├── tagger.ts     # 标签提取与分类 Agent（支持 tool-calling 模式的向量搜索）
+│   ├── tools.ts      # Agent 工具工厂（searchSimilarTags、searchDocsByKeyword）
 │   └── index.ts      # 统一导出
 ├── command/      # CLI 命令
 │   └── vein.ts       # 主命令 (new / markdown / ask / hs / tags)
 ├── config/       # 配置（logger、项目初始化和配置读写）
 ├── store/        # 数据库层
 │   ├── schema.ts     # Drizzle schema 定义
-│   ├── client.ts     # 数据库连接（bun:sqlite + sqlite-vec 扩展加载）
-│   ├── index.ts      # 树形结构 CRUD + doc/tag/category/embedding 操作
+│   ├── client.ts     # 数据库连接（bun:sqlite + 自动检测 Homebrew SQLite + sqlite-vec）
+│   ├── index.ts      # 树形结构 CRUD + doc/tag/category/embedding/FTS5 操作
 │   ├── migrate.ts    # 迁移执行
 │   └── migrations/   # SQL 迁移文件 + config.schema.json
 ├── tree/         # 树形数据结构与 Markdown 拆分
 └── utils/        # 通用工具
+    ├── common.ts     # uuid, md5
+    └── segment.ts    # LLM 中文分词（将中文切词后用空格连接，适配 FTS5 unicode61 tokenizer）
 ```
 
 ## Tagger：标签提取与向量去重
@@ -92,8 +102,10 @@ Tagger 负责从文档摘要中提取标签并归类。**核心优化**：三管
 当 `.vein/config.json` 中配置了 `embedding` 时，Tagger 启用 **tool-calling 模式**：
 
 1. LLM 在生成 tag 前调用 `searchSimilarTags(name, categoryId)` 工具
-2. 工具生成 query tag 的 embedding（OpenRouter API）→ 查询 `tag_embeddings` vec0 表
-3. 返回 cosine similarity > 0.8 的已有 tag
+2. 工具并行执行两路查询：
+   - **vec0 向量搜索**：生成 query tag 的 embedding（OpenRouter API）→ 查询 `tag_embeddings` vec0 表
+   - **FTS5 关键词搜索**：用 trigram n-gram 匹配 `tags_fts` 表
+3. 两路结果合并去重（按 tagId），取最高相似度，降序返回
 4. LLM 判断是否复用已有 tag
 
 未配置 `embedding` 时退化为纯 prompt 模式（仅 A1+A2）。
@@ -110,7 +122,16 @@ Tagger 负责从文档摘要中提取标签并归类。**核心优化**：三管
 
 ## 查询路径（Librarian 渐进式检索）
 
-Librarian Agent 按以下链路逐层下钻，每步缩小范围：
+Librarian Agent 按以下三条链路检索，按优先级回退：
+
+### 链路优先级
+
+```
+有 embedding → 链路 2（语义标签）→ 链路 3（关键词）→ 链路 1（分类浏览）
+无 embedding → 链路 3（关键词）→ 链路 1（分类浏览）
+```
+
+### 链路 1：分类渐进式查找
 
 ```
 categories → tags → docs → tree (结构+摘要) → node (全文) → review (自检)
@@ -124,6 +145,28 @@ categories → tags → docs → tree (结构+摘要) → node (全文) → revi
 | 4 | `getDocStructure` | 获取文档树结构（title + summary/prefixSummary） |
 | 5 | `getDocNodeDetails` | 获取节点完整文本 |
 | 6 | `reviewResult` | 自检：审查检索结果是否满足用户需求 |
+
+### 链路 2：语义标签直搜（有 embedding 时优先）
+
+```
+query → searchSimilarTags → docs → tree → node
+```
+
+1. `searchSimilarTags`：融合 vec0 向量相似度 + FTS5 关键词匹配，返回 [{tagId, tag, similarity}]
+2. 选择相似度最高的 3-5 个标签，调用 `getDocsByTag`
+3. 之后同链路 1 步骤 4-5
+
+### 链路 3：分词关键词直搜（无 embedding 时优先）
+
+```
+query → searchDocsByKeyword → getDocStructure → getDocNodeDetails
+```
+
+1. `searchDocsByKeyword`：将查询经 LLM 分词后在 `docs_fts` 中搜索文档摘要，返回 [{docId, metadata, rank}]
+2. 选择 rank 最高的 3-5 个文档，调用 `getDocStructure`
+3. 之后同链路 1 步骤 5
+
+> 此路径直达文档，跳过分类和标签中间层，适合关键词明确的查询。
 
 自检后若 verdict 为 partial/fail，会根据 suggestion 回溯重试（最多 2 次）。
 
@@ -154,7 +197,8 @@ Reviewer 是独立的纯评估 Agent，评估维度：相关性、完整性、�
     "embedding": {
         "provider": "openrouter",
         "model": "openai/text-embedding-3-small"
-    }
+    },
+    "sqliteLibPath": "/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib"
 }
 ```
 
@@ -169,6 +213,7 @@ Reviewer 是独立的纯评估 Agent，评估维度：相关性、完整性、�
 | `summarizer.model` | 摘要专用模型名称（可选，未配置时回退到 `model`） |
 | `embedding.provider` | Embedding provider（可选，目前仅 `openrouter`） |
 | `embedding.model` | Embedding 模型 ID，如 `openai/text-embedding-3-small`、`nvidia/llama-nemotron-embed-vl-1b-v2:free` |
+| `sqliteLibPath` | 自定义 SQLite 库路径（可选，用于加载 sqlite-vec。建议通过环境变量 `VEIN_SQLITE_LIB_PATH` 设置，Homebrew 路径会自动探测） |
 
 > **切换 embedding 模型**：不同模型输出不同维度（OpenAI 1536、NVIDIA 2048、Google 768）。切换前需先 `vein tags clear-embeddings` 删除旧 vec0 表，再 `vein tags backfill-embeddings` 用新模型重建。
 
@@ -212,31 +257,58 @@ vein tags clear-embeddings
 - 迁移 SQL 内联在 `src/store/migrations/sql.ts`，按数组顺序执行，无外部 .sql 文件
 - 迁移全部使用 `IF NOT EXISTS` / `INSERT OR IGNORE`，保证幂等，新增表后执行 `vein new --migrate` 即可
 - `tag_embeddings` vec0 表不在迁移中创建，由 `upsertTagEmbedding` 首次调用时懒创建（自动匹配维度）
+- `docs_fts` 和 `tags_fts` FTS5 表在 `0002_create_fts_tables` 迁移中创建
 - 种子数据放独立迁移条目（如 `0000_seed_categories`）
 - AI Agent 工具遵循 `base.ts` 的 `ToolDef` 模式
 - summarizer 调用自动走 `model_cache` 缓存，按 prompt MD5 + 模型名去重，命中时 hit_count + 1
 - 每次 summarizer 调用有 60s 超时，超时后抛出错误并记录日志
 - 不同 Agent 职责分离：tagger 只做标签提取和分类，librarian 只做渐进式文档检索，reviewer 只做结果审查
-- Librarian 检索时展示实时进度（spinner 文字随步骤变化：Browsing categories... → Checking tags... → ...）
-- Tagger 的 `searchSimilarTags` 工具在 vec0 表不存在时优雅降级（返回空数组），不抛错
+- Librarian 检索时展示实时进度（spinner 文字随步骤变化：Searching documents by keyword... → Browsing categories... → Checking tags... → ...）
+- `searchSimilarTags` 融合 vec0 向量搜索 + FTS5 关键词搜索（tags_fts trigram），并行执行后合并去重
+- Tagger 的 `searchSimilarTags` 工具在 vec0 表不存在时优雅降级（仅 FTS5），不抛错
 - `getTagsWithoutEmbeddings` 在 vec0 表不存在时 fallback 为返回全部 tag
+- 中文分词：`segmentText()` 通过 LLM 调用实现，文档摘要写入前分词，标签名不额外分词（tags_fts 用 trigram 天然支持）
 - 无注释代码风格（除非必要）
 - SQL 不写在命令模块中，统一封装在 store 层
 
 ## 数据库连接
 
-使用 `bun:sqlite` 内置模块（零外部依赖）：
+使用 `bun:sqlite` 内置模块。macOS 上 Bun 内置 SQLite 不支持扩展加载，需要用 Homebrew 的 SQLite 库：
 
 ```typescript
 import { Database } from 'bun:sqlite'
+import { existsSync } from 'node:fs'
 import * as sqliteVec from 'sqlite-vec'
+
+// 自动检测：VEIN_SQLITE_LIB_PATH 环境变量 > Homebrew 路径
+function setupCustomSQLite() {
+    const envPath = process.env.VEIN_SQLITE_LIB_PATH
+    if (envPath && existsSync(envPath)) {
+        Database.setCustomSQLite(envPath)
+        return
+    }
+    const candidates = [
+        '/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib', // Apple Silicon
+        '/usr/local/opt/sqlite/lib/libsqlite3.dylib',     // Intel
+    ]
+    for (const p of candidates) {
+        if (existsSync(p)) {
+            Database.setCustomSQLite(p)
+            return
+        }
+    }
+}
+setupCustomSQLite()  // 必须在 new Database() 之前调用
 
 const db = new Database(dbPath)
 db.exec('PRAGMA foreign_keys = ON')
 sqliteVec.load(db)  // 加载向量扩展
 ```
 
-`getRawClient()` 返回兼容包装器（`{ execute(sql | { sql, args }) → { rows } }`），保持与旧 libsql 代码兼容。`getNativeDb()` 返回原始 `Database` 实例。
+- `setupCustomSQLite()` 在 `client.ts` 和 `migrate.ts` 模块加载时自动调用
+- 配置了 embedding 但 sqlite-vec 无法加载时，`vein new` 会报错提示安装 `brew install sqlite`
+- 未配置 embedding 时，sqlite-vec 加载失败仅 warning，FTS5 正常工作
+- `getRawClient()` 返回兼容包装器（`{ execute(sql | { sql, args }) → { rows } }`），保持与旧 libsql 代码兼容。`getNativeDb()` 返回原始 `Database` 实例
 
 ## 代码规范
 

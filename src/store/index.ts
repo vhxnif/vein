@@ -404,12 +404,26 @@ async function purgeModelCache(
     return 0
 }
 
-async function insertDoc(id: string, metadata: Record<string, unknown>) {
-    return db
+async function insertDoc(
+    id: string,
+    metadata: Record<string, unknown>,
+    summary?: string
+) {
+    const client = getRawClient()
+    const result = db
         .insert(docs)
         .values({ id, metadata: JSON.stringify(metadata) })
         .onConflictDoNothing()
         .returning()
+
+    if (summary) {
+        await client.execute({
+            sql: `INSERT OR REPLACE INTO docs_fts (doc_id, summary) VALUES (?1, ?2)`,
+            args: [id, summary],
+        })
+    }
+
+    return result
 }
 
 async function getDoc(id: string) {
@@ -418,6 +432,11 @@ async function getDoc(id: string) {
 
 async function deleteDoc(id: string) {
     log.info({ docId: id, content: 'Deleting doc' })
+    const client = getRawClient()
+    client.execute({
+        sql: `DELETE FROM docs_fts WHERE doc_id = ?1`,
+        args: [id],
+    })
     return db.delete(docs).where(eq(docs.id, id))
 }
 
@@ -492,6 +511,14 @@ async function upsertTag(
     }
     const id = uuid()
     await db.insert(tags).values({ id, tag: normalized })
+
+    // Index in FTS for keyword search
+    const client = getRawClient()
+    client.execute({
+        sql: `INSERT OR REPLACE INTO tags_fts (tag_id, tag) VALUES (?1, ?2)`,
+        args: [id, normalized],
+    })
+
     return { id, tag: normalized }
 }
 
@@ -509,6 +536,72 @@ async function insertCategorieTag(
         .insert(categorie_tags)
         .values({ id, categorieId, tagId })
         .onConflictDoNothing()
+}
+
+// ── FTS5 keyword search ────────────────────────────────────────────
+
+type KeywordDocResult = {
+    docId: string
+    rank: number
+}
+
+async function searchDocsByKeyword(
+    segmentedQuery: string,
+    k: number
+): Promise<KeywordDocResult[]> {
+    const raw = getRawClient()
+    try {
+        const result = await raw.execute({
+            sql: `
+                SELECT doc_id, rank
+                FROM docs_fts
+                WHERE docs_fts MATCH ?1
+                ORDER BY rank
+                LIMIT ?2
+            `,
+            args: [segmentedQuery, k],
+        })
+        return (result.rows as Array<{ doc_id: string; rank: number }>).map(
+            (r) => ({
+                docId: r.doc_id,
+                rank: r.rank,
+            })
+        )
+    } catch {
+        // docs_fts table may not exist yet
+        return []
+    }
+}
+
+async function searchTagsByKeyword(
+    query: string,
+    k: number
+): Promise<SimilarTag[]> {
+    const raw = getRawClient()
+    try {
+        const result = await raw.execute({
+            sql: `
+                SELECT tf.tag_id, t.tag, tf.rank
+                FROM tags_fts tf
+                JOIN tags t ON t.id = tf.tag_id
+                WHERE tags_fts MATCH ?1
+                ORDER BY rank
+                LIMIT ?2
+            `,
+            args: [query, k],
+        })
+        // Convert BM25 rank to a similarity-like score: 1 / (1 + rank)
+        // Lower BM25 rank = better match, so invert it
+        return (
+            result.rows as Array<{ tag_id: string; tag: string; rank: number }>
+        ).map((r) => ({
+            tagId: r.tag_id,
+            tag: r.tag,
+            similarity: Math.round((1 / (1 + r.rank)) * 10000) / 10000,
+        }))
+    } catch {
+        return []
+    }
 }
 
 // ── embedding (sqlite-vec vec0) ─────────────────────────────────────
@@ -668,7 +761,9 @@ export {
     insertTree,
     purgeModelCache,
     searchAllSimilarTags,
+    searchDocsByKeyword,
     searchSimilarTags,
+    searchTagsByKeyword,
     setCachedResponse,
     upsertTag,
     upsertTagEmbedding,

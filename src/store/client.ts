@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 import * as sqliteVec from 'sqlite-vec'
 import { getProjectRoot } from '../config'
 import * as schema from './schema'
+import './sqlite_setup'
 
 export type { BunSQLiteDatabase }
 
@@ -37,7 +38,11 @@ function createDb(dbPath: string) {
     db.run('PRAGMA foreign_keys = ON')
 
     // Load sqlite-vec extension
-    sqliteVec.load(db)
+    try {
+        sqliteVec.load(db)
+    } catch (_err) {
+        // sqlite-vec not supported — vector similarity will be unavailable
+    }
 
     const raw = createRawWrapper(db)
     const drizzleDb = drizzle(db, { schema })

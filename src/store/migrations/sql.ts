@@ -105,4 +105,19 @@ CREATE INDEX IF NOT EXISTS idx_model_cache_md5_model ON model_cache(md5, model);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_categorie_tags_pair ON categorie_tags(categorie_id, tag_id);
         `.trim(),
     },
+    {
+        name: '0002_create_fts_tables.sql',
+        sql: `
+CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
+    doc_id,
+    summary
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS tags_fts USING fts5(
+    tag_id,
+    tag,
+    tokenize='trigram'
+);
+        `.trim(),
+    },
 ]

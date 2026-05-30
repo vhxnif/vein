@@ -11,7 +11,7 @@ import type { BaseDocNode, TreeNode } from '../tree/type'
 import { type ContextDef, call, type ToolDef } from './base'
 import type { ReviewResult, SourceRef } from './reviewer'
 import { reviewer } from './reviewer'
-import { makeSearchSimilarTagsTool } from './tools'
+import { makeSearchDocsByKeywordTool, makeSearchSimilarTagsTool } from './tools'
 
 const BASE_PROMPT = `你是一个文档检索 Librarian。你的任务是根据用户的查询，按可用的查找链路逐步缩小范围，最终返回最相关的文档片段原文。
 
@@ -74,11 +74,27 @@ const LINK2_PROMPT = `
 
 > 此路径比链路 1 快，适合目标明确的查询。如果 searchSimilarTags 返回空结果或无高质量匹配（similarity < 0.7），回退到链路 1。`
 
+const LINK3_PROMPT = `
+### 链路 3：分词关键词直搜（无 embedding 时优先使用）
+
+路径: query → searchDocsByKeyword → getDocStructure → getDocNodeDetails
+
+1. **searchDocsByKeyword**：用关键词在文档摘要中搜索相关文档。传入 query（搜索关键词）。返回 [{docId, metadata, rank}]
+2. 选择 rank 最高（即 rank 数值最小）的 3-5 个文档，调用 getDocStructure 查看结构
+3. 之后与链路 1 的步骤 5 相同：getDocNodeDetails 获取全文
+
+> 此路径直达文档，跳过分类和标签中间层，适合关键词明确的查询。如果 searchDocsByKeyword 返回空结果，回退到链路 1。
+
+## 查找优先级
+
+- 有 searchSimilarTags（语义标签搜索）时：优先尝试链路 2（语义标签）→ 无结果时回退到链路 3（关键词）→ 仍无结果时回退到链路 1（分类浏览）
+- 无 searchSimilarTags 时：优先尝试链路 3（关键词）→ 无结果时回退到链路 1（分类浏览）`
+
 function buildPrompt(hasEmbedding: boolean): string {
-    if (!hasEmbedding) return BASE_PROMPT
+    const extra = hasEmbedding ? `${LINK2_PROMPT}${LINK3_PROMPT}` : LINK3_PROMPT
     return BASE_PROMPT.replace(
         '> 后续新增查找链路时，在上方「可用查找链路」区域追加即可。',
-        `> 后续新增查找链路时，在上方「可用查找链路」区域追加即可。${LINK2_PROMPT}`
+        `> 后续新增查找链路时，在上方「可用查找链路」区域追加即可。${extra}`
     )
 }
 
@@ -226,6 +242,8 @@ function buildTools(embeddingProvider?: ModelProvider): ToolDef[] {
         base.unshift(makeSearchSimilarTagsTool(embeddingProvider))
     }
 
+    base.unshift(makeSearchDocsByKeywordTool())
+
     return base
 }
 
@@ -295,6 +313,7 @@ function extractTrace(messages: ContextDef['messages']): TraceStep[] {
 }
 
 const stepLabels: Record<string, string> = {
+    searchDocsByKeyword: 'Searching documents by keyword...',
     searchSimilarTags: 'Searching similar tags...',
     getCategories: 'Browsing categories...',
     getTagsByCategory: 'Checking tags...',
