@@ -42,6 +42,10 @@ export function setModelProvider(provider: ModelProvider) {
     _model = null
 }
 
+export function getModelKey(): string {
+    return `${modelProvider.provider}/${modelProvider.model}`
+}
+
 async function call(context: ContextDef) {
     log.info({ sysPrompt: context.systemPrompt })
     log.info({ tools: context.tools })
