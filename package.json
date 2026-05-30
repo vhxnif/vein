@@ -1,0 +1,31 @@
+{
+  "name": "vein",
+  "module": "index.ts",
+  "type": "module",
+  "bin": {
+    "vein": "build/vein.js"
+  },
+  "scripts": {
+    "build": "bun build ./src/command/*.ts --outdir ./build --target bun --minify --sourcemap=linked --entry-naming [name].[ext] --external clipboardy",
+    "check": "tsc --noEmit",
+    "lint": "bunx --bun @biomejs/biome lint",
+    "lint:fix": "bunx --bun @biomejs/biome lint --write ./src",
+    "format": "bunx --bun @biomejs/biome check --write ./src"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "drizzle-kit": "^0.31.10"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@clack/prompts": "^1.4.0",
+    "@earendil-works/pi-ai": "^0.74.1",
+    "commander": "^14.0.3",
+    "drizzle-orm": "^0.45.2",
+    "pino": "^10.3.1",
+    "sqlite-vec": "^0.1.9"
+  }
+}
