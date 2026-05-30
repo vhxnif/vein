@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
