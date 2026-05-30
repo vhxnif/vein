@@ -608,6 +608,18 @@ async function searchTagsByKeyword(
 
 let _embeddingDim = 0
 
+async function hasTagEmbedding(tagId: string): Promise<boolean> {
+    try {
+        const result = await getRawClient().execute({
+            sql: `SELECT 1 FROM tag_embeddings WHERE tag_id = ?1 LIMIT 1`,
+            args: [tagId],
+        })
+        return (result.rows as unknown[]).length > 0
+    } catch {
+        return false
+    }
+}
+
 async function upsertTagEmbedding(
     tagId: string,
     embedding: number[]
@@ -625,8 +637,19 @@ async function upsertTagEmbedding(
         })
     }
 
+    // Skip if already exists
+    try {
+        const existing = await raw.execute({
+            sql: `SELECT 1 FROM tag_embeddings WHERE tag_id = ?1 LIMIT 1`,
+            args: [tagId],
+        })
+        if ((existing.rows as unknown[]).length > 0) return
+    } catch {
+        // Table may not exist yet
+    }
+
     raw.execute({
-        sql: `INSERT OR REPLACE INTO tag_embeddings (tag_id, embedding) VALUES (?1, ?2)`,
+        sql: `INSERT INTO tag_embeddings (tag_id, embedding) VALUES (?1, ?2)`,
         args: [tagId, JSON.stringify(embedding)],
     })
 }
@@ -755,6 +778,7 @@ export {
     getSubTree,
     getTagsByCategory,
     getTagsWithoutEmbeddings,
+    hasTagEmbedding,
     insertCategorieTag,
     insertDoc,
     insertDocTag,

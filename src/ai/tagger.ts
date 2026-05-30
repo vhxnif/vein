@@ -200,6 +200,9 @@ async function extractAndSaveTags(
             await store.insertCategorieTag(cat.id, tag.id)
 
             if (embeddingProvider) {
+                const alreadyEmbedded = await store.hasTagEmbedding(tag.id)
+                if (alreadyEmbedded) continue
+
                 generateEmbedding(tag.tag, embeddingProvider)
                     .then((emb) => store.upsertTagEmbedding(tag.id, emb))
                     .catch((err) =>
