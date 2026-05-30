@@ -7,12 +7,13 @@ Vein 是一个基于 AI Agent 的文档管理与智能检索系统。核心理�
 ## 技术栈
 
 - **运行时**: Bun
-- **数据库**: SQLite (bun:sqlite), ORM 用 Drizzle (`drizzle-orm/bun-sqlite`)
+- **数据库**: SQLite (bun:sqlite, WAL 模式), ORM 用 Drizzle (`drizzle-orm/bun-sqlite`)
 - **全文搜索**: FTS5 (BM25 排序)，作为向量查询的补充和兜底
 - **向量搜索**: sqlite-vec (vec0 虚拟表, 通过 Homebrew SQLite 加载，macOS 上 Bun 内置 SQLite 不支持扩展)
 - **中文分词**: LLM 切词 + FTS5 空格分词（写入侧），trigram（标签侧）
 - **AI 模型**: 通过 @earendil-works/pi-ai 调用，可在 .vein/config.json 中配置
 - **Embedding**: OpenRouter embeddings API (`POST /api/v1/embeddings`)
+- **批量导入**: 两阶段并行：LLM 阶段 4 文件并发（Promise.all），DB 阶段串行（WAL 模式优化写入）
 - **代码风格**: Biome (lint + format)
 
 ## 核心数据模型
@@ -252,6 +253,32 @@ vein tags clear-embeddings
     切换 embedding 模型前必须执行，否则维度不匹配。
 ```
 
+## 批量导入管道
+
+`vein markdown <files...>` 分两阶段处理：
+
+**Phase 1 — 并行 LLM（4 文件并发）：**
+```
+readFile → mdToTree (解析 + LLM 摘要) → segmentText (LLM 分词)
+```
+- `Promise.all` 并发，最耗时的 LLM 调用并行处理
+- 所有 LLM 结果自动走 `model_cache` 缓存（summarizer、segmentText、tagger）
+
+**Phase 2 — 串行 DB（WAL 模式）：**
+```
+insertTree → insertDoc (含 docs_fts) → extractAndSaveTags
+```
+- SQLite WAL 模式优化写入性能，写事务不阻塞
+- 单文件模式保留原有详细 spinner 进度
+
+**缓存层级：**
+
+| 缓存 | key | 模型 | 场景 |
+|------|-----|------|------|
+| summarizer | md5(prompt) | summarizer/config.model | 相同节点摘要命中 |
+| segmentText | md5(systemPrompt + text) | config.model | 相同文本分词命中 |
+| tagger | md5(systemPrompt + summary + toolsSuffix) | config.model | 相同摘要标签命中 |
+
 ## 开发约定
 
 - 迁移 SQL 内联在 `src/store/migrations/sql.ts`，按数组顺序执行，无外部 .sql 文件
@@ -267,7 +294,11 @@ vein tags clear-embeddings
 - `searchSimilarTags` 融合 vec0 向量搜索 + FTS5 关键词搜索（tags_fts trigram），并行执行后合并去重
 - Tagger 的 `searchSimilarTags` 工具在 vec0 表不存在时优雅降级（仅 FTS5），不抛错
 - `getTagsWithoutEmbeddings` 在 vec0 表不存在时 fallback 为返回全部 tag
-- 中文分词：`segmentText()` 通过 LLM 调用实现，文档摘要写入前分词，标签名不额外分词（tags_fts 用 trigram 天然支持）
+- 中文分词：`segmentText()` 通过 LLM 调用实现，文档摘要写入前分词，标签名不额外分词（tags_fts 用 trigram 天然支持）。分词结果写入 `model_cache` 缓存
+- `upsertTag` 插入 `tags_fts` 需 `await`，FTS5 不支持 `OR REPLACE` 语法
+- 生成 tag embedding 前先调用 `hasTagEmbedding()` 检查是否已存在，避免重复 API 调用
+- 批量导入两阶段分离：LLM 阶段可并行（Phase 1），DB 写入必须串行（Phase 2），不可混用并发写入同一 SQLite 连接
+- SQLite 使用 WAL 模式（`PRAGMA journal_mode=WAL`），在 `client.ts` 和 `migrate.ts` 中创建连接时统一设置
 - 无注释代码风格（除非必要）
 - SQL 不写在命令模块中，统一封装在 store 层
 
@@ -301,6 +332,7 @@ function setupCustomSQLite() {
 setupCustomSQLite()  // 必须在 new Database() 之前调用
 
 const db = new Database(dbPath)
+db.exec('PRAGMA journal_mode=WAL')
 db.exec('PRAGMA foreign_keys = ON')
 sqliteVec.load(db)  // 加载向量扩展
 ```

@@ -11,6 +11,7 @@ async function runMigrations(
     opts?: { requireExtension?: boolean }
 ) {
     const db = new Database(dbPath)
+    db.exec('PRAGMA journal_mode=WAL')
     db.exec('PRAGMA foreign_keys = ON')
 
     // Load sqlite-vec extension

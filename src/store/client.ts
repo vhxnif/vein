@@ -35,6 +35,7 @@ function createRawWrapper(db: Database): RawClient {
 
 function createDb(dbPath: string) {
     const db = new Database(dbPath)
+    db.run('PRAGMA journal_mode=WAL')
     db.run('PRAGMA foreign_keys = ON')
 
     // Load sqlite-vec extension

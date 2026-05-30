@@ -31,6 +31,7 @@ import {
 import type { ModelProvider, ProjectConfig } from '../config/type'
 import * as store from '../store'
 import { mdToTree } from '../tree/markdown_split'
+import type { DocNode } from '../tree/type'
 import { md5 } from '../utils/common'
 import { segmentText } from '../utils/segment'
 
@@ -500,29 +501,229 @@ vein.command('markdown')
 
         const results: ImportResult[] = []
         const batch = total > 1
-        for (const [i, fp] of files.entries()) {
-            const prefix = batch ? `[${i + 1}/${total}] ` : ''
-            try {
-                results.push(
-                    await importMarkdownFile(fp, {
-                        config,
-                        force,
-                        summarizer: summarize,
-                        prefix,
-                        batch,
+        const PARALLEL = batch ? 4 : 1
+
+        if (batch) {
+            // ── Phase 1: parallel LLM work (parse + summarize + segment) ──
+            const s = spinner()
+            const prepared: Array<{
+                fp: string
+                docId: string
+                docName: string
+                absolutePath: string
+                relativePath: string
+                tree: DocNode
+                bodySummary?: string
+            }> = []
+
+            const filesWithIndex = files.map((fp, i) => ({ fp, i }))
+            for (let j = 0; j < files.length; j += PARALLEL) {
+                const chunk = filesWithIndex.slice(j, j + PARALLEL)
+                s.start(
+                    `[${j + 1}-${Math.min(j + PARALLEL, total)}/${total}] Parsing & summarizing...`
+                )
+                const chunkResults = await Promise.all(
+                    chunk.map(async ({ fp, i }) => {
+                        const absolutePath = path.resolve(fp)
+                        const docName = path.basename(absolutePath, '.md')
+                        const projectRoot = getProjectRoot(process.cwd())
+                        const relativePath = projectRoot
+                            ? path.relative(projectRoot, absolutePath)
+                            : absolutePath
+                        const prefix = `[${i + 1}/${total}] `
+                        try {
+                            const content = await readFile(
+                                absolutePath,
+                                'utf-8'
+                            )
+                            const docId = md5(content)
+                            const existing = await store.getDoc(docId)
+                            if (existing && !force) {
+                                return {
+                                    skipped: true as const,
+                                    prefix,
+                                    docName,
+                                    docId,
+                                }
+                            }
+                            const tree = await mdToTree(
+                                docId,
+                                docName,
+                                content,
+                                {
+                                    summary: { summarizer: summarize },
+                                }
+                            )
+                            const rootSummary = tree.value.summary
+                            const bodySummary = rootSummary
+                                ? await segmentText(rootSummary)
+                                : undefined
+                            return {
+                                skipped: false as const,
+                                fp,
+                                docId,
+                                docName,
+                                absolutePath,
+                                relativePath,
+                                tree,
+                                bodySummary,
+                                prefix,
+                                rootSummary,
+                            }
+                        } catch (err) {
+                            log.error({
+                                err,
+                                filePath: fp,
+                                content: 'Markdown parse failed',
+                            })
+                            return {
+                                error: true as const,
+                                prefix,
+                                filePath: fp,
+                                errMsg: getErrorMessage(err),
+                            }
+                        }
                     })
                 )
-            } catch (err) {
-                log.error({
-                    err,
-                    filePath: fp,
-                    content: 'Markdown import failed',
-                })
-                results.push({
-                    status: 'failed',
-                    filePath: fp,
-                    error: getErrorMessage(err),
-                })
+
+                for (const r of chunkResults) {
+                    if ('error' in r) {
+                        results.push({
+                            status: 'failed',
+                            filePath: r.filePath!,
+                            error: r.errMsg!,
+                        })
+                    } else if (r.skipped) {
+                        s.stop(`${r.prefix}Skipped: already imported`)
+                        results.push({
+                            status: 'skipped',
+                            docName: r.docName,
+                            docId: r.docId,
+                        })
+                    } else {
+                        prepared.push({ ...r, fp: r.fp! })
+                    }
+                }
+            }
+
+            // ── Phase 2: serial DB writes ──
+            for (const [_pi, p] of prepared.entries()) {
+                const idx = files.indexOf(p.fp) + 1
+                const prefix = `[${idx}/${total}] `
+                s.start(`${prefix}Writing to database...`)
+                try {
+                    const nodeCount = await store.insertTree([p.tree], p.docId)
+                    await store.insertDoc(
+                        p.docId,
+                        {
+                            title: p.docName,
+                            sourcePath: p.relativePath,
+                            nodeCount,
+                        },
+                        p.bodySummary
+                    )
+
+                    if (nodeCount <= 1) {
+                        s.stop(
+                            `${prefix}${p.docName}: No headings found — no structure extracted.`
+                        )
+                        results.push({
+                            status: 'imported',
+                            docName: p.docName,
+                            docId: p.docId,
+                            nodeCount,
+                        })
+                        continue
+                    }
+
+                    const rootSummary = p.tree.value.summary
+                    if (rootSummary) {
+                        s.start(`${prefix}Extracting tags...`)
+                        let tagCount = 0
+                        let categoryCount = 0
+                        try {
+                            const tagResult = await extractAndSaveTags(
+                                p.docId,
+                                rootSummary,
+                                modelKey(config.model),
+                                config.embedding,
+                                (progress) => {
+                                    if (
+                                        progress.phase === 'saving' &&
+                                        progress.total
+                                    ) {
+                                        s.message(
+                                            `${prefix}Tagging ${progress.saved}/${progress.total}...`
+                                        )
+                                    }
+                                }
+                            )
+                            tagCount = tagResult.tagCount
+                            categoryCount = tagResult.categoryCount
+                        } catch (err) {
+                            log.warn({
+                                err,
+                                docId: p.docId,
+                                content: 'Tag extraction failed',
+                            })
+                        }
+
+                        const tagsPart =
+                            tagCount > 0
+                                ? `${tagCount} tag(s) / ${categoryCount} ${pluralize(categoryCount, 'category', 'categories')}`
+                                : 'no tags extracted'
+                        s.stop(
+                            `${prefix}${p.docName} → ${nodeCount} nodes, ${tagsPart}`
+                        )
+                    } else {
+                        s.stop(`${prefix}${p.docName} → ${nodeCount} nodes`)
+                    }
+
+                    results.push({
+                        status: 'imported',
+                        docName: p.docName,
+                        docId: p.docId,
+                        nodeCount,
+                    })
+                } catch (err) {
+                    log.error({
+                        err,
+                        docId: p.docId,
+                        content: 'DB write failed',
+                    })
+                    results.push({
+                        status: 'failed',
+                        filePath: p.fp,
+                        error: getErrorMessage(err),
+                    })
+                }
+            }
+        } else {
+            // ── Single-file mode: unchanged ──
+            for (const [i, fp] of files.entries()) {
+                const prefix = batch ? `[${i + 1}/${total}] ` : ''
+                try {
+                    results.push(
+                        await importMarkdownFile(fp, {
+                            config,
+                            force,
+                            summarizer: summarize,
+                            prefix,
+                            batch,
+                        })
+                    )
+                } catch (err) {
+                    log.error({
+                        err,
+                        filePath: fp,
+                        content: 'Markdown import failed',
+                    })
+                    results.push({
+                        status: 'failed',
+                        filePath: fp,
+                        error: getErrorMessage(err),
+                    })
+                }
             }
         }
 

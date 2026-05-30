@@ -201,18 +201,18 @@ async function extractAndSaveTags(
 
             if (embeddingProvider) {
                 const alreadyEmbedded = await store.hasTagEmbedding(tag.id)
-                if (alreadyEmbedded) continue
-
-                generateEmbedding(tag.tag, embeddingProvider)
-                    .then((emb) => store.upsertTagEmbedding(tag.id, emb))
-                    .catch((err) =>
-                        log.warn({
-                            err,
-                            tagId: tag.id,
-                            tag: tag.tag,
-                            content: 'Failed to generate tag embedding',
-                        })
-                    )
+                if (!alreadyEmbedded) {
+                    generateEmbedding(tag.tag, embeddingProvider)
+                        .then((emb) => store.upsertTagEmbedding(tag.id, emb))
+                        .catch((err) =>
+                            log.warn({
+                                err,
+                                tagId: tag.id,
+                                tag: tag.tag,
+                                content: 'Failed to generate tag embedding',
+                            })
+                        )
+                }
             }
 
             tagCount++

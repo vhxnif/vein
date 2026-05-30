@@ -514,8 +514,8 @@ async function upsertTag(
 
     // Index in FTS for keyword search
     const client = getRawClient()
-    client.execute({
-        sql: `INSERT OR REPLACE INTO tags_fts (tag_id, tag) VALUES (?1, ?2)`,
+    await client.execute({
+        sql: `INSERT INTO tags_fts (tag_id, tag) VALUES (?1, ?2)`,
         args: [id, normalized],
     })
 
