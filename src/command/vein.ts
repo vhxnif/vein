@@ -505,7 +505,6 @@ vein.command('markdown')
 
         if (batch) {
             // ── Phase 1: parallel LLM work (parse + summarize + segment) ──
-            const s = spinner()
             const prepared: Array<{
                 fp: string
                 docId: string
@@ -515,13 +514,15 @@ vein.command('markdown')
                 tree: DocNode
                 bodySummary?: string
             }> = []
+            let phase1Completed = 0
+            const phase1Total = files.length
+
+            const s = spinner()
+            s.start(`Parsing & summarizing (0/${phase1Total})...`)
 
             const filesWithIndex = files.map((fp, i) => ({ fp, i }))
             for (let j = 0; j < files.length; j += PARALLEL) {
                 const chunk = filesWithIndex.slice(j, j + PARALLEL)
-                s.start(
-                    `[${j + 1}-${Math.min(j + PARALLEL, total)}/${total}] Parsing & summarizing...`
-                )
                 const chunkResults = await Promise.all(
                     chunk.map(async ({ fp, i }) => {
                         const absolutePath = path.resolve(fp)
@@ -587,6 +588,10 @@ vein.command('markdown')
                 )
 
                 for (const r of chunkResults) {
+                    phase1Completed++
+                    s.message(
+                        `Parsing & summarizing (${phase1Completed}/${phase1Total})...`
+                    )
                     if ('error' in r) {
                         results.push({
                             status: 'failed',
@@ -594,7 +599,6 @@ vein.command('markdown')
                             error: r.errMsg!,
                         })
                     } else if (r.skipped) {
-                        s.stop(`${r.prefix}Skipped: already imported`)
                         results.push({
                             status: 'skipped',
                             docName: r.docName,
@@ -605,12 +609,30 @@ vein.command('markdown')
                     }
                 }
             }
+            s.stop(`Parsed & summarized ${phase1Completed} file(s)`)
+
+            const skippedInPhase1 = results.filter(
+                (r) => r.status === 'skipped'
+            ).length
+            const failedInPhase1 = results.filter(
+                (r) => r.status === 'failed'
+            ).length
+            if (skippedInPhase1 > 0 || failedInPhase1 > 0) {
+                const parts: string[] = []
+                if (prepared.length > 0)
+                    parts.push(`${prepared.length} to import`)
+                if (skippedInPhase1 > 0)
+                    parts.push(`${skippedInPhase1} skipped`)
+                if (failedInPhase1 > 0) parts.push(`${failedInPhase1} failed`)
+                note(parts.join(', '))
+            }
 
             // ── Phase 2: serial DB writes ──
+            const s2 = spinner()
             for (const [_pi, p] of prepared.entries()) {
                 const idx = files.indexOf(p.fp) + 1
                 const prefix = `[${idx}/${total}] `
-                s.start(`${prefix}Writing to database...`)
+                s2.start(`${prefix}Writing to database...`)
                 try {
                     const nodeCount = await store.insertTree([p.tree], p.docId)
                     await store.insertDoc(
@@ -624,7 +646,7 @@ vein.command('markdown')
                     )
 
                     if (nodeCount <= 1) {
-                        s.stop(
+                        s2.stop(
                             `${prefix}${p.docName}: No headings found — no structure extracted.`
                         )
                         results.push({
@@ -638,7 +660,7 @@ vein.command('markdown')
 
                     const rootSummary = p.tree.value.summary
                     if (rootSummary) {
-                        s.start(`${prefix}Extracting tags...`)
+                        s2.start(`${prefix}Extracting tags...`)
                         let tagCount = 0
                         let categoryCount = 0
                         try {
@@ -652,7 +674,7 @@ vein.command('markdown')
                                         progress.phase === 'saving' &&
                                         progress.total
                                     ) {
-                                        s.message(
+                                        s2.message(
                                             `${prefix}Tagging ${progress.saved}/${progress.total}...`
                                         )
                                     }
@@ -672,11 +694,11 @@ vein.command('markdown')
                             tagCount > 0
                                 ? `${tagCount} tag(s) / ${categoryCount} ${pluralize(categoryCount, 'category', 'categories')}`
                                 : 'no tags extracted'
-                        s.stop(
+                        s2.stop(
                             `${prefix}${p.docName} → ${nodeCount} nodes, ${tagsPart}`
                         )
                     } else {
-                        s.stop(`${prefix}${p.docName} → ${nodeCount} nodes`)
+                        s2.stop(`${prefix}${p.docName} → ${nodeCount} nodes`)
                     }
 
                     results.push({
