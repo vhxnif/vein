@@ -51,12 +51,27 @@ export function getModelKey(): string {
 }
 
 async function call(context: ContextDef) {
-    log.info({ sysPrompt: context.systemPrompt })
-    log.info({ tools: context.tools })
+    log.debug({
+        sysPromptLen: context.systemPrompt?.length ?? 0,
+        toolCount: context.tools?.length ?? 0,
+        content: 'AI call start',
+    })
     while (true) {
-        log.info({ messages: context.messages })
+        log.debug({
+            msgCount: context.messages.length,
+            content: 'Sending messages',
+        })
         const msg = await complete(getCurrentModel(), context)
-        log.info({ result: msg })
+        log.debug({
+            role: msg.role,
+            textLen: msg.content
+                .filter((it) => it.type === 'text')
+                .map((it) => it.text)
+                .join('').length,
+            toolCallCount: msg.content.filter((it) => it.type === 'toolCall')
+                .length,
+            content: 'AI response',
+        })
         context.messages.push(msg)
         const toolCalls = msg.content.filter((it) => it.type === 'toolCall')
         if (toolCalls.length <= 0) {
@@ -70,7 +85,11 @@ async function call(context: ContextDef) {
             const result = await context.tools
                 ?.find((it) => it.name === tool.name)
                 ?.run(tool.arguments)
-            log.info({ toolCall: tool, toolCallResult: result })
+            log.debug({
+                toolName: tool.name,
+                resultLen: result?.length ?? 0,
+                content: 'Tool executed',
+            })
             if (result) {
                 context.messages.push({
                     role: 'toolResult',

@@ -483,9 +483,18 @@ async function librarian(
             })
         }
         if (event.type === 'tool_execution_end') {
+            const resultText =
+                event.result?.content
+                    ?.filter(
+                        (it: { type: string; text?: string }) =>
+                            it.type === 'text'
+                    )
+                    .map((it: { text?: string }) => it.text)
+                    .join('') ?? ''
             log.info({
                 toolName: event.toolName,
-                result: event.result,
+                resultLen: resultText.length,
+                resultSummary: summarizeResult(event.toolName, resultText),
                 content: 'Tool end',
             })
         }

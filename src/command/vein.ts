@@ -123,7 +123,7 @@ function createCachedSummarizer(config: ProjectConfig) {
         const hash = md5(prompt)
         const cached = await store.getCachedResponse(hash, key)
         if (cached) {
-            log.info({ hash, modelKey: key, content: 'Summary cache hit' })
+            log.debug({ hash, modelKey: key, content: 'Summary cache hit' })
             return cached
         }
         let timer: ReturnType<typeof setTimeout>
@@ -139,7 +139,7 @@ function createCachedSummarizer(config: ProjectConfig) {
         ])
         clearTimeout(timer!)
         await store.setCachedResponse(hash, key, response)
-        log.info({ hash, modelKey: key, content: 'Summary cached' })
+        log.debug({ hash, modelKey: key, content: 'Summary cached' })
         return response
     }
 }

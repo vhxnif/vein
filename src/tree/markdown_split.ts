@@ -478,7 +478,7 @@ async function mdToTree(
     const lineCount = content.split('\n').length
 
     // Phase 1: Parse
-    log.info({ docId, content: 'Extracting nodes from markdown...' })
+    log.debug({ docId, content: 'Extracting nodes from markdown...' })
     const { nodeList, lines } = extractNodesFromMarkdown(content)
 
     if (nodeList.length === 0) {
@@ -491,12 +491,12 @@ async function mdToTree(
         return createRootNode(docId, docName, lineCount, [])
     }
 
-    log.info({ docId, content: 'Extracting text content from nodes...' })
+    log.debug({ docId, content: 'Extracting text content from nodes...' })
     let nodesWithContent = extractNodeTextContent(nodeList, lines)
 
     // Phase 2: Thinning (optional)
     if (thinning?.minTokenThreshold) {
-        log.info({ docId, content: 'Thinning nodes...' })
+        log.debug({ docId, content: 'Thinning nodes...' })
         nodesWithContent = await doThinning(
             nodesWithContent,
             thinning.minTokenThreshold
@@ -504,23 +504,23 @@ async function mdToTree(
     }
 
     // Phase 3: Build tree
-    log.info({ docId, content: 'Building tree from nodes...' })
+    log.debug({ docId, content: 'Building tree from nodes...' })
     const treeStructure = buildTreeFromNodes(nodesWithContent, docId)
 
     // Phase 4: Post-processing (formatting, summaries, description)
-    log.info({ docId, content: 'Formatting tree structure...' })
+    log.debug({ docId, content: 'Formatting tree structure...' })
 
     if (!summary) {
-        log.info({ docId, content: 'Tree structure built' })
+        log.debug({ docId, content: 'Tree structure built' })
         return createRootNode(docId, docName, lineCount, treeStructure)
     }
-    log.info({ docId, content: 'Summary structure...' })
+    log.debug({ docId, content: 'Summary structure...' })
     const { tree, docDescription } = await doSummary(
         docId,
         treeStructure,
         summary
     )
-    log.info({ docId, content: 'Tree structure built' })
+    log.debug({ docId, content: 'Tree structure built' })
     return createRootNode(docId, docName, lineCount, tree, docDescription)
 }
 

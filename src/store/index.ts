@@ -336,7 +336,7 @@ async function getCachedResponse(
         .get()
 
     if (!row) {
-        log.info({ md5: md5.slice(0, 16), model, content: 'Cache miss' })
+        log.debug({ md5: md5.slice(0, 16), model, content: 'Cache miss' })
         return void 0
     }
 
@@ -364,7 +364,7 @@ async function setCachedResponse(
             .update(modelCache)
             .set({ response })
             .where(eq(modelCache.id, existing.id))
-        log.info({ md5: md5.slice(0, 16), model, content: 'Cache updated' })
+        log.debug({ md5: md5.slice(0, 16), model, content: 'Cache updated' })
     } else {
         await db.insert(modelCache).values({
             id: Bun.randomUUIDv7(),
@@ -372,7 +372,7 @@ async function setCachedResponse(
             model,
             response,
         })
-        log.info({ md5: md5.slice(0, 16), model, content: 'Cache inserted' })
+        log.debug({ md5: md5.slice(0, 16), model, content: 'Cache inserted' })
     }
 }
 
