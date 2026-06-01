@@ -87,6 +87,22 @@ export const configSchema = {
                 },
             },
         },
+        segmenter: {
+            type: 'object',
+            description:
+                "Optional faster/cheaper model for Chinese text segmentation. Falls back to 'model' if not set. Use a small model (e.g. 'gpt-4o-mini') to speed up batch imports.",
+            required: ['provider', 'model'],
+            properties: {
+                provider: {
+                    type: 'string',
+                    $ref: '#/properties/model/properties/provider',
+                },
+                model: {
+                    type: 'string',
+                    description: 'Model identifier.',
+                },
+            },
+        },
         embedding: {
             type: 'object',
             description:

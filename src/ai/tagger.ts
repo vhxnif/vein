@@ -50,7 +50,7 @@ function buildPrompt(
     })
 
     const toolInstructions = hasTools
-        ? `\n你可以使用 searchSimilarTags 工具来查询标签库中语义相似的已有标签：\n- 传入 query（标签名）和 categoryId（分类 ID）可限定分类搜索\n- 不传 categoryId 则全库搜索\n在创建新标签前，建议先调用此工具检查是否存在等价的已有标签。\n如果返回的相似度 > 0.8，直接复用已有标签，不要创建新标签。\n`
+        ? `\n你可以使用 searchSimilarTags 工具来批量检查候选标签是否已存在：\n- 传入 queries（候选标签名数组）可一次性检查多个标签\n- 返回所有匹配的已有标签，按相似度降序\n建议：先列出所有候选标签，然后一次性调用 searchSimilarTags 批量检查。\n如果返回的相似度 > 0.8，直接复用已有标签，不要创建新标签。\n`
         : ''
 
     return `你是一个标签提取与分类助手。根据用户提供的文章概要，完成两项任务：
@@ -86,10 +86,12 @@ async function tagger(
         : undefined
     const systemPrompt = buildPrompt(categories, existing, !!tools)
 
-    // Cache key includes tools flag to avoid stale non-tool results
+    // Cache key from stable inputs only (excludes existingTags which
+    // change over time — same summary should hit cache regardless of
+    // when imported).
     const toolsSuffix = tools ? '|tools' : ''
     const cacheKey = opts?.modelKey
-        ? md5(systemPrompt + summary + toolsSuffix)
+        ? md5(JSON.stringify(categories) + summary + toolsSuffix)
         : undefined
 
     // Cache read
@@ -185,6 +187,17 @@ async function extractAndSaveTags(
         embeddingProvider,
     })
 
+    return saveTagResult(docId, result, embeddingProvider, onProgress)
+}
+
+// ── Save helper: persists tagger result, used by parallel batch ──
+
+async function saveTagResult(
+    docId: string,
+    result: TaggerResult,
+    embeddingProvider?: ModelProvider,
+    onProgress?: (progress: TagProgress) => void
+): Promise<TagStats> {
     const totalTags = result.categories.reduce(
         (sum, c) => sum + c.tags.length,
         0
@@ -230,4 +243,4 @@ async function extractAndSaveTags(
 }
 
 export type { CategoryDef, CategoryTags, TaggerResult, TagProgress, TagStats }
-export { extractAndSaveTags, tagger }
+export { extractAndSaveTags, saveTagResult, tagger }

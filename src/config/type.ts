@@ -11,6 +11,8 @@ export type ProjectConfig = {
     db: string
     model: ModelProvider
     summarizer?: ModelProvider
+    /** Optional faster/cheaper model for Chinese word segmentation. Falls back to 'model' if not set. */
+    segmenter?: ModelProvider
     embedding?: ModelProvider
     /**
      * Path to a custom libsqlite3 shared library (for loading sqlite-vec on macOS).

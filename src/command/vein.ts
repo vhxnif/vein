@@ -14,12 +14,14 @@ import {
 import { getModels, getProviders } from '@earendil-works/pi-ai'
 import { Command } from 'commander'
 import { generateEmbedding } from '../ai/embedding'
-import type { LibrarianResult } from '../ai/index'
+import type { LibrarianResult, TaggerResult } from '../ai/index'
 import {
     createSummarizer,
     extractAndSaveTags,
     librarian,
+    saveTagResult,
     setModelProvider,
+    tagger,
 } from '../ai/index'
 import {
     getProjectRoot,
@@ -329,7 +331,7 @@ async function importMarkdownFile(
         const nodeCount = await store.insertTree([tree], docId)
         const rootSummary = tree.value.summary
         const bodySummary = rootSummary
-            ? await segmentText(rootSummary)
+            ? await segmentText(rootSummary, config.segmenter)
             : undefined
         await store.insertDoc(
             docId,
@@ -413,7 +415,9 @@ async function importMarkdownFile(
     insertSpinner.start('Saving to database...')
     const nodeCount = await store.insertTree([tree], docId)
     const rootSummary = tree.value.summary
-    const bodySummary = rootSummary ? await segmentText(rootSummary) : undefined
+    const bodySummary = rootSummary
+        ? await segmentText(rootSummary, config.segmenter)
+        : undefined
     await store.insertDoc(
         docId,
         {
@@ -560,7 +564,10 @@ vein.command('markdown')
                             )
                             const rootSummary = tree.value.summary
                             const bodySummary = rootSummary
-                                ? await segmentText(rootSummary)
+                                ? await segmentText(
+                                      rootSummary,
+                                      config.segmenter
+                                  )
                                 : undefined
                             return {
                                 ok: true as const,
@@ -684,18 +691,78 @@ vein.command('markdown')
                 }
             }
 
-            // ── Phase 2: serial tag extraction ──
+            // ── Phase 2: parallel tagger → serial save ──
             if (toTag.length > 0) {
+                // Fetch shared data once
+                const [categoryRows, existingTagsMap] = await Promise.all([
+                    store.getCategories(),
+                    store.getAllTagsGrouped(),
+                ])
+                const categories = categoryRows.map((c) => ({
+                    id: c.id,
+                    name: c.content,
+                }))
+                const mk = modelKey(config.model)
+
+                // Parallel tagger LLM calls (4 concurrent)
+                const TAG_PARALLEL = 4
+                const taggerResults: Array<{
+                    t: (typeof toTag)[0]
+                    result: TaggerResult
+                }> = []
+                const sTagLLM = spinner()
+                let tagged = 0
+
+                for (let j = 0; j < toTag.length; j += TAG_PARALLEL) {
+                    const chunk = toTag.slice(j, j + TAG_PARALLEL)
+                    sTagLLM.start(
+                        `Analyzing tags (${tagged}/${toTag.length})...`
+                    )
+                    const chunkResults = await Promise.all(
+                        chunk.map(async (t) => {
+                            try {
+                                const result = await tagger(
+                                    t.rootSummary,
+                                    categories,
+                                    {
+                                        modelKey: mk,
+                                        existingTags: existingTagsMap,
+                                        embeddingProvider: config.embedding,
+                                    }
+                                )
+                                return { t, result, error: false as const }
+                            } catch (err) {
+                                log.warn({
+                                    err,
+                                    docId: t.docId,
+                                    content: 'Tag analysis failed',
+                                })
+                                return {
+                                    t,
+                                    result: { categories: [] },
+                                    error: true as const,
+                                }
+                            }
+                        })
+                    )
+                    tagged += chunk.length
+                    sTagLLM.stop(`Analyzed tags (${tagged}/${toTag.length})`)
+                    taggerResults.push(...chunkResults)
+                }
+
+                // Serial save
                 const sTag = spinner()
-                for (const t of toTag) {
-                    sTag.start(`${t.prefix}Extracting tags...`)
-                    let tagCount = 0
-                    let categoryCount = 0
+                for (const { t, result } of taggerResults) {
+                    if (result.categories.length === 0) {
+                        sTag.start(`${t.prefix}Extracting tags...`)
+                        sTag.stop(`${t.prefix}${t.docName}: no tags extracted`)
+                        continue
+                    }
+                    sTag.start(`${t.prefix}Saving tags...`)
                     try {
-                        const tagResult = await extractAndSaveTags(
+                        const { tagCount, categoryCount } = await saveTagResult(
                             t.docId,
-                            t.rootSummary,
-                            modelKey(config.model),
+                            result,
                             config.embedding,
                             (progress) => {
                                 if (
@@ -708,27 +775,21 @@ vein.command('markdown')
                                 }
                             }
                         )
-                        tagCount = tagResult.tagCount
-                        categoryCount = tagResult.categoryCount
-                    } catch (err) {
+                        const tagsPart =
+                            tagCount > 0
+                                ? `${tagCount} tag(s) / ${categoryCount} ${pluralize(categoryCount, 'category', 'categories')}`
+                                : 'no tags extracted'
                         sTag.stop(
-                            `${t.prefix}${t.docName}: Tag extraction failed`
+                            `${t.prefix}${t.docName} → ${t.nodeCount} nodes, ${tagsPart}`
                         )
+                    } catch (err) {
+                        sTag.stop(`${t.prefix}${t.docName}: Tag save failed`)
                         log.warn({
                             err,
                             docId: t.docId,
-                            content: 'Tag extraction failed',
+                            content: 'Tag save failed',
                         })
-                        continue
                     }
-
-                    const tagsPart =
-                        tagCount > 0
-                            ? `${tagCount} tag(s) / ${categoryCount} ${pluralize(categoryCount, 'category', 'categories')}`
-                            : 'no tags extracted'
-                    sTag.stop(
-                        `${t.prefix}${t.docName} → ${t.nodeCount} nodes, ${tagsPart}`
-                    )
                 }
             }
         } else {

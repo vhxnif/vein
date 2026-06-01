@@ -14,6 +14,19 @@ async function generateEmbedding(
     text: string,
     embeddingProvider: ModelProvider
 ): Promise<number[]> {
+    const results = await generateEmbeddings([text], embeddingProvider)
+    return results[0]!
+}
+
+/**
+ * Batch generate embeddings for multiple texts in a single API call.
+ */
+async function generateEmbeddings(
+    texts: string[],
+    embeddingProvider: ModelProvider
+): Promise<number[][]> {
+    if (texts.length === 0) return []
+
     const apiKey = process.env.OPENROUTER_API_KEY
     if (!apiKey) {
         throw new Error(
@@ -30,7 +43,7 @@ async function generateEmbedding(
         },
         body: JSON.stringify({
             model: embeddingProvider.model,
-            input: text,
+            input: texts,
         }),
     })
 
@@ -49,17 +62,18 @@ async function generateEmbedding(
         data: Array<{ embedding: number[] }>
     }
 
-    const embedding = data.data?.[0]?.embedding
-    if (!embedding || embedding.length === 0) {
+    const embeddings = data.data?.map((d) => d.embedding) ?? []
+    if (embeddings.length === 0 || embeddings.some((e) => e.length === 0)) {
         throw new Error('Empty embedding returned from API')
     }
 
     log.info({
         model: embeddingProvider.model,
-        dims: embedding.length,
-        content: 'Embedding generated',
+        count: embeddings.length,
+        dims: embeddings[0]?.length,
+        content: 'Batch embeddings generated',
     })
-    return embedding
+    return embeddings
 }
 
-export { generateEmbedding }
+export { generateEmbedding, generateEmbeddings }
