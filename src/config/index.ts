@@ -95,5 +95,20 @@ async function initProject(
     return config
 }
 
+async function saveProjectConfig(
+    root: string,
+    config: ProjectConfig
+): Promise<void> {
+    const configPath = path.join(root, veinDir, 'config.json')
+    await writeFile(configPath, JSON.stringify(config, null, 2))
+}
+
 export type { ModelProvider, ProjectConfig }
-export { getProjectRoot, initProject, loadProjectConfig, logger, veinDir }
+export {
+    getProjectRoot,
+    initProject,
+    loadProjectConfig,
+    logger,
+    saveProjectConfig,
+    veinDir,
+}
