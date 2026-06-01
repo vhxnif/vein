@@ -42,6 +42,10 @@ export function setModelProvider(provider: ModelProvider) {
     _model = null
 }
 
+export function getModelProvider(): ModelProvider {
+    return { ...modelProvider }
+}
+
 export function getModelKey(): string {
     return `${modelProvider.provider}/${modelProvider.model}`
 }

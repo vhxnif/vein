@@ -1,4 +1,12 @@
-import { Type } from '@earendil-works/pi-ai'
+/** biome-ignore-all lint/suspicious/noExplicitAny: AgentTool type constraints */
+import type {
+    AgentMessage,
+    AgentTool,
+    AgentToolResult,
+} from '@earendil-works/pi-agent-core'
+import { Agent } from '@earendil-works/pi-agent-core'
+import { getModel, Type } from '@earendil-works/pi-ai'
+import { logger } from '../config'
 import {
     getCategories,
     getDocsByTag,
@@ -7,9 +15,11 @@ import {
     getTagsByCategory,
 } from '../store'
 import type { BaseDocNode, TreeNode } from '../tree/type'
-import { type ContextDef, call, type ToolDef } from './base'
+import { getModelProvider } from './base'
 import type { ReviewResult, SourceRef } from './reviewer'
 import { reviewer } from './reviewer'
+
+const log = logger.child({ module: 'librarian' })
 
 const BASE_PROMPT = `你是一个文档检索 Librarian。你的任务是根据用户的查询，按可用的查找链路逐步缩小范围，最终返回最相关的文档片段原文。
 
@@ -31,11 +41,18 @@ const BASE_PROMPT = `你是一个文档检索 Librarian。你的任务是根据�
 
 ## 数据结构说明
 
-### getDocStructure 返回的节点
-- 每个节点包含 nodeId、title
-- **叶子节点**（无子节点）：有 summary 字段，是该节点内容的摘要
-- **非叶子节点**（有子节点）：有 prefixSummary 字段，概括该子树覆盖的内容范围；同时有 nodes 数组包含子节点
-- 叶子节点和非叶子节点不会同时有 summary 和 prefixSummary
+### getDocStructure 返回的格式
+每个节点占一行，包含 nodeId 和 title。子节点缩进 2 空格。
+- **叶子节点**：紧跟一行 summary（缩进 2 空格）
+- **非叶子节点**：紧跟 (目录) 标记和 prefixSummary（缩进 2 空格），然后缩进显示子节点
+
+示例：
+0000 文档根标题
+  根摘要内容...
+  0001 (目录) 章节标题
+    ## 章节标题
+    0002 叶子节点
+      该叶子节点的摘要...
 
 ### getDocNodeDetails 返回
 - 节点的完整原始文本（text 字段）
@@ -78,52 +95,70 @@ function buildPrompt(): string {
     return BASE_PROMPT
 }
 
-function reorderDict<T extends Record<string, unknown>>(
-    data: T,
-    keyOrder: string[]
-): Partial<T> {
-    const result: Record<string, unknown> = {}
-    for (const key of keyOrder) {
-        if (key in data) {
-            result[key] = data[key]
+function renderDocStructure(
+    nodes: TreeNode<BaseDocNode>[],
+    indent = 0
+): string {
+    const pad = '  '.repeat(indent)
+    const lines: string[] = []
+    for (const node of nodes) {
+        const id = node.nodeId.split('_')[0]
+        const v = node.value
+        const isLeaf = node.nodes.length === 0
+        lines.push(`${pad}${id} ${v.title}`)
+        if (isLeaf && v.summary) {
+            lines.push(`${pad}  ${v.summary}`)
+        } else if (!isLeaf) {
+            lines.push(`${pad}  (目录)`)
+            if (v.prefixSummary) {
+                lines.push(`${pad}  ${v.prefixSummary}`)
+            }
+            lines.push(
+                renderDocStructure(
+                    node.nodes as TreeNode<BaseDocNode>[],
+                    indent + 1
+                )
+            )
         }
     }
-    return result as Partial<T>
+    return lines.join('\n')
 }
 
-function formatStructure<T>(
-    structure: TreeNode<T>[],
-    valueKeyOrder: string[]
-): TreeNode<T>[] {
-    return structure.map((node) => {
-        const formatted: Record<string, unknown> = {}
-        formatted.nodeId = node.nodeId.split('_')[0]
-        formatted.value = reorderDict(
-            node.value as unknown as Record<string, unknown>,
-            valueKeyOrder
-        )
-        if (node.nodes.length > 0) {
-            formatted.nodes = formatStructure(node.nodes, valueKeyOrder)
-        }
-        return formatted as unknown as TreeNode<T>
+function buildTools(): any {
+    const cache = new Map<string, string>()
+    const cached = async (
+        key: string,
+        fn: () => Promise<string>
+    ): Promise<string> => {
+        if (cache.has(key)) return Promise.resolve(cache.get(key)!)
+        return fn().then((r) => {
+            cache.set(key, r)
+            return r
+        })
+    }
+
+    const ok = (s: string): AgentToolResult<any> => ({
+        content: [{ type: 'text' as const, text: s }],
+        details: {},
     })
-}
 
-function cleanNode(tree: TreeNode<BaseDocNode>[]) {
-    return formatStructure(tree, ['title', 'summary', 'prefixSummary'])
-}
+    // Narrow execute type so we can destructure params safely
+    type Ex = AgentTool['execute']
+    const tool = (fn: Ex): Ex => fn
 
-function buildTools(): ToolDef[] {
     return [
         {
             name: 'getCategories',
             description:
                 '获取所有分类列表，返回 [{id, content}]。分类列表不变，整个检索只需调用一次！',
             parameters: Type.Object({}),
-            run: async () => {
-                const categories = await getCategories()
-                return JSON.stringify(categories)
-            },
+            execute: tool(async () => {
+                const result = await cached('getCategories', async () => {
+                    const categories = await getCategories()
+                    return JSON.stringify(categories)
+                })
+                return ok(result)
+            }),
         },
         {
             name: 'getTagsByCategory',
@@ -132,10 +167,17 @@ function buildTools(): ToolDef[] {
             parameters: Type.Object({
                 categoryId: Type.String({ description: '分类 ID' }),
             }),
-            run: async ({ categoryId }: { categoryId: string }) => {
-                const tags = await getTagsByCategory(categoryId)
-                return JSON.stringify(tags)
-            },
+            execute: tool(async (_, p) => {
+                const { categoryId } = p as { categoryId: string }
+                const result = await cached(
+                    `getTagsByCategory:${categoryId}`,
+                    async () => {
+                        const tags = await getTagsByCategory(categoryId)
+                        return JSON.stringify(tags)
+                    }
+                )
+                return ok(result)
+            }),
         },
         {
             name: 'getDocsByTag',
@@ -144,22 +186,36 @@ function buildTools(): ToolDef[] {
             parameters: Type.Object({
                 tagId: Type.String({ description: '标签 ID' }),
             }),
-            run: async ({ tagId }: { tagId: string }) => {
-                const docs = await getDocsByTag(tagId)
-                return JSON.stringify(docs)
-            },
+            execute: tool(async (_, p) => {
+                const { tagId } = p as { tagId: string }
+                const result = await cached(
+                    `getDocsByTag:${tagId}`,
+                    async () => {
+                        const docs = await getDocsByTag(tagId)
+                        return JSON.stringify(docs)
+                    }
+                )
+                return ok(result)
+            }),
         },
         {
             name: 'getDocStructure',
             description:
-                '获取文档结构（含标题和摘要），返回树形结构，每个节点含 title、summary（叶子）或 prefixSummary（非叶子）。只对最有把握的少量文档调用（≤5个），先纵深看完一个再考虑下一个。',
+                '获取文档结构（含标题和摘要），返回缩进树形文本，每行 nodeId + title。叶子节点跟 summary，非叶子节点跟 (目录) + prefixSummary。只对最有把握的少量文档调用（≤5个），先纵深看完一个再考虑下一个。',
             parameters: Type.Object({
                 docId: Type.String({ description: '文章Id' }),
             }),
-            run: async ({ docId }: { docId: string }) => {
-                const tree = await getFullTree<BaseDocNode>(`${docId}`)
-                return JSON.stringify(cleanNode(tree))
-            },
+            execute: tool(async (_, p) => {
+                const { docId } = p as { docId: string }
+                const result = await cached(
+                    `getDocStructure:${docId}`,
+                    async () => {
+                        const tree = await getFullTree<BaseDocNode>(`${docId}`)
+                        return renderDocStructure(tree)
+                    }
+                )
+                return ok(result)
+            }),
         },
         {
             name: 'getDocNodeDetails',
@@ -168,18 +224,22 @@ function buildTools(): ToolDef[] {
                 docId: Type.String({ description: '文章Id' }),
                 nodeId: Type.String({ description: '文章节点Id' }),
             }),
-            run: async ({
-                docId,
-                nodeId,
-            }: {
-                docId: string
-                nodeId: string
-            }) => {
-                const d = await getNodeDetails<BaseDocNode>(
-                    `${nodeId}_${docId}`
+            execute: tool(async (_, p) => {
+                const { docId, nodeId } = p as {
+                    docId: string
+                    nodeId: string
+                }
+                const result = await cached(
+                    `getDocNodeDetails:${docId}:${nodeId}`,
+                    async () => {
+                        const d = await getNodeDetails<BaseDocNode>(
+                            `${nodeId}_${docId}`
+                        )
+                        return d?.text ?? ''
+                    }
                 )
-                return d?.text ?? ''
-            },
+                return ok(result)
+            }),
         },
         {
             name: 'reviewResult',
@@ -199,19 +259,15 @@ function buildTools(): ToolDef[] {
                     })
                 ),
             }),
-            run: async ({
-                query,
-                result,
-                sources,
-            }: {
-                query: string
-                result: string
-                sources?: string
-            }) => {
+            execute: tool(async (_, p) => {
+                const { query, result, sources } = p as {
+                    query: string
+                    result: string
+                    sources?: string
+                }
                 let parsed: SourceRef[] | undefined
                 if (sources) {
                     try {
-                        // Agent may pass a JSON string or an already-parsed array
                         const raw: unknown = sources
                         parsed = Array.isArray(raw)
                             ? (raw as SourceRef[])
@@ -221,8 +277,8 @@ function buildTools(): ToolDef[] {
                     }
                 }
                 const review = await reviewer(query, result, parsed)
-                return JSON.stringify(review)
-            },
+                return ok(JSON.stringify(review))
+            }),
         },
     ]
 }
@@ -261,7 +317,7 @@ function summarizeResult(tool: string, raw: string): string {
     }
 }
 
-function extractTrace(messages: ContextDef['messages']): TraceStep[] {
+function extractTrace(messages: AgentMessage[]): TraceStep[] {
     const trace: TraceStep[] = []
     const toolResultMap = new Map<string, string>()
 
@@ -292,6 +348,58 @@ function extractTrace(messages: ContextDef['messages']): TraceStep[] {
     return trace
 }
 
+// ── Context pruning: compact old doc structures instead of deleting ──
+// Full text for the most recent N docs; older ones keep only nodeId + title
+// lines (drop summary/prefixSummary content).
+
+function compactDocText(text: string): string {
+    return text
+        .split('\n')
+        .filter((line) => /^\s*\d{4} /.test(line) || line.includes('(目录)'))
+        .join('\n')
+}
+
+function pruneContext(messages: AgentMessage[]): AgentMessage[] {
+    const MAX_FULL = 5
+
+    // Scan from the end to find doc structure positions
+    const structIndices: number[] = []
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i]
+        if (
+            msg &&
+            msg.role === 'toolResult' &&
+            'toolName' in msg &&
+            msg.toolName === 'getDocStructure'
+        ) {
+            structIndices.push(i)
+        }
+    }
+
+    if (structIndices.length <= MAX_FULL) return messages
+
+    // Indices from the end: structIndices[0] is the most recent
+    // Keep MAX_FULL most recent as-is, compact the rest
+    const compactSet = new Set(structIndices.slice(MAX_FULL))
+
+    return messages.map((msg, i) => {
+        if (!compactSet.has(i)) return msg
+        if (!('content' in msg)) return msg
+        const c = (msg as { content: Array<{ type: string; text?: string }> })
+            .content[0]
+        if (!c || !('text' in c) || !c.text) return msg
+        return {
+            ...msg,
+            content: [
+                {
+                    type: 'text' as const,
+                    text: compactDocText(c.text),
+                },
+            ],
+        }
+    })
+}
+
 const stepLabels: Record<string, string> = {
     getCategories: 'Browsing categories...',
     getTagsByCategory: 'Checking tags...',
@@ -305,31 +413,66 @@ async function librarian(
     msg: string,
     onStep?: (label: string) => void
 ): Promise<LibrarianResult> {
-    const context: ContextDef = {
-        systemPrompt: buildPrompt(),
-        messages: [
-            {
-                role: 'user',
-                content: msg,
-                timestamp: Date.now(),
-            },
-        ],
-        tools: buildTools(),
-        onToolCall: onStep
-            ? (name) => onStep(stepLabels[name] ?? `Calling ${name}...`)
-            : undefined,
+    const provider = getModelProvider()
+    const model = getModel(provider.provider as never, provider.model)
+
+    const agent = new Agent({
+        initialState: {
+            systemPrompt: buildPrompt(),
+            model,
+            tools: buildTools(),
+        },
+        transformContext: async (messages) => pruneContext(messages),
+    })
+
+    if (onStep) {
+        agent.subscribe((event) => {
+            if (event.type === 'tool_execution_start') {
+                onStep(
+                    stepLabels[event.toolName] ?? `Calling ${event.toolName}...`
+                )
+            }
+        })
     }
 
-    const lastMsg = await call(context)
+    // Bridge Agent events to our logger for traceability
+    agent.subscribe((event) => {
+        if (event.type === 'tool_execution_start') {
+            log.info({
+                toolName: event.toolName,
+                args: event.args,
+                content: 'Tool start',
+            })
+        }
+        if (event.type === 'tool_execution_end') {
+            log.info({
+                toolName: event.toolName,
+                result: event.result,
+                content: 'Tool end',
+            })
+        }
+    })
 
-    const content = lastMsg.content
-        .filter((it) => it.type === 'text')
-        .map((it) => it.text)
-        .join('\n')
+    await agent.prompt(msg)
 
-    const trace = extractTrace(context.messages)
+    const messages = agent.state.messages
+    log.info({
+        msgCount: messages.length,
+        content: 'Agent prompt complete',
+    })
 
-    // Extract last review from reviewResult tool calls
+    const lastAssistant = [...messages]
+        .reverse()
+        .find((m) => m.role === 'assistant')
+
+    const content =
+        lastAssistant?.content
+            .filter((it) => it.type === 'text')
+            .map((it) => it.text)
+            .join('\n') ?? ''
+
+    const trace = extractTrace(messages)
+
     let review: ReviewResult | undefined
     for (const step of [...trace].reverse()) {
         if (step.tool === 'reviewResult') {

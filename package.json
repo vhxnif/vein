@@ -22,6 +22,7 @@
   "dependencies": {
     "@biomejs/biome": "^2.4.15",
     "@clack/prompts": "^1.4.0",
+    "@earendil-works/pi-agent-core": "^0.78.0",
     "@earendil-works/pi-ai": "^0.74.1",
     "commander": "^14.0.3",
     "drizzle-orm": "^0.45.2",
