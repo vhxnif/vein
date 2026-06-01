@@ -43,23 +43,36 @@ const BASE_PROMPT = `你是一个文档检索 Librarian。你的任务是根据�
 ## 查找原则
 
 1. 严格按链路顺序逐层下钻，不要跳步
-2. 每一步根据返回数据判断下一步选择哪个 id；如果有多个候选，优先选择与用户查询最相关的
+2. 每一步根据返回数据快速判断，每层只选最相关的 1-3 个候选，不要贪多
 3. 如果某层没有匹配结果，回溯到上一层尝试其他选项
 4. 最终返回给用户的应该是 getDocNodeDetails 取得的完整文本，而非 summary
 5. 如果多个节点都相关，可以多次调用 getDocNodeDetails 获取所有相关内容
 
-> 后续新增查找链路时，在上方「可用查找链路」区域追加即可。
+## 效率约束（必须遵守）
+
+| 规则 | 说明 |
+|------|------|
+| 分类只查一次 | getCategories 返回的分类列表不会变化，整个检索过程中只调用一次 |
+| 标签按需查 | 只查与查询主题明显相关的分类下的标签，无需浏览所有分类 |
+| 文档结构限量 | getDocStructure 只在锁定候选后调用，单次检索不超过 5 个文档 |
+| 优先纵深 | 找到一个有希望的文档后，先把它看完（getDocNodeDetails），再考虑其他 |
+| 总步骤预算 | 单次检索（不含重试）控制在 10 步以内；含重试总共不超过 25 步 |
+| 记住已有信息 | 已经获取过的分类、标签、文档结构不要重复获取 |
 
 ## 自检流程
 
 完成检索后，在返回给用户之前，必须执行自检：
 
-1. 调用 reviewResult 工具，传入：用户原始查询(query)、检索结果(result)、以及所有引用节点的地址(sources) —— JSON 数组格式 [{"docId":"...","nodeId":"..."}]。Reviewer 会根据地址自行获取原文验证
+1. 调用 reviewResult 工具，传入：用户原始查询(query)、检索结果(result)、以及所有引用节点的地址(sources) —— 注意 sources 必须是 **JSON 字符串**，例如：'[{"docId":"abc","nodeId":"0001"}]'（不是 JSON 对象/数组，是字符串）
 2. 根据审查结果 verdict 字段决定下一步：
    - "pass"：直接将检索结果返回给用户
-   - "partial" 或 "fail"：根据 suggestion 调整检索策略，重新查找
-     - 可能方向：切换其他分类/标签、选择同一文档的其他节点、回溯到上一层
-3. 最多重试 2 次；如果仍不通过，将最后一次结果和审查意见一并返回给用户`
+   - "partial" 或 "fail"：根据 suggestion **增量调整**检索策略，不要从头开始：
+     - 文档选错了 → 回到标签层，换一个候选标签
+     - 节点选错了 → 回到 getDocStructure，换节点
+     - 信息不够 → 补充调用 getDocNodeDetails 获取更多节点
+     - 只有在标签层没有更多候选时，才回到分类层
+3. 重试时不要再调用 getCategories（分类不会变）
+4. 最多重试 2 次；如果仍不通过，将最后一次结果和审查意见一并返回给用户`
 
 function buildPrompt(): string {
     return BASE_PROMPT
@@ -104,7 +117,8 @@ function buildTools(): ToolDef[] {
     return [
         {
             name: 'getCategories',
-            description: '获取所有分类列表，返回 [{id, content}]',
+            description:
+                '获取所有分类列表，返回 [{id, content}]。分类列表不变，整个检索只需调用一次！',
             parameters: Type.Object({}),
             run: async () => {
                 const categories = await getCategories()
@@ -113,7 +127,8 @@ function buildTools(): ToolDef[] {
         },
         {
             name: 'getTagsByCategory',
-            description: '根据分类 ID 获取该分类下的所有标签，返回 [{id, tag}]',
+            description:
+                '根据分类 ID 获取该分类下的所有标签，返回 [{id, tag}]。只查与查询主题明显相关的分类，无需遍历所有分类。',
             parameters: Type.Object({
                 categoryId: Type.String({ description: '分类 ID' }),
             }),
@@ -137,7 +152,7 @@ function buildTools(): ToolDef[] {
         {
             name: 'getDocStructure',
             description:
-                '获取文档结构（含标题和摘要），返回树形结构，每个节点含 title、summary（叶子）或 prefixSummary（非叶子）',
+                '获取文档结构（含标题和摘要），返回树形结构，每个节点含 title、summary（叶子）或 prefixSummary（非叶子）。只对最有把握的少量文档调用（≤5个），先纵深看完一个再考虑下一个。',
             parameters: Type.Object({
                 docId: Type.String({ description: '文章Id' }),
             }),
@@ -169,7 +184,8 @@ function buildTools(): ToolDef[] {
         {
             name: 'reviewResult',
             description:
-                '审查检索结果是否满足用户需求。完成检索后、回复用户前必须调用此工具。传入用户原始查询、准备返回的检索结果，以及引用数据源的地址列表（docId + nodeId）。Reviewer 会根据地址自行获取原文验证。',
+                '审查检索结果是否满足用户需求。完成检索后、回复用户前必须调用此工具。传入用户原始查询、准备返回的检索结果，以及引用数据源的地址列表（docId + nodeId）。Reviewer 会根据地址自行获取原文验证。' +
+                '如果不通过需要重试：增量调整即可，不要重新浏览分类！',
             parameters: Type.Object({
                 query: Type.String({ description: '用户原始查询' }),
                 result: Type.String({
@@ -178,7 +194,8 @@ function buildTools(): ToolDef[] {
                 sources: Type.Optional(
                     Type.String({
                         description:
-                            '引用的数据源地址，JSON 数组格式：[{"docId":"...","nodeId":"..."}]。从 getDocNodeDetails 获取的每个节点都应在列表中。',
+                            '引用的数据源地址，必须是 JSON 字符串（注意：是字符串不是数组）。' +
+                            '格式：\'[{"docId":"abc123","nodeId":"0001"}]\'。从 getDocNodeDetails 获取的每个节点都应在列表中。',
                     })
                 ),
             }),
@@ -194,7 +211,11 @@ function buildTools(): ToolDef[] {
                 let parsed: SourceRef[] | undefined
                 if (sources) {
                     try {
-                        parsed = JSON.parse(sources) as SourceRef[]
+                        // Agent may pass a JSON string or an already-parsed array
+                        const raw: unknown = sources
+                        parsed = Array.isArray(raw)
+                            ? (raw as SourceRef[])
+                            : (JSON.parse(sources) as SourceRef[])
                     } catch {
                         // ignore invalid sources
                     }
