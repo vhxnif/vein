@@ -978,7 +978,13 @@ vein.command('ask')
             )
 
             if (!interactive) {
-                console.log(JSON.stringify({ ...result, elapsedMs }))
+                console.log(
+                    JSON.stringify({
+                        ...result,
+                        elapsedMs,
+                        reviewElapsedMs: result.reviewElapsedMs,
+                    })
+                )
                 return
             }
 
@@ -987,8 +993,12 @@ vein.command('ask')
             if (result.review) {
                 const icon =
                     VERDICT_ICON[result.review.verdict] ?? result.review.verdict
+                const reviewTime =
+                    result.reviewElapsedMs !== undefined
+                        ? ` · review ${formatDuration(result.reviewElapsedMs)}`
+                        : ''
                 note(
-                    `${icon} Review: ${result.review.verdict} (${result.review.score}/5)\n${result.review.reason}`
+                    `${icon} Review: ${result.review.verdict} (${result.review.score}/5)${reviewTime}\n${result.review.reason}`
                 )
             }
 

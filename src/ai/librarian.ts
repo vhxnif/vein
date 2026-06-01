@@ -288,12 +288,14 @@ type TraceStep = {
     args: Record<string, unknown>
     resultSummary: string
     rawResult: string
+    elapsedMs: number
 }
 
 type LibrarianResult = {
     content: string
     trace: TraceStep[]
     review?: ReviewResult
+    reviewElapsedMs?: number
 }
 
 function summarizeResult(tool: string, raw: string): string {
@@ -326,10 +328,18 @@ function summarizeResult(tool: string, raw: string): string {
         }
         if (tool === 'getDocsByTag') {
             if (Array.isArray(parsed)) {
-                const titles = (
-                    parsed as Array<{ metadata?: { title?: string } }>
-                )
-                    .map((d) => d.metadata?.title ?? '')
+                const titles = (parsed as Array<{ metadata?: string }>)
+                    .map((d) => {
+                        try {
+                            return (
+                                JSON.parse(d.metadata ?? '{}') as {
+                                    title?: string
+                                }
+                            ).title
+                        } catch {
+                            return ''
+                        }
+                    })
                     .filter(Boolean)
                 const head = titles.slice(0, 3).join(', ')
                 return `${parsed.length} docs: ${head}${titles.length > 3 ? '…' : ''}`
@@ -355,7 +365,10 @@ function summarizeResult(tool: string, raw: string): string {
     }
 }
 
-function extractTrace(messages: AgentMessage[]): TraceStep[] {
+function extractTrace(
+    messages: AgentMessage[],
+    toolTimings: Map<string, number>
+): TraceStep[] {
     const trace: TraceStep[] = []
     const toolResultMap = new Map<string, string>()
 
@@ -379,6 +392,7 @@ function extractTrace(messages: AgentMessage[]): TraceStep[] {
                 args: block.arguments as Record<string, unknown>,
                 resultSummary: summarizeResult(block.name, result),
                 rawResult: result,
+                elapsedMs: toolTimings.get(block.id) ?? 0,
             })
         }
     }
@@ -474,8 +488,12 @@ async function librarian(
     }
 
     // Bridge Agent events to our logger for traceability
+    const toolStartTimes = new Map<string, number>()
+    const toolTimings = new Map<string, number>()
+
     agent.subscribe((event) => {
         if (event.type === 'tool_execution_start') {
+            toolStartTimes.set(event.toolCallId, performance.now())
             log.info({
                 toolName: event.toolName,
                 args: event.args,
@@ -483,6 +501,13 @@ async function librarian(
             })
         }
         if (event.type === 'tool_execution_end') {
+            const start = toolStartTimes.get(event.toolCallId)
+            if (start !== undefined) {
+                toolTimings.set(
+                    event.toolCallId,
+                    Math.round(performance.now() - start)
+                )
+            }
             const resultText =
                 event.result?.content
                     ?.filter(
@@ -518,11 +543,13 @@ async function librarian(
             .map((it) => it.text)
             .join('\n') ?? ''
 
-    const trace = extractTrace(messages)
+    const trace = extractTrace(messages, toolTimings)
 
     let review: ReviewResult | undefined
+    let reviewElapsedMs: number | undefined
     for (const step of [...trace].reverse()) {
         if (step.tool === 'reviewResult') {
+            reviewElapsedMs = step.elapsedMs
             try {
                 review = JSON.parse(step.rawResult) as ReviewResult
             } catch {
@@ -532,7 +559,7 @@ async function librarian(
         }
     }
 
-    return { content, trace, review }
+    return { content, trace, review, reviewElapsedMs }
 }
 
 export type { LibrarianResult, TraceStep }
