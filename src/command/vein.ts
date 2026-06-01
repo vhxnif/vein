@@ -993,10 +993,32 @@ vein.command('ask')
             }
 
             if (showTrace && result.trace.length > 0) {
-                const traceSummary = result.trace
-                    .map((s) => `  ${s.tool} → ${s.resultSummary}`)
+                const traceLines = result.trace
+                    .map((s, i) => {
+                        const num = String(i + 1).padStart(2, ' ')
+                        const tool = s.tool
+                        let detail = s.resultSummary
+                        if (tool === 'getDocStructure') {
+                            const docId = (s.args as { docId?: string })?.docId
+                            detail = docId
+                                ? `${docId.slice(0, 8)} → ${s.resultSummary}`
+                                : s.resultSummary
+                        } else if (tool === 'getDocNodeDetails') {
+                            const a = s.args as {
+                                docId?: string
+                                nodeId?: string
+                            }
+                            detail =
+                                a.docId && a.nodeId
+                                    ? `${a.docId.slice(0, 8)}/${a.nodeId} → ${s.resultSummary}`
+                                    : s.resultSummary
+                        }
+                        return `  ${num}. ${tool}  ${detail}`
+                    })
                     .join('\n')
-                note(`Trace:\n${traceSummary}`)
+                note(
+                    `Retrieval trace (${result.trace.length} step${result.trace.length > 1 ? 's' : ''}):\n${traceLines}`
+                )
             }
 
             log.info({

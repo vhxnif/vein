@@ -298,18 +298,56 @@ type LibrarianResult = {
 
 function summarizeResult(tool: string, raw: string): string {
     if (tool === 'getDocNodeDetails') {
-        const len = raw.length
-        return len > 200
-            ? `文本片段（${len} 字符）：${raw.slice(0, 200)}...`
-            : raw
+        return `${raw.length} chars`
+    }
+    if (tool === 'getDocStructure') {
+        const nodeCount = raw.split('\n').filter((l) => l.trim()).length
+        return `${nodeCount} nodes`
     }
     try {
         const parsed = JSON.parse(raw) as unknown
-        if (Array.isArray(parsed)) {
-            return `返回 ${parsed.length} 条记录`
+        if (tool === 'getCategories') {
+            if (Array.isArray(parsed)) {
+                const names = (parsed as Array<{ content?: string }>)
+                    .map((c) => c.content ?? '')
+                    .filter(Boolean)
+                const head = names.slice(0, 5).join(', ')
+                return `${parsed.length} categories: ${head}${names.length > 5 ? '…' : ''}`
+            }
+        }
+        if (tool === 'getTagsByCategory') {
+            if (Array.isArray(parsed)) {
+                const names = (parsed as Array<{ tag?: string }>)
+                    .map((t) => t.tag ?? '')
+                    .filter(Boolean)
+                const head = names.slice(0, 6).join(', ')
+                return `${parsed.length} tags: ${head}${names.length > 6 ? '…' : ''}`
+            }
+        }
+        if (tool === 'getDocsByTag') {
+            if (Array.isArray(parsed)) {
+                const titles = (
+                    parsed as Array<{ metadata?: { title?: string } }>
+                )
+                    .map((d) => d.metadata?.title ?? '')
+                    .filter(Boolean)
+                const head = titles.slice(0, 3).join(', ')
+                return `${parsed.length} docs: ${head}${titles.length > 3 ? '…' : ''}`
+            }
         }
         if (tool === 'reviewResult') {
-            return JSON.stringify(parsed)
+            if (typeof parsed === 'object' && parsed !== null) {
+                const r = parsed as {
+                    verdict?: string
+                    score?: number
+                    reason?: string
+                }
+                return `${r.verdict ?? '?'} (${r.score ?? '?'}/5): ${(r.reason ?? '').slice(0, 80)}`
+            }
+            return JSON.stringify(parsed).slice(0, 200)
+        }
+        if (Array.isArray(parsed)) {
+            return `${parsed.length} records`
         }
         return JSON.stringify(parsed).slice(0, 200)
     } catch {
