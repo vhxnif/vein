@@ -114,6 +114,16 @@ const VERDICT_ICON: Record<string, string> = {
     fail: '✗',
 }
 
+const VERDICT_COLOR: Record<string, string> = {
+    pass: '\x1b[32m',
+    partial: '\x1b[33m',
+    fail: '\x1b[31m',
+}
+
+function colorize(text: string, code: string): string {
+    return process.stdout.isTTY ? `${code}${text}\x1b[0m` : text
+}
+
 function createCachedSummarizer(config: ProjectConfig) {
     const summaryProvider = config.summarizer ?? config.model
     const key = modelKey(summaryProvider)
@@ -991,14 +1001,18 @@ vein.command('ask')
             note(result.content || '(no results found)')
 
             if (result.review) {
-                const icon =
-                    VERDICT_ICON[result.review.verdict] ?? result.review.verdict
+                const verdict = result.review.verdict
+                const icon = VERDICT_ICON[verdict] ?? verdict
+                const color = VERDICT_COLOR[verdict] ?? ''
                 const reviewTime =
                     result.reviewElapsedMs !== undefined
                         ? ` · review ${formatDuration(result.reviewElapsedMs)}`
                         : ''
                 note(
-                    `${icon} Review: ${result.review.verdict} (${result.review.score}/5)${reviewTime}\n${result.review.reason}`
+                    colorize(
+                        `${icon} Review: ${verdict} (${result.review.score}/5)${reviewTime}\n${result.review.reason}`,
+                        color
+                    )
                 )
             }
 
