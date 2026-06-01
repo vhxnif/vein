@@ -1,5 +1,4 @@
 import { Type } from '@earendil-works/pi-ai'
-import type { ModelProvider } from '../config'
 import {
     getCategories,
     getDocsByTag,
@@ -11,7 +10,6 @@ import type { BaseDocNode, TreeNode } from '../tree/type'
 import { type ContextDef, call, type ToolDef } from './base'
 import type { ReviewResult, SourceRef } from './reviewer'
 import { reviewer } from './reviewer'
-import { makeSearchDocsByKeywordTool, makeSearchSimilarTagsTool } from './tools'
 
 const BASE_PROMPT = `你是一个文档检索 Librarian。你的任务是根据用户的查询，按可用的查找链路逐步缩小范围，最终返回最相关的文档片段原文。
 
@@ -63,39 +61,8 @@ const BASE_PROMPT = `你是一个文档检索 Librarian。你的任务是根据�
      - 可能方向：切换其他分类/标签、选择同一文档的其他节点、回溯到上一层
 3. 最多重试 2 次；如果仍不通过，将最后一次结果和审查意见一并返回给用户`
 
-const LINK2_PROMPT = `
-### 链路 2：语义标签直搜（快速路径，推荐优先尝试）
-
-路径: query → searchSimilarTags → docs → tree → node
-
-1. **searchSimilarTags**：将用户的查询转换为语义向量，在标签库中搜索最相似的标签。传入 query（查询文本），可选 categoryId 限定分类。返回 [{tagId, tag, similarity}]
-2. 选择 similarity 最高的 3-5 个标签，调用 getDocsByTag 获取关联文档
-3. 之后与链路 1 的步骤 4-5 相同：getDocStructure → getDocNodeDetails
-
-> 此路径比链路 1 快，适合目标明确的查询。如果 searchSimilarTags 返回空结果或无高质量匹配（similarity < 0.7），回退到链路 1。`
-
-const LINK3_PROMPT = `
-### 链路 3：分词关键词直搜（无 embedding 时优先使用）
-
-路径: query → searchDocsByKeyword → getDocStructure → getDocNodeDetails
-
-1. **searchDocsByKeyword**：用关键词在文档摘要中搜索相关文档。传入 query（搜索关键词）。返回 [{docId, metadata, rank}]
-2. 选择 rank 最高（即 rank 数值最小）的 3-5 个文档，调用 getDocStructure 查看结构
-3. 之后与链路 1 的步骤 5 相同：getDocNodeDetails 获取全文
-
-> 此路径直达文档，跳过分类和标签中间层，适合关键词明确的查询。如果 searchDocsByKeyword 返回空结果，回退到链路 1。
-
-## 查找优先级
-
-- 有 searchSimilarTags（语义标签搜索）时：优先尝试链路 2（语义标签）→ 无结果时回退到链路 3（关键词）→ 仍无结果时回退到链路 1（分类浏览）
-- 无 searchSimilarTags 时：优先尝试链路 3（关键词）→ 无结果时回退到链路 1（分类浏览）`
-
-function buildPrompt(hasEmbedding: boolean): string {
-    const extra = hasEmbedding ? `${LINK2_PROMPT}${LINK3_PROMPT}` : LINK3_PROMPT
-    return BASE_PROMPT.replace(
-        '> 后续新增查找链路时，在上方「可用查找链路」区域追加即可。',
-        `> 后续新增查找链路时，在上方「可用查找链路」区域追加即可。${extra}`
-    )
+function buildPrompt(): string {
+    return BASE_PROMPT
 }
 
 function reorderDict<T extends Record<string, unknown>>(
@@ -133,8 +100,8 @@ function cleanNode(tree: TreeNode<BaseDocNode>[]) {
     return formatStructure(tree, ['title', 'summary', 'prefixSummary'])
 }
 
-function buildTools(embeddingProvider?: ModelProvider): ToolDef[] {
-    const base: ToolDef[] = [
+function buildTools(): ToolDef[] {
+    return [
         {
             name: 'getCategories',
             description: '获取所有分类列表，返回 [{id, content}]',
@@ -237,14 +204,6 @@ function buildTools(embeddingProvider?: ModelProvider): ToolDef[] {
             },
         },
     ]
-
-    if (embeddingProvider) {
-        base.unshift(makeSearchSimilarTagsTool(embeddingProvider))
-    }
-
-    base.unshift(makeSearchDocsByKeywordTool())
-
-    return base
 }
 
 type TraceStep = {
@@ -313,8 +272,6 @@ function extractTrace(messages: ContextDef['messages']): TraceStep[] {
 }
 
 const stepLabels: Record<string, string> = {
-    searchDocsByKeyword: 'Searching documents by keyword...',
-    searchSimilarTags: 'Searching similar tags...',
     getCategories: 'Browsing categories...',
     getTagsByCategory: 'Checking tags...',
     getDocsByTag: 'Finding documents...',
@@ -325,11 +282,10 @@ const stepLabels: Record<string, string> = {
 
 async function librarian(
     msg: string,
-    onStep?: (label: string) => void,
-    embeddingProvider?: ModelProvider
+    onStep?: (label: string) => void
 ): Promise<LibrarianResult> {
     const context: ContextDef = {
-        systemPrompt: buildPrompt(!!embeddingProvider),
+        systemPrompt: buildPrompt(),
         messages: [
             {
                 role: 'user',
@@ -337,7 +293,7 @@ async function librarian(
                 timestamp: Date.now(),
             },
         ],
-        tools: buildTools(embeddingProvider),
+        tools: buildTools(),
         onToolCall: onStep
             ? (name) => onStep(stepLabels[name] ?? `Calling ${name}...`)
             : undefined,

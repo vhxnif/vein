@@ -31,7 +31,6 @@ import {
 import type { ModelProvider, ProjectConfig } from '../config/type'
 import * as store from '../store'
 import { mdToTree } from '../tree/markdown_split'
-import type { DocNode } from '../tree/type'
 import { md5 } from '../utils/common'
 import { segmentText } from '../utils/segment'
 
@@ -501,28 +500,32 @@ vein.command('markdown')
 
         const results: ImportResult[] = []
         const batch = total > 1
-        const PARALLEL = batch ? 4 : 1
 
         if (batch) {
-            // ── Phase 1: parallel LLM work (parse + summarize + segment) ──
-            const prepared: Array<{
-                fp: string
+            const PARALLEL = 4
+            const filesWithIndex = files.map((fp, i) => ({ fp, i }))
+            let completed = 0
+
+            const toTag: Array<{
                 docId: string
                 docName: string
-                absolutePath: string
-                relativePath: string
-                tree: DocNode
-                bodySummary?: string
+                rootSummary: string
+                prefix: string
+                nodeCount: number
             }> = []
-            let phase1Completed = 0
-            const phase1Total = files.length
 
-            const s = spinner()
-            s.start(`Parsing & summarizing (0/${phase1Total})...`)
+            // Reusable spinners — one per phase to avoid listener leaks
+            const sPhase1 = spinner()
+            const sWrite = spinner()
 
-            const filesWithIndex = files.map((fp, i) => ({ fp, i }))
+            // ── Phase 1: parallel LLM → serial DB (tree + doc, no tags) ──
             for (let j = 0; j < files.length; j += PARALLEL) {
                 const chunk = filesWithIndex.slice(j, j + PARALLEL)
+
+                sPhase1.start(
+                    `Parsing & summarizing (${completed}/${total})...`
+                )
+
                 const chunkResults = await Promise.all(
                     chunk.map(async ({ fp, i }) => {
                         const absolutePath = path.resolve(fp)
@@ -560,7 +563,7 @@ vein.command('markdown')
                                 ? await segmentText(rootSummary)
                                 : undefined
                             return {
-                                skipped: false as const,
+                                ok: true as const,
                                 fp,
                                 docId,
                                 docName,
@@ -570,6 +573,7 @@ vein.command('markdown')
                                 bodySummary,
                                 prefix,
                                 rootSummary,
+                                needsCleanup: !!existing,
                             }
                         } catch (err) {
                             log.error({
@@ -587,137 +591,144 @@ vein.command('markdown')
                     })
                 )
 
+                completed += chunkResults.length
+                sPhase1.stop(`Parsed & summarized (${completed}/${total})`)
+
                 for (const r of chunkResults) {
-                    phase1Completed++
-                    s.message(
-                        `Parsing & summarizing (${phase1Completed}/${phase1Total})...`
-                    )
                     if ('error' in r) {
                         results.push({
                             status: 'failed',
                             filePath: r.filePath!,
                             error: r.errMsg!,
                         })
-                    } else if (r.skipped) {
+                        continue
+                    }
+                    if (r.skipped) {
                         results.push({
                             status: 'skipped',
                             docName: r.docName,
                             docId: r.docId,
                         })
-                    } else {
-                        prepared.push({ ...r, fp: r.fp! })
+                        continue
+                    }
+
+                    const prefix = r.prefix
+                    sWrite.start(`${prefix}Writing to database...`)
+                    try {
+                        if (r.needsCleanup) {
+                            await store.deleteTree(r.docId)
+                            await store.deleteDoc(r.docId)
+                        }
+                        const nodeCount = await store.insertTree(
+                            [r.tree],
+                            r.docId
+                        )
+                        await store.insertDoc(
+                            r.docId,
+                            {
+                                title: r.docName,
+                                sourcePath: r.relativePath,
+                                nodeCount,
+                            },
+                            r.bodySummary
+                        )
+
+                        if (nodeCount <= 1) {
+                            sWrite.stop(
+                                `${prefix}${r.docName}: No headings found — no structure extracted.`
+                            )
+                            results.push({
+                                status: 'imported',
+                                docName: r.docName,
+                                docId: r.docId,
+                                nodeCount,
+                            })
+                            continue
+                        }
+
+                        if (r.rootSummary) {
+                            sWrite.stop(
+                                `${prefix}${r.docName} → ${nodeCount} nodes, tagging deferred`
+                            )
+                            toTag.push({
+                                docId: r.docId,
+                                docName: r.docName,
+                                rootSummary: r.rootSummary,
+                                prefix,
+                                nodeCount,
+                            })
+                        } else {
+                            sWrite.stop(
+                                `${prefix}${r.docName} → ${nodeCount} nodes`
+                            )
+                        }
+
+                        results.push({
+                            status: 'imported',
+                            docName: r.docName,
+                            docId: r.docId,
+                            nodeCount,
+                        })
+                    } catch (err) {
+                        log.error({
+                            err,
+                            docId: r.docId,
+                            content: 'DB write failed',
+                        })
+                        results.push({
+                            status: 'failed',
+                            filePath: r.fp,
+                            error: getErrorMessage(err),
+                        })
                     }
                 }
             }
-            s.stop(`Parsed & summarized ${phase1Completed} file(s)`)
 
-            const skippedInPhase1 = results.filter(
-                (r) => r.status === 'skipped'
-            ).length
-            const failedInPhase1 = results.filter(
-                (r) => r.status === 'failed'
-            ).length
-            if (skippedInPhase1 > 0 || failedInPhase1 > 0) {
-                const parts: string[] = []
-                if (prepared.length > 0)
-                    parts.push(`${prepared.length} to import`)
-                if (skippedInPhase1 > 0)
-                    parts.push(`${skippedInPhase1} skipped`)
-                if (failedInPhase1 > 0) parts.push(`${failedInPhase1} failed`)
-                note(parts.join(', '))
-            }
-
-            // ── Phase 2: serial DB writes ──
-            const s2 = spinner()
-            for (const [_pi, p] of prepared.entries()) {
-                const idx = files.indexOf(p.fp) + 1
-                const prefix = `[${idx}/${total}] `
-                s2.start(`${prefix}Writing to database...`)
-                try {
-                    const nodeCount = await store.insertTree([p.tree], p.docId)
-                    await store.insertDoc(
-                        p.docId,
-                        {
-                            title: p.docName,
-                            sourcePath: p.relativePath,
-                            nodeCount,
-                        },
-                        p.bodySummary
-                    )
-
-                    if (nodeCount <= 1) {
-                        s2.stop(
-                            `${prefix}${p.docName}: No headings found — no structure extracted.`
+            // ── Phase 2: serial tag extraction ──
+            if (toTag.length > 0) {
+                const sTag = spinner()
+                for (const t of toTag) {
+                    sTag.start(`${t.prefix}Extracting tags...`)
+                    let tagCount = 0
+                    let categoryCount = 0
+                    try {
+                        const tagResult = await extractAndSaveTags(
+                            t.docId,
+                            t.rootSummary,
+                            modelKey(config.model),
+                            config.embedding,
+                            (progress) => {
+                                if (
+                                    progress.phase === 'saving' &&
+                                    progress.total
+                                ) {
+                                    sTag.message(
+                                        `${t.prefix}Tagging ${progress.saved}/${progress.total}...`
+                                    )
+                                }
+                            }
                         )
-                        results.push({
-                            status: 'imported',
-                            docName: p.docName,
-                            docId: p.docId,
-                            nodeCount,
+                        tagCount = tagResult.tagCount
+                        categoryCount = tagResult.categoryCount
+                    } catch (err) {
+                        sTag.stop(
+                            `${t.prefix}${t.docName}: Tag extraction failed`
+                        )
+                        log.warn({
+                            err,
+                            docId: t.docId,
+                            content: 'Tag extraction failed',
                         })
                         continue
                     }
 
-                    const rootSummary = p.tree.value.summary
-                    if (rootSummary) {
-                        s2.start(`${prefix}Extracting tags...`)
-                        let tagCount = 0
-                        let categoryCount = 0
-                        try {
-                            const tagResult = await extractAndSaveTags(
-                                p.docId,
-                                rootSummary,
-                                modelKey(config.model),
-                                config.embedding,
-                                (progress) => {
-                                    if (
-                                        progress.phase === 'saving' &&
-                                        progress.total
-                                    ) {
-                                        s2.message(
-                                            `${prefix}Tagging ${progress.saved}/${progress.total}...`
-                                        )
-                                    }
-                                }
-                            )
-                            tagCount = tagResult.tagCount
-                            categoryCount = tagResult.categoryCount
-                        } catch (err) {
-                            log.warn({
-                                err,
-                                docId: p.docId,
-                                content: 'Tag extraction failed',
-                            })
-                        }
-
-                        const tagsPart =
-                            tagCount > 0
-                                ? `${tagCount} tag(s) / ${categoryCount} ${pluralize(categoryCount, 'category', 'categories')}`
-                                : 'no tags extracted'
-                        s2.stop(
-                            `${prefix}${p.docName} → ${nodeCount} nodes, ${tagsPart}`
-                        )
-                    } else {
-                        s2.stop(`${prefix}${p.docName} → ${nodeCount} nodes`)
-                    }
-
-                    results.push({
-                        status: 'imported',
-                        docName: p.docName,
-                        docId: p.docId,
-                        nodeCount,
-                    })
-                } catch (err) {
-                    log.error({
-                        err,
-                        docId: p.docId,
-                        content: 'DB write failed',
-                    })
-                    results.push({
-                        status: 'failed',
-                        filePath: p.fp,
-                        error: getErrorMessage(err),
-                    })
+                    const tagsPart =
+                        tagCount > 0
+                            ? `${tagCount} tag(s) / ${categoryCount} ${pluralize(categoryCount, 'category', 'categories')}`
+                            : 'no tags extracted'
+                    sTag.stop(
+                        `${t.prefix}${t.docName} → ${t.nodeCount} nodes, ${tagsPart}`
+                    )
                 }
             }
         } else {
@@ -873,8 +884,7 @@ vein.command('ask')
                     query,
                     searchSpinner
                         ? (label) => searchSpinner.message(label)
-                        : undefined,
-                    config.embedding
+                        : undefined
                 )
             } catch (err) {
                 searchSpinner?.stop('Search failed')
