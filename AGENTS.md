@@ -72,7 +72,7 @@ src/
 │   ├── tools.ts      # Agent 工具工厂（searchSimilarTags、searchDocsByKeyword）
 │   └── index.ts      # 统一导出
 ├── command/      # CLI 命令
-│   └── vein.ts       # 主命令 (new / markdown / ask / hs / tags)
+│   └── vein.ts       # 主命令 (new / markdown / ask / hs / tags / config)
 ├── config/       # 配置（logger、项目初始化和配置读写）
 ├── store/        # 数据库层
 │   ├── schema.ts     # Drizzle schema 定义
@@ -195,6 +195,10 @@ Reviewer 是独立的纯评估 Agent，评估维度：相关性、完整性、�
         "provider": "openai",
         "model": "gpt-4o-mini"
     },
+    "segmenter": {
+        "provider": "openai",
+        "model": "gpt-4o-mini"
+    },
     "embedding": {
         "provider": "openrouter",
         "model": "openai/text-embedding-3-small"
@@ -212,6 +216,8 @@ Reviewer 是独立的纯评估 Agent，评估维度：相关性、完整性、�
 | `model.model` | 模型名称，如 `deepseek-v4-pro`、`gpt-4o-mini` |
 | `summarizer.provider` | 文档摘要专用 AI provider（可选，未配置时回退到 `model`） |
 | `summarizer.model` | 摘要专用模型名称（可选，未配置时回退到 `model`） |
+| `segmenter.provider` | 中文分词专用 AI provider（可选，未配置时回退到 `model`） |
+| `segmenter.model` | 分词专用模型名称（可选，未配置时回退到 `model`） |
 | `embedding.provider` | Embedding provider（可选，目前仅 `openrouter`） |
 | `embedding.model` | Embedding 模型 ID，如 `openai/text-embedding-3-small`、`nvidia/llama-nemotron-embed-vl-1b-v2:free` |
 | `sqliteLibPath` | 自定义 SQLite 库路径（可选，用于加载 sqlite-vec。建议通过环境变量 `VEIN_SQLITE_LIB_PATH` 设置，Homebrew 路径会自动探测） |
@@ -236,7 +242,7 @@ vein ask [query] [-n | --no-interactive] [-t | --trace]
     检索文档库。默认交互输入 query。
     传入 query 参数时直接使用，不重复收集。
     -n 输出 JSON（供脚本使用，含 elapsedMs 耗时字段）。
-    -t 展示检索步骤追踪。
+    -t 展示检索步骤追踪（含 docId/nodeId 和内容摘要，不含完整文本）。
     每次查询结果自动保存到 .vein/ask-history/。
 
 vein history [-l | --last] [-L | --list] [-p <n>]
@@ -251,6 +257,10 @@ vein tags backfill-embeddings
 vein tags clear-embeddings
     删除 tag_embeddings vec0 表。
     切换 embedding 模型前必须执行，否则维度不匹配。
+
+vein config
+    交互式查看和修改项目配置（model / summarizer / segmenter / embedding / sqliteLibPath）。
+    循环菜单选择要修改的字段，每次改动即时保存到 .vein/config.json。
 ```
 
 ## 批量导入管道
@@ -348,8 +358,13 @@ sqliteVec.load(db)  // 加载向量扩展
 - **Lint**: Biome, 推荐规则 + 严格 correctness/suspicious 规则, 启用 organizeImports
 - **TypeScript**: ESNext target, strict 模式, `verbatimModuleSyntax`（type 导入需显式 `import type`）
 - **命名**: 文件 kebab-case, 函数 camelCase, 类型 PascalCase
-- **日志**: 使用 `logger.child({ module: 'xxx' })` 创建模块级 logger，关键操作节点（缓存命中/未命中、数据变更、错误）必须打日志
-- **日志级别**: `log.info` 记录正常流程节点，`log.warn` 记录需关注但非致命的操作（如强制覆盖），`log.error` 记录异常（传入 `err` 字段）
+- **日志**: 使用 `logger.child({ module: 'xxx' })` 创建模块级 logger
+- **日志级别**:
+  - `log.info` 仅记录关键流程节点（Agent 工具调用开始/结束、检索完成、迁移、错误恢复等）
+  - `log.debug` 记录内部细节（缓存命中/未命中、markdown 解析流水线步骤、LLM 消息收发等）
+  - `log.warn` 记录需关注但非致命的操作（如强制覆盖、降级行为）
+  - `log.error` 记录异常（传入 `err` 字段，含 stack trace）
+- **日志内容约束**: 禁止在日志中打印完整 LLM prompt/messages/response 或大型数据结构（如完整文档树）。Agent 工具结果仅记录摘要（resultSummary + resultLen），不记录完整 result 字段。
 - **日志格式**: 结构化对象 `log.info({ docId, key: value, content: '描述' })`，`content` 字段用英文描述操作，避免在 msg 中拼接变量
 - **导出**: 统一起名导出（避免 default export）
 - **运行时**: `bun run src/index.ts`, `bun run check` 类型检查, `bun run lint` 检查代码, `bun run format` 格式化（含 import 排序）
