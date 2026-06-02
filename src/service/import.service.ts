@@ -6,6 +6,7 @@ import type { ModelProvider, ProjectConfig } from '../config/type'
 import * as store from '../store'
 import { mdToTree, renderDocOutline } from '../tree/markdown_split'
 import type { DocNode } from '../tree/type'
+import { getErrorMessage, modelKey, pluralize } from '../utils/cli-helpers'
 import { md5 } from '../utils/common'
 import { segmentText } from '../utils/segment'
 
@@ -28,20 +29,6 @@ export type ImportProgress = {
     message: string
     completed?: number
     total?: number
-}
-
-function getErrorMessage(err: unknown): string {
-    return err instanceof Error
-        ? err.message || 'Unknown error'
-        : 'Unknown error'
-}
-
-function modelKey(provider: ModelProvider): string {
-    return `${provider.provider}/${provider.model}`
-}
-
-function pluralize(count: number, singular: string, plural: string): string {
-    return count === 1 ? singular : plural
 }
 
 type ParsedFile = {
@@ -278,6 +265,12 @@ export async function importBatch(
                         structure: r.parsed.structure,
                         nodeCount,
                     })
+                } else if (nodeCount > 1) {
+                    log.debug({
+                        docId: r.parsed.docId,
+                        docName: r.parsed.docName,
+                        content: 'No root summary, skipping tag analysis',
+                    })
                 }
                 results.push({
                     status: 'imported',
@@ -394,4 +387,4 @@ function collectAllSummaries(tree: DocNode): string[] {
     return summaries
 }
 
-export { collectAllSummaries, getErrorMessage, modelKey, pluralize }
+export { collectAllSummaries }
