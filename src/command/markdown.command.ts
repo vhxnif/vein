@@ -140,11 +140,7 @@ export function register(program: Command) {
                 .description(
                     're-segment documents whose summaries changed and update FTS index'
                 )
-                .argument(
-                    '[docIds...]',
-                    'specific document id(s) (if omitted, process all candidates)'
-                )
-                .action(async (docIds?: string[]) => {
+                .action(async () => {
                     const config = await setupProjectModel()
                     if (!config) {
                         outro('Not in a vein project. Run "vein new" first.')
@@ -153,18 +149,13 @@ export function register(program: Command) {
 
                     const segmenter = config.segmenter ?? config.model
 
-                    // Resolve target docs
-                    docIds ??= []
-                    if (docIds.length === 0) {
-                        const allDocs = await store.getAllDocs()
-                        docIds = allDocs.map((d) => d.id)
-
-                        if (docIds.length === 0) {
-                            outro('No documents found.')
-                            return
-                        }
+                    const allDocs = await store.getAllDocs()
+                    if (allDocs.length === 0) {
+                        outro('No documents found.')
+                        return
                     }
 
+                    const docIds = allDocs.map((d) => d.id)
                     intro(`Re-segmenting ${docIds.length} document(s)`)
 
                     let done = 0
@@ -257,8 +248,8 @@ export function register(program: Command) {
                     if (done > 0) parts.push(`${done} re-segmented`)
                     if (skipped > 0) parts.push(`${skipped} skipped`)
                     if (failed > 0) parts.push(`${failed} failed`)
-                    segSpinner.stop(parts.join(', ') || 'Nothing done')
-                    outro()
+                    segSpinner.stop('Done.')
+                    outro(parts.join(', ') || 'Nothing done')
                 })
         )
 }
