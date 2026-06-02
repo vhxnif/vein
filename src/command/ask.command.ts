@@ -95,6 +95,10 @@ export function register(program: Command) {
             'disable interactive prompt, output JSON'
         )
         .option('-t, --trace', 'show retrieval trace in output')
+        .option(
+            '-q, --quick',
+            'use keyword search to skip category/tag browsing'
+        )
         .action(
             async (
                 queryArg?: string,
@@ -102,10 +106,12 @@ export function register(program: Command) {
                     noInteractive?: boolean
                     interactive?: boolean
                     trace?: boolean
+                    quick?: boolean
                 }
             ) => {
                 const interactive = options?.interactive ?? true
                 const showTrace = options?.trace ?? false
+                const quick = options?.quick ?? false
 
                 const config = await setupProjectModel()
                 if (!config) {
@@ -160,7 +166,8 @@ export function register(program: Command) {
                         query,
                         searchSpinner
                             ? (label) => searchSpinner.message(label)
-                            : undefined
+                            : undefined,
+                        { quick, segmenter: config.segmenter }
                     )
                 } catch (err) {
                     searchSpinner?.stop('Search failed')

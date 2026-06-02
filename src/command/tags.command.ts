@@ -78,9 +78,7 @@ export function register(program: Command) {
         )
         .addCommand(
             new Command('backfill-fts')
-                .description(
-                    're-segment all tags and rebuild tags_fts index (run after upgrading from trigram to unicode61 tokenizer)'
-                )
+                .description('re-segment all tags and rebuild tags_fts index')
                 .action(async () => {
                     const config = await setupProjectModel()
                     if (!config) {

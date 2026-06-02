@@ -5,6 +5,26 @@ import { segmentText } from '../utils/segment'
 import type { ToolDef } from './base'
 import { generateEmbeddings } from './embedding'
 
+/** Shared business logic: segment + FTS search + enrich metadata */
+async function searchDocsByKeyword(
+    query: string,
+    segmenter?: ModelProvider
+): Promise<string> {
+    const segmented = segmenter ? await segmentText(query, segmenter) : query
+    const results = await store.searchDocsByKeyword(segmented, 10)
+    const enriched = await Promise.all(
+        results.map(async (r) => {
+            const doc = await store.getDoc(r.docId)
+            return {
+                docId: r.docId,
+                metadata: doc ? JSON.parse(doc.metadata) : {},
+                rank: r.rank,
+            }
+        })
+    )
+    return JSON.stringify(enriched)
+}
+
 function makeSearchSimilarTagsTool(
     embeddingProvider: ModelProvider,
     segmenter?: ModelProvider
@@ -101,34 +121,4 @@ function mergeAndDedup(
     return JSON.stringify(sorted)
 }
 
-function makeSearchDocsByKeywordTool(): ToolDef {
-    return {
-        name: 'searchDocsByKeyword',
-        description:
-            '通过关键词在文档摘要中搜索相关文档。返回 [{docId, metadata, rank}]，按匹配度降序。' +
-            '适用于：用户查询包含具体关键词时，快速定位相关文档，跳过分类→标签的逐层浏览。',
-        parameters: Type.Object({
-            query: Type.String({ description: '搜索关键词' }),
-        }),
-        run: async ({ query }: { query: string }) => {
-            const segmented = await segmentText(query)
-            const results = await store.searchDocsByKeyword(segmented, 10)
-
-            // Enrich with doc metadata
-            const enriched = await Promise.all(
-                results.map(async (r) => {
-                    const doc = await store.getDoc(r.docId)
-                    return {
-                        docId: r.docId,
-                        metadata: doc ? JSON.parse(doc.metadata) : {},
-                        rank: r.rank,
-                    }
-                })
-            )
-
-            return JSON.stringify(enriched)
-        },
-    }
-}
-
-export { makeSearchDocsByKeywordTool, makeSearchSimilarTagsTool }
+export { makeSearchSimilarTagsTool, searchDocsByKeyword }
