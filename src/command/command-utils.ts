@@ -1,5 +1,5 @@
 import { createSummarizer, setModelProvider } from '../ai/index'
-import { getProjectRoot, loadProjectConfig, logger } from '../config'
+import { loadProjectConfig, logger, resolveProjectRoot } from '../config'
 import type { ProjectConfig } from '../config/type'
 import * as store from '../store'
 import { modelKey } from '../utils/cli-helpers'
@@ -8,7 +8,7 @@ import { md5 } from '../utils/common'
 const log = logger.child({ module: 'command-utils' })
 
 async function setupProjectModel(): Promise<ProjectConfig | undefined> {
-    const root = getProjectRoot(process.cwd())
+    const root = resolveProjectRoot()
     if (!root) return
     const config = await loadProjectConfig(root)
     if (config?.model) {

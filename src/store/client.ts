@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite'
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import * as sqliteVec from 'sqlite-vec'
-import { getProjectRoot } from '../config'
+import { resolveProjectRoot } from '../config'
 import * as schema from './schema'
 import './sqlite_setup'
 
@@ -52,7 +52,7 @@ function createDb(dbPath: string) {
 }
 
 function resolveDbPath(): string {
-    const root = getProjectRoot(process.cwd())
+    const root = resolveProjectRoot()
     if (!root) {
         console.error(
             'No vein project found. Run "vein new <name>" to initialize one.'

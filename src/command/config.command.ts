@@ -2,7 +2,11 @@ import { autocomplete, intro, note, outro, select, text } from '@clack/prompts'
 import { getModels, getProviders } from '@earendil-works/pi-ai'
 import type { Command } from 'commander'
 import { setModelProvider } from '../ai/index'
-import { getProjectRoot, loadProjectConfig, saveProjectConfig } from '../config'
+import {
+    loadProjectConfig,
+    resolveProjectRoot,
+    saveProjectConfig,
+} from '../config'
 import type { ModelProvider, ProjectConfig } from '../config/type'
 
 const formatMd = (md?: ModelProvider) =>
@@ -69,7 +73,7 @@ export function register(program: Command) {
         .command('config')
         .description('interactively view and modify project configuration')
         .action(async () => {
-            const root = getProjectRoot(process.cwd())
+            const root = resolveProjectRoot()
             if (!root) {
                 outro('Not in a vein project. Run "vein new" first.')
                 return

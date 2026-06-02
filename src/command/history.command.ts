@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { intro, note, outro, select } from '@clack/prompts'
 import type { Command } from 'commander'
-import { getProjectRoot, veinDir } from '../config'
+import { resolveProjectRoot, veinDir } from '../config'
 import { formatDuration } from '../utils/cli-helpers'
 
 type HistoryEntry = {
@@ -51,7 +51,7 @@ export function register(program: Command) {
                 list?: boolean
                 page?: number
             }) => {
-                const root = getProjectRoot(process.cwd())
+                const root = resolveProjectRoot()
                 if (!root) {
                     outro('Not in a vein project. Run "vein new" first.')
                     return

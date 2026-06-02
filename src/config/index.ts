@@ -5,6 +5,25 @@ import { name } from '../../package.json'
 import { configSchema } from '../store/migrations/config_schema'
 import type { ModelProvider, ProjectConfig } from './type'
 
+// ── project root override (set by --project flag) ──
+
+let _projectOverridePath: string | undefined
+
+/** Set a global project root override (used by --project flag). */
+export function setProjectOverride(p: string | undefined): void {
+    _projectOverridePath = p
+}
+
+/**
+ * Resolve the project root directory.
+ * If a global override was set (via --project), returns that.
+ * Otherwise walks up from cwd looking for a .vein directory.
+ */
+export function resolveProjectRoot(): string | undefined {
+    if (_projectOverridePath) return _projectOverridePath
+    return getProjectRoot(process.cwd())
+}
+
 const logs = `${process.env.HOME}/.config/${name}/logs`
 
 await mkdir(logs, { recursive: true })

@@ -4,7 +4,7 @@ import { intro, note, outro, spinner, text } from '@clack/prompts'
 import type { Command } from 'commander'
 import type { LibrarianResult } from '../ai/index'
 import { librarian } from '../ai/index'
-import { getProjectRoot, logger, veinDir } from '../config'
+import { logger, resolveProjectRoot, veinDir } from '../config'
 import {
     colorize,
     formatDuration,
@@ -177,7 +177,7 @@ export function register(program: Command) {
                 const elapsedMs = Math.round(performance.now() - startedAt)
                 const elapsed = formatDuration(elapsedMs)
 
-                const projectRoot = getProjectRoot(process.cwd())
+                const projectRoot = resolveProjectRoot()
                 if (projectRoot) {
                     saveHistory(projectRoot, query, result, elapsedMs).catch(
                         (err) =>

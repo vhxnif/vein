@@ -17,6 +17,7 @@ import {
     loadProjectConfig,
     logger,
 } from '../config'
+import { registerProject } from '../config/global'
 import type { ModelProvider } from '../config/type'
 
 const log = logger.child({ module: 'new' })
@@ -43,9 +44,11 @@ export function register(program: Command) {
 
             let projectName = name
             if (!projectName) {
+                const defaultName = path.basename(cwd)
                 const raw = await text({
                     message: 'Project name:',
-                    placeholder: path.basename(cwd),
+                    placeholder: defaultName,
+                    defaultValue: defaultName,
                 })
                 if (typeof raw !== 'string') {
                     outro('Cancelled')
@@ -114,6 +117,7 @@ export function register(program: Command) {
                     embedding
                 )
                 setModelProvider(config.model)
+                await registerProject(config.name, cwd)
                 initSpinner.stop('Initialized')
                 log.info({
                     name: projectName,

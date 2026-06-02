@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { saveTagResult, tagger } from '../ai/index'
-import { getProjectRoot, logger } from '../config'
+import { logger, resolveProjectRoot } from '../config'
 import type { ModelProvider, ProjectConfig } from '../config/type'
 import * as store from '../store'
 import { mdToTree, renderDocOutline } from '../tree/markdown_split'
@@ -71,7 +71,7 @@ async function parseOneFile(
 ): Promise<ParseChunkResult> {
     const absolutePath = path.resolve(fp)
     const docName = path.basename(absolutePath, '.md')
-    const projectRoot = getProjectRoot(process.cwd())
+    const projectRoot = resolveProjectRoot()
     const relativePath = projectRoot
         ? path.relative(projectRoot, absolutePath)
         : absolutePath
