@@ -57,7 +57,7 @@ nodes ──(tree_closure)──→ nodes (树形层级)
 
 ### 预设分类体系
 
-12 个宏观分类，仿真实图书馆分类法设计，见 `src/store/migrations/0000_seed_categories.sql`。
+12 个宏观分类，仿真实图书馆分类法设计，见 `src/store/migrations/sql.ts` 中的 seed 条目。
 
 ## 目录结构
 
@@ -72,15 +72,20 @@ src/
 │   ├── tools.ts      # Agent 工具工厂（searchSimilarTags、searchDocsByKeyword）
 │   └── index.ts      # 统一导出
 ├── command/      # CLI 命令（每个命令独立文件，导出 register(program)）
-│   ├── vein.ts           # 入口：Command 创建 + 各命令注册（薄层，~20 行）
+│   ├── vein.ts           # 入口：Command 创建 + 各命令注册 + --project 全局选项
 │   ├── command-utils.ts  # 共享工具：setupProjectModel、createCachedSummarizer
-│   ├── new.command.ts    # vein new（项目初始化）
+│   ├── new.command.ts    # vein new（项目初始化，自动注册到全局）
 │   ├── markdown.command.ts # vein markdown（markdown 导入，调用 service 层）
 │   ├── ask.command.ts    # vein ask（文档检索）
 │   ├── history.command.ts # vein history（历史回顾，含 formatHistoryDetail）
 │   ├── tags.command.ts   # vein tags（标签管理）
-│   └── config.command.ts # vein config（交互式配置修改）
-├── config/       # 配置（logger、项目初始化和配置读写）
+│   ├── config.command.ts # vein config（交互式配置修改）
+│   ├── browse.command.ts # vein browse（按 doc/category/tag 维度浏览）
+│   └── projects.command.ts # vein projects（全局项目注册表管理）
+├── config/       # 配置（logger、项目初始化、全局项目注册表、root override）
+│   ├── index.ts      # 项目配置读写 + resolveProjectRoot / setProjectOverride
+│   ├── global.ts     # 全局项目注册表（~/.config/vein/projects.json）
+│   └── type.ts       # ProjectConfig / ModelProvider 类型
 ├── service/      # 业务逻辑层（与 CLI I/O 分离）
 │   └── import.service.ts # markdown 导入管道（Phase 1 并行 LLM + Phase 2 串行 DB）
 ├── store/        # 数据库层
@@ -234,13 +239,47 @@ Reviewer 是独立的纯评估 Agent，评估维度：相关性、完整性、�
 
 > **切换 embedding 模型**：不同模型输出不同维度（OpenAI 1536、NVIDIA 2048、Google 768）。切换前需先 `vein tags clear-embeddings` 删除旧 vec0 表，再 `vein tags backfill-embeddings` 用新模型重建。
 
+## 全局项目注册表
+
+`vein new` 初始化项目时自动将项目名和绝对路径写入 `~/.config/vein/projects.json`。之后可在任意目录通过 `vein -p <name> <command>` 直接操作该项目，无需 cd 到项目目录。
+
+```json
+// ~/.config/vein/projects.json
+{
+  "projects": {
+    "my-docs": "/Users/alice/my-docs",
+    "work-notes": "/Users/alice/work/notes"
+  }
+}
+```
+
+**项目根目录解析优先级**：
+1. 如果传了 `-p/--project`，从全局注册表查找路径 → 设置 `_projectOverridePath`
+2. 如果没传 `-p`，从当前工作目录向上查找 `.vein` 目录（原有逻辑）
+
+`resolveProjectRoot()` 封装了上述逻辑，所有需要定位项目的地方（DB 连接、配置加载、历史保存等）统一使用该函数。`setProjectOverride(path)` 由 `vein.ts` 的 `preAction` hook 调用。
+
+**相关文件**：
+- `src/config/global.ts` — 全局注册表 CRUD（`registerProject`、`unregisterProject`、`getProjectPath`、`loadGlobalProjects`）
+- `src/config/index.ts` — `resolveProjectRoot()`、`setProjectOverride()`、`_projectOverridePath`
+- `src/store/client.ts` — `resolveDbPath()` 使用 `resolveProjectRoot()` 而非直接的 `getProjectRoot(cwd)`
+- `src/command/vein.ts` — `-p/--project` 全局选项 + `preAction` hook 解析并设置 override
+- 使用 `await vein.parseAsync()` 确保异步 hook 在 action 之前完成
+
+`vein projects` (别名 `pr`) 可查看所有已注册项目，`--remove <name>` 删除注册。
+
 ## 命令
 
 ```
+vein [options] [command]
+    -p, --project <name>  指定目标项目（从全局注册表查找路径）。
+                          可选，不传时回退到 cwd 目录上探。
+
 vein new [name] [--migrate]
-    初始化项目。name 可选（不传时交互输入）。
+    初始化项目。name 可选（不传时交互输入，默认取当前目录名）。
     --migrate 对已有项目重新执行迁移。
     交互步骤：项目名 → AI provider → 模型 → embedding 配置（可选）
+    初始化成功后自动注册到全局项目表（~/.config/vein/projects.json）。
 
 vein markdown <files...> [-f | --force]
     导入 markdown 文件为文档树（含 AI 摘要 + 标签提取）。
@@ -259,6 +298,18 @@ vein history [-l | --last] [-L | --list] [-p <n>]
     回顾历史问答记录。无参数时交互式选择会话查看详情（循环选择，Esc 退出）。
     -l 查看最近一次。-L 非交互列表模式。-p 指定分页（每页 20 条）。
     别名 hs。
+
+vein browse
+    交互式浏览文档库，支持三个维度：
+      Documents — 分页列出所有文档（20/页），可查看详情和标签
+      Categories — 列出分类 → 查看下辖标签（含文档数）→ 查看文档
+      Tags — 分页列出所有标签（含文档数）→ 查看关联分类和文档
+    别名 br。
+
+vein projects [--remove <name>]
+    列出全局注册的所有 vein 项目（名称、路径、是否存在）。
+    --remove <name> 从注册表中删除指定项目。
+    别名 pr。
 
 vein tags backfill-embeddings
     为所有缺少 embedding 的 tag 生成向量并写入 tag_embeddings。
@@ -302,14 +353,17 @@ insertTree → insertDoc (含 docs_fts) → tagger (并行 LLM, TAG_PARALLEL = 4
 
 ## 开发约定
 
-- **命令组织**：每个命令独立文件（`src/command/xxx.command.ts`），导出 `register(program: Command)` 函数；入口 `vein.ts` 仅负责创建 Command 并调用各 register
+- **命令组织**：每个命令独立文件（`src/command/xxx.command.ts`），导出 `register(program: Command)` 函数；入口 `vein.ts` 负责创建 Command、注册子命令、全局 `--project` 选项和 `preAction` hook
 - **CLI/Business 分离**：命令文件只处理 CLI I/O（spinner、prompt、outro），核心业务逻辑放 `src/service/`
-- **共享工具**：`command-utils.ts` 中 `setupProjectModel` 和 `createCachedSummarizer` 供所有命令复用
+- **共享工具**：`command-utils.ts` 中 `setupProjectModel`（使用 `resolveProjectRoot`）和 `createCachedSummarizer` 供所有命令复用
+- **项目定位**：始终使用 `resolveProjectRoot()` 而非直接 `getProjectRoot(process.cwd())`，以正确支持 `--project` 全局选项
+- **构建**：单一入口 `bun build ./src/command/vein.ts`，所有子命令通过 import 被卷入一个 `vein.js`（非 glob 多入口，避免共享代码重复打包）
 - 迁移 SQL 内联在 `src/store/migrations/sql.ts`，按数组顺序执行，无外部 .sql 文件
 - 迁移全部使用 `IF NOT EXISTS` / `INSERT OR IGNORE`，保证幂等，新增表后执行 `vein new --migrate` 即可
+- 迁移命名以版本号为前缀（如 `v0.1.0_create_fts_tables`），后续版本新增迁移只需追加条目
 - `tag_embeddings` vec0 表不在迁移中创建，由 `upsertTagEmbedding` 首次调用时懒创建（自动匹配维度）
-- `docs_fts` 和 `tags_fts` FTS5 表在 `0002_create_fts_tables` 迁移中创建
-- 种子数据放独立迁移条目（如 `0000_seed_categories`）
+- `docs_fts` 和 `tags_fts` FTS5 表在 `v0.1.0_create_fts_tables` 迁移中创建
+- 种子数据放独立迁移条目（如 `v0.1.0_seed_categories`）
 - AI Agent 工具遵循 `base.ts` 的 `ToolDef` 模式
 - summarizer 调用自动走 `model_cache` 缓存，按 prompt MD5 + 模型名去重，命中时 hit_count + 1
 - 每次 summarizer 调用有 60s 超时，超时后抛出错误并记录日志
@@ -381,4 +435,4 @@ sqliteVec.load(db)  // 加载向量扩展
 - **日志内容约束**: 禁止在日志中打印完整 LLM prompt/messages/response 或大型数据结构（如完整文档树）。Agent 工具结果仅记录摘要（resultSummary + resultLen），不记录完整 result 字段。
 - **日志格式**: 结构化对象 `log.info({ docId, key: value, content: '描述' })`，`content` 字段用英文描述操作，避免在 msg 中拼接变量
 - **导出**: 统一起名导出（避免 default export）
-- **运行时**: `bun run src/index.ts`, `bun run check` 类型检查, `bun run lint` 检查代码, `bun run format` 格式化（含 import 排序）
+- **运行时**: `bun run src/command/vein.ts`, `bun run build` 构建（单入口 vein.ts）, `bun run check` 类型检查, `bun run lint` 检查代码, `bun run format` 格式化（含 import 排序）

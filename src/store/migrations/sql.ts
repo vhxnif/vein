@@ -1,6 +1,6 @@
 export const schema = [
     {
-        name: '0000_create_closure_tables.sql',
+        name: 'v0.1.0_create_closure_tables.sql',
         sql: `
 CREATE TABLE IF NOT EXISTS docs (
     id TEXT PRIMARY KEY,
@@ -66,7 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_categorie_tags_tag_id ON categorie_tags(tag_id);
 `.trim(),
     },
     {
-        name: '0000_seed_categories.sql',
+        name: 'v0.1.0_seed_categories.sql',
         sql: `
 INSERT OR IGNORE INTO categories (id, content) VALUES
 ('cat_000', '计算机与信息技术'),
@@ -84,7 +84,7 @@ INSERT OR IGNORE INTO categories (id, content) VALUES
 `.trim(),
     },
     {
-        name: '0000_create_model_cache.sql',
+        name: 'v0.1.0_create_model_cache.sql',
         sql: `
 CREATE TABLE IF NOT EXISTS model_cache (
     id TEXT PRIMARY KEY,
@@ -100,13 +100,13 @@ CREATE INDEX IF NOT EXISTS idx_model_cache_md5_model ON model_cache(md5, model);
         `.trim(),
     },
     {
-        name: '0001_unique_categorie_tags.sql',
+        name: 'v0.1.0_unique_categorie_tags.sql',
         sql: `
 CREATE UNIQUE INDEX IF NOT EXISTS idx_categorie_tags_pair ON categorie_tags(categorie_id, tag_id);
         `.trim(),
     },
     {
-        name: '0002_create_fts_tables.sql',
+        name: 'v0.1.0_create_fts_tables.sql',
         sql: `
 CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
     doc_id,
