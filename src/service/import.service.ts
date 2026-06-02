@@ -5,6 +5,7 @@ import { logger, resolveProjectRoot } from '../config'
 import type { ModelProvider, ProjectConfig } from '../config/type'
 import * as store from '../store'
 import { mdToTree, renderDocOutline } from '../tree/markdown_split'
+import type { DocNode } from '../tree/type'
 import { md5 } from '../utils/common'
 import { segmentText } from '../utils/segment'
 
@@ -89,8 +90,12 @@ async function parseOneFile(
         })
         const rootSummary = tree.value.summary
         const structure = renderDocOutline(tree)
-        const bodySummary = rootSummary
-            ? await segmentText(rootSummary, segmenter)
+        const allSummaries = collectAllSummaries(tree)
+        const combinedSummary = [...allSummaries, rootSummary]
+            .filter(Boolean)
+            .join('\n')
+        const bodySummary = combinedSummary
+            ? await segmentText(combinedSummary, segmenter)
             : undefined
         return {
             kind: 'ok',
@@ -375,4 +380,15 @@ export async function importBatch(
     return results
 }
 
-export { getErrorMessage, modelKey, pluralize }
+function collectAllSummaries(tree: DocNode): string[] {
+    const summaries: string[] = []
+    function walk(node: DocNode) {
+        if (node.value.summary) summaries.push(node.value.summary)
+        if (node.value.prefixSummary) summaries.push(node.value.prefixSummary)
+        for (const child of node.nodes) walk(child)
+    }
+    walk(tree)
+    return summaries
+}
+
+export { collectAllSummaries, getErrorMessage, modelKey, pluralize }
