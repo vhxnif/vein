@@ -6,13 +6,24 @@ import './sqlite_setup'
 
 const log = logger.child({ module: 'migrate' })
 
+/** Split a multi-statement SQL string and run each statement separately. */
+function execMulti(db: Database, sql: string): void {
+    const statements = sql
+        .split(';')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+    for (const stmt of statements) {
+        db.run(stmt)
+    }
+}
+
 async function runMigrations(
     dbPath: string,
     opts?: { requireExtension?: boolean }
 ) {
     const db = new Database(dbPath)
-    db.exec('PRAGMA journal_mode=WAL')
-    db.exec('PRAGMA foreign_keys = ON')
+    db.run('PRAGMA journal_mode=WAL')
+    db.run('PRAGMA foreign_keys = ON')
 
     // Load sqlite-vec extension
     try {
@@ -38,7 +49,7 @@ After installing, re-run: vein new --migrate`,
     }
 
     for (const { name, sql } of schema) {
-        db.exec(sql)
+        execMulti(db, sql)
         log.info({ sql: name, content: 'Migration applied successfully.' })
     }
     db.close()
