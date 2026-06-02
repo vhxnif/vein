@@ -52,6 +52,7 @@ type ParsedFile = {
     relativePath: string
     tree: Awaited<ReturnType<typeof mdToTree>>
     rootSummary: string | undefined
+    combinedSummary: string | undefined
     bodySummary: string | undefined
     needsCleanup: boolean
     structure: string
@@ -91,9 +92,7 @@ async function parseOneFile(
         const rootSummary = tree.value.summary
         const structure = renderDocOutline(tree)
         const allSummaries = collectAllSummaries(tree)
-        const combinedSummary = [...allSummaries, rootSummary]
-            .filter(Boolean)
-            .join('\n')
+        const combinedSummary = allSummaries.filter(Boolean).join('\n')
         const bodySummary = combinedSummary
             ? await segmentText(combinedSummary, segmenter)
             : undefined
@@ -107,6 +106,7 @@ async function parseOneFile(
                 relativePath,
                 tree,
                 rootSummary,
+                combinedSummary: combinedSummary || undefined,
                 bodySummary,
                 structure,
                 needsCleanup: !!existing,
@@ -130,6 +130,9 @@ async function writeOneDocument(parsed: ParsedFile): Promise<number> {
             title: parsed.docName,
             sourcePath: parsed.relativePath,
             nodeCount,
+            summaryHash: parsed.combinedSummary
+                ? md5(parsed.combinedSummary)
+                : undefined,
         },
         parsed.bodySummary
     )

@@ -267,6 +267,12 @@ vein markdown <files...> [-f | --force]
     同一文件（按内容 MD5）默认跳过。
     -f 强制重新导入。
 
+vein markdown resegment [docIds...]
+    对指定文档重新分词并更新 docs_fts 索引。
+    不传参数时检查所有文档，通过 summaryHash 检测摘要是否变化，
+    无变化则跳过。逻辑与导入一致：收集所有节点 summary → segmentText → updateDocsFts。
+    别名 rs。
+
 vein ask [query] [-n | --no-interactive] [-t | --trace] [-q | --quick]
     检索文档库。默认交互输入 query。
     传入 query 参数时直接使用，不重复收集。

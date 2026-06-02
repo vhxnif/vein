@@ -432,6 +432,40 @@ async function getDoc(id: string) {
     return db.select().from(docs).where(eq(docs.id, id)).get()
 }
 
+async function updateDocMetadata(
+    docId: string,
+    metadata: Record<string, unknown>
+): Promise<void> {
+    await db
+        .update(docs)
+        .set({
+            metadata: JSON.stringify(metadata),
+            updatedAt: sql`(datetime('now'))`,
+        })
+        .where(eq(docs.id, docId))
+}
+
+async function updateDocFts(docId: string, segmented: string): Promise<void> {
+    const client = getRawClient()
+    await client.execute({
+        sql: `INSERT OR REPLACE INTO docs_fts (doc_id, summary) VALUES (?1, ?2)`,
+        args: [docId, segmented],
+    })
+}
+
+async function getDocFtsSummary(docId: string): Promise<string | undefined> {
+    try {
+        const result = await getRawClient().execute({
+            sql: `SELECT summary FROM docs_fts WHERE doc_id = ?1`,
+            args: [docId],
+        })
+        const row = result.rows[0] as { summary: string } | undefined
+        return row?.summary
+    } catch {
+        return undefined
+    }
+}
+
 async function deleteDoc(id: string) {
     log.info({ docId: id, content: 'Deleting doc' })
     const client = getRawClient()
@@ -800,6 +834,7 @@ type BrowseDoc = {
     sourcePath: string
     nodeCount: number
     createdAt: string
+    metadata: string
 }
 
 async function getAllDocs(): Promise<BrowseDoc[]> {
@@ -828,6 +863,7 @@ async function getAllDocs(): Promise<BrowseDoc[]> {
             sourcePath: (meta.sourcePath as string) ?? '',
             nodeCount: r.node_count,
             createdAt: r.created_at,
+            metadata: r.metadata,
         }
     })
 }
@@ -863,6 +899,7 @@ async function getDocsPaginated(
             sourcePath: (meta.sourcePath as string) ?? '',
             nodeCount: r.node_count,
             createdAt: r.created_at,
+            metadata: r.metadata,
         }
     })
 }
@@ -947,6 +984,7 @@ export {
     getCategoriesWithTagCount,
     getDoc,
     getDocCount,
+    getDocFtsSummary,
     getDocsByTag,
     getDocsPaginated,
     getDocTags,
@@ -969,6 +1007,8 @@ export {
     searchSimilarTags,
     searchTagsByKeyword,
     setCachedResponse,
+    updateDocFts,
+    updateDocMetadata,
     upsertTag,
     upsertTagEmbedding,
 }
