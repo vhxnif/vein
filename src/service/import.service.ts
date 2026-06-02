@@ -144,13 +144,15 @@ async function tagOneDocument(
     modelKeyStr: string,
     embeddingProvider: ModelProvider | undefined,
     categories: Array<{ id: string; name: string }>,
-    existingTagsMap: Map<string, string[]>
+    existingTagsMap: Map<string, string[]>,
+    segmenter: ModelProvider | undefined
 ): Promise<{ tagCount: number; categoryCount: number; error: boolean }> {
     try {
         const result = await tagger(entry.rootSummary, categories, {
             modelKey: modelKeyStr,
             existingTags: existingTagsMap,
             embeddingProvider,
+            segmenter,
             structure: entry.structure,
         })
         if (result.categories.length === 0) {
@@ -159,7 +161,9 @@ async function tagOneDocument(
         const { tagCount, categoryCount } = await saveTagResult(
             entry.docId,
             result,
-            embeddingProvider
+            embeddingProvider,
+            undefined,
+            segmenter
         )
         return { tagCount, categoryCount, error: false }
     } catch (err) {
@@ -324,7 +328,8 @@ export async function importBatch(
                         mk,
                         config.embedding,
                         categories,
-                        existingTagsMap
+                        existingTagsMap,
+                        config.segmenter
                     )
                 )
             )

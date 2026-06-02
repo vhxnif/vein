@@ -78,12 +78,13 @@ async function tagger(
         modelKey?: string
         existingTags?: Map<string, string[]>
         embeddingProvider?: ModelProvider
+        segmenter?: ModelProvider
         structure?: string
     }
 ): Promise<TaggerResult> {
     const existing = opts?.existingTags ?? new Map()
     const tools = opts?.embeddingProvider
-        ? [makeSearchSimilarTagsTool(opts.embeddingProvider)]
+        ? [makeSearchSimilarTagsTool(opts.embeddingProvider, opts.segmenter)]
         : undefined
     const systemPrompt = buildPrompt(categories, existing, !!tools)
 
@@ -177,7 +178,8 @@ async function extractAndSaveTags(
     modelKey: string,
     embeddingProvider?: ModelProvider,
     onProgress?: (progress: TagProgress) => void,
-    structure?: string
+    structure?: string,
+    segmenter?: ModelProvider
 ): Promise<TagStats> {
     onProgress?.({ phase: 'loading' })
 
@@ -196,10 +198,17 @@ async function extractAndSaveTags(
         modelKey,
         existingTags,
         embeddingProvider,
+        segmenter,
         structure,
     })
 
-    return saveTagResult(docId, result, embeddingProvider, onProgress)
+    return saveTagResult(
+        docId,
+        result,
+        embeddingProvider,
+        onProgress,
+        segmenter
+    )
 }
 
 // ── Save helper: persists tagger result, used by parallel batch ──
@@ -208,7 +217,8 @@ async function saveTagResult(
     docId: string,
     result: TaggerResult,
     embeddingProvider?: ModelProvider,
-    onProgress?: (progress: TagProgress) => void
+    onProgress?: (progress: TagProgress) => void,
+    segmenter?: ModelProvider
 ): Promise<TagStats> {
     const totalTags = result.categories.reduce(
         (sum, c) => sum + c.tags.length,
@@ -220,7 +230,7 @@ async function saveTagResult(
 
     for (const cat of result.categories) {
         for (const tagName of cat.tags) {
-            const tag = await store.upsertTag(tagName)
+            const tag = await store.upsertTag(tagName, segmenter)
             await store.insertDocTag(tag.id, docId)
             await store.insertCategorieTag(cat.id, tag.id)
 

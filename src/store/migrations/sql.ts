@@ -115,8 +115,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
 
 CREATE VIRTUAL TABLE IF NOT EXISTS tags_fts USING fts5(
     tag_id,
-    tag,
-    tokenize='trigram'
+    tag
 );
         `.trim(),
     },

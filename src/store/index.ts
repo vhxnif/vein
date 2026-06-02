@@ -1,7 +1,9 @@
 import { and, count, eq, sql } from 'drizzle-orm'
 import { logger } from '../config'
+import type { ModelProvider } from '../config/type'
 import type { TreeNode } from '../tree/type'
 import { uuid } from '../utils/common'
+import { segmentText } from '../utils/segment'
 import { db, getRawClient } from './client'
 import {
     categorie_tags,
@@ -507,7 +509,8 @@ async function getDocTags(
 }
 
 async function upsertTag(
-    tagName: string
+    tagName: string,
+    segmenter?: ModelProvider
 ): Promise<{ id: string; tag: string }> {
     const normalized = normalizeTag(tagName)
     if (!normalized) {
@@ -521,14 +524,28 @@ async function upsertTag(
     if (existing) {
         return { id: existing.id, tag: existing.tag }
     }
+
+    // Segment for FTS index (unicode61 tokenizer needs space-separated words)
+    let segmented: string | undefined
+    if (segmenter) {
+        try {
+            segmented = await segmentText(normalized, segmenter)
+        } catch (err) {
+            log.warn({
+                err,
+                tagName: normalized,
+                content: 'Tag segmentation failed, inserting raw',
+            })
+        }
+    }
+
     const id = uuid()
     await db.insert(tags).values({ id, tag: normalized })
 
-    // Index in FTS for keyword search
     const client = getRawClient()
     await client.execute({
         sql: `INSERT INTO tags_fts (tag_id, tag) VALUES (?1, ?2)`,
-        args: [id, normalized],
+        args: [id, segmented ?? normalized],
     })
 
     return { id, tag: normalized }

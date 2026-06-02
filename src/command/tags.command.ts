@@ -3,6 +3,7 @@ import { Command } from 'commander'
 import { generateEmbedding } from '../ai/embedding'
 import { logger } from '../config'
 import * as store from '../store'
+import { segmentText } from '../utils/segment'
 import { setupProjectModel } from './command-utils'
 
 const log = logger.child({ module: 'tags' })
@@ -68,6 +69,79 @@ export function register(program: Command) {
                     backfillSpinner.stop(
                         `Done: ${done} embedded, ${failed} failed`
                     )
+                    outro(
+                        failed > 0
+                            ? `Backfilled ${done} tag(s), ${failed} failed (see log for details)`
+                            : `Backfilled ${done} tag(s)`
+                    )
+                })
+        )
+        .addCommand(
+            new Command('backfill-fts')
+                .description(
+                    're-segment all tags and rebuild tags_fts index (run after upgrading from trigram to unicode61 tokenizer)'
+                )
+                .action(async () => {
+                    const config = await setupProjectModel()
+                    if (!config) {
+                        outro('Not in a vein project. Run "vein new" first.')
+                        return
+                    }
+
+                    intro('Backfilling tags FTS index')
+
+                    const { getRawClient: getRaw } = await import(
+                        '../store/client'
+                    )
+                    const client = getRaw()
+
+                    // Drop and recreate tags_fts
+                    client.execute('DROP TABLE IF EXISTS tags_fts')
+                    client.execute(
+                        'CREATE VIRTUAL TABLE IF NOT EXISTS tags_fts USING fts5(tag_id, tag)'
+                    )
+
+                    // Get all tags
+                    const allTags = await store.getTagsWithDocCount()
+                    if (allTags.length === 0) {
+                        outro('No tags to backfill.')
+                        return
+                    }
+
+                    note(`Found ${allTags.length} tag(s) to backfill`)
+
+                    const segmenter = config.segmenter ?? config.model
+                    let done = 0
+                    let failed = 0
+                    const ftsSpinner = spinner()
+                    ftsSpinner.start('Segmenting & indexing...')
+
+                    for (const t of allTags) {
+                        ftsSpinner.message(
+                            `[${done + 1}/${allTags.length}] Indexing: ${t.tag}`
+                        )
+                        try {
+                            const segmented = await segmentText(
+                                t.tag,
+                                segmenter
+                            )
+                            client.execute({
+                                sql: 'INSERT INTO tags_fts (tag_id, tag) VALUES (?1, ?2)',
+                                args: [t.id, segmented],
+                            })
+                            done++
+                        } catch (err) {
+                            failed++
+                            log.warn({
+                                err,
+                                tagId: t.id,
+                                tag: t.tag,
+                                content: 'FTS backfill failed',
+                            })
+                        }
+                    }
+
+                    ftsSpinner.stop(`Done: ${done} indexed, ${failed} failed`)
                     outro(
                         failed > 0
                             ? `Backfilled ${done} tag(s), ${failed} failed (see log for details)`

@@ -5,7 +5,10 @@ import { segmentText } from '../utils/segment'
 import type { ToolDef } from './base'
 import { generateEmbeddings } from './embedding'
 
-function makeSearchSimilarTagsTool(embeddingProvider: ModelProvider): ToolDef {
+function makeSearchSimilarTagsTool(
+    embeddingProvider: ModelProvider,
+    segmenter?: ModelProvider
+): ToolDef {
     return {
         name: 'searchSimilarTags',
         description:
@@ -17,6 +20,15 @@ function makeSearchSimilarTagsTool(embeddingProvider: ModelProvider): ToolDef {
         run: async ({ queries }: { queries: string[] }) => {
             if (queries.length === 0) return JSON.stringify([])
 
+            // Segment all queries for FTS keyword search
+            const segmentedQueries = segmenter
+                ? await Promise.all(
+                      queries.map((q) =>
+                          segmentText(q, segmenter).catch(() => q)
+                      )
+                  )
+                : queries
+
             // Batch generate embeddings for all queries (single API call)
             let allEmbeddings: number[][]
             try {
@@ -27,20 +39,22 @@ function makeSearchSimilarTagsTool(embeddingProvider: ModelProvider): ToolDef {
             } catch {
                 // Embedding failed — fall back to keyword search only
                 const kwResults = await Promise.all(
-                    queries.map((q) => store.searchTagsByKeyword(q, 10))
+                    segmentedQueries.map((q) =>
+                        store.searchTagsByKeyword(q, 10)
+                    )
                 )
                 return mergeAndDedup(kwResults)
             }
 
             // For each query, run vec0 search and FTS5 keyword search in parallel
             const allResults = await Promise.all(
-                queries.map(async (query, i) => {
+                queries.map(async (_query, i) => {
                     const emb = allEmbeddings[i]!
                     const [vecResults, keywordResults] = await Promise.all([
                         store
                             .searchAllSimilarTags(emb, 10, 0.6)
                             .catch(() => []),
-                        store.searchTagsByKeyword(query, 10),
+                        store.searchTagsByKeyword(segmentedQueries[i]!, 10),
                     ])
 
                     // Merge vec + keyword for this query
