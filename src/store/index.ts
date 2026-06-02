@@ -494,6 +494,18 @@ async function getDocsByTag(
         .all()
 }
 
+async function getDocTags(
+    docId: string
+): Promise<{ id: string; tag: string }[]> {
+    return db
+        .select({ id: tags.id, tag: tags.tag })
+        .from(tags)
+        .innerJoin(doc_tags, eq(tags.id, doc_tags.tagId))
+        .where(eq(doc_tags.docId, docId))
+        .orderBy(tags.tag)
+        .all()
+}
+
 async function upsertTag(
     tagName: string
 ): Promise<{ id: string; tag: string }> {
@@ -763,20 +775,171 @@ async function searchAllSimilarTags(
         }))
 }
 
+// ── browse / overview helpers ──────────────────────────────────────
+
+type BrowseDoc = {
+    id: string
+    title: string
+    sourcePath: string
+    nodeCount: number
+    createdAt: string
+}
+
+async function getAllDocs(): Promise<BrowseDoc[]> {
+    const raw = getRawClient()
+    const result = await raw.execute({
+        sql: `
+            SELECT d.id, d.metadata, d.created_at,
+                   COUNT(n.id) AS node_count
+            FROM docs d
+            LEFT JOIN nodes n ON n.doc_id = d.id
+            GROUP BY d.id
+            ORDER BY d.created_at DESC
+        `,
+    })
+    const rows = result.rows as Array<{
+        id: string
+        metadata: string
+        created_at: string
+        node_count: number
+    }>
+    return rows.map((r) => {
+        const meta = JSON.parse(r.metadata) as Record<string, unknown>
+        return {
+            id: r.id,
+            title: (meta.title as string) ?? 'Untitled',
+            sourcePath: (meta.sourcePath as string) ?? '',
+            nodeCount: r.node_count,
+            createdAt: r.created_at,
+        }
+    })
+}
+
+async function getDocsPaginated(
+    offset: number,
+    limit: number
+): Promise<BrowseDoc[]> {
+    const raw = getRawClient()
+    const result = await raw.execute({
+        sql: `
+            SELECT d.id, d.metadata, d.created_at,
+                   COUNT(n.id) AS node_count
+            FROM docs d
+            LEFT JOIN nodes n ON n.doc_id = d.id
+            GROUP BY d.id
+            ORDER BY d.created_at DESC
+            LIMIT ?1 OFFSET ?2
+        `,
+        args: [limit, offset],
+    })
+    const rows = result.rows as Array<{
+        id: string
+        metadata: string
+        created_at: string
+        node_count: number
+    }>
+    return rows.map((r) => {
+        const meta = JSON.parse(r.metadata) as Record<string, unknown>
+        return {
+            id: r.id,
+            title: (meta.title as string) ?? 'Untitled',
+            sourcePath: (meta.sourcePath as string) ?? '',
+            nodeCount: r.node_count,
+            createdAt: r.created_at,
+        }
+    })
+}
+
+async function getDocCount(): Promise<number> {
+    const row = db.select({ count: count() }).from(docs).get()
+    return row?.count ?? 0
+}
+
+async function getTagCategories(
+    tagId: string
+): Promise<{ id: string; content: string }[]> {
+    return db
+        .select({ id: categories.id, content: categories.content })
+        .from(categories)
+        .innerJoin(
+            categorie_tags,
+            eq(categories.id, categorie_tags.categorieId)
+        )
+        .where(eq(categorie_tags.tagId, tagId))
+        .all()
+}
+
+type TagWithDocCount = {
+    id: string
+    tag: string
+    docCount: number
+}
+
+async function getTagsWithDocCount(): Promise<TagWithDocCount[]> {
+    const rows = await db
+        .select({
+            id: tags.id,
+            tag: tags.tag,
+            docCount: count(doc_tags.docId),
+        })
+        .from(tags)
+        .leftJoin(doc_tags, eq(tags.id, doc_tags.tagId))
+        .groupBy(tags.id)
+        .orderBy(sql`${count(doc_tags.docId)} DESC`)
+        .all()
+    return rows.map((r) => ({
+        id: r.id,
+        tag: r.tag,
+        docCount: r.docCount,
+    }))
+}
+
+type CategoryWithTagCount = {
+    id: string
+    content: string
+    tagCount: number
+}
+
+async function getCategoriesWithTagCount(): Promise<CategoryWithTagCount[]> {
+    const rows = await db
+        .select({
+            id: categories.id,
+            content: categories.content,
+            tagCount: count(categorie_tags.tagId),
+        })
+        .from(categories)
+        .leftJoin(categorie_tags, eq(categories.id, categorie_tags.categorieId))
+        .groupBy(categories.id)
+        .orderBy(categories.id)
+        .all()
+    return rows.map((r) => ({
+        id: r.id,
+        content: r.content,
+        tagCount: r.tagCount,
+    }))
+}
+
 export {
     deleteDoc,
     deleteTree,
+    getAllDocs,
     getAllTagsGrouped,
     getAncestors,
     getCachedResponse,
     getCategories,
+    getCategoriesWithTagCount,
     getDoc,
+    getDocCount,
     getDocsByTag,
+    getDocsPaginated,
+    getDocTags,
     getFullTree,
     getNodeDetails,
     getSiblings,
     getSubTree,
+    getTagCategories,
     getTagsByCategory,
+    getTagsWithDocCount,
     getTagsWithoutEmbeddings,
     hasTagEmbedding,
     insertCategorieTag,

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from 'commander'
 import { register as registerAsk } from './ask.command'
+import { register as registerBrowse } from './browse.command'
 import { register as registerConfig } from './config.command'
 import { register as registerHistory } from './history.command'
 import { register as registerMarkdown } from './markdown.command'
@@ -17,5 +18,6 @@ registerAsk(vein)
 registerHistory(vein)
 registerTags(vein)
 registerConfig(vein)
+registerBrowse(vein)
 
 vein.parse()

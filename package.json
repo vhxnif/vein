@@ -6,7 +6,7 @@
     "vein": "build/vein.js"
   },
   "scripts": {
-    "build": "bun build ./src/command/*.ts --outdir ./build --target bun --minify --sourcemap=linked --entry-naming [name].[ext] --external clipboardy",
+    "build": "bun build ./src/command/vein.ts --outdir ./build --target bun --minify --sourcemap=linked --entry-naming [name].[ext] --external clipboardy",
     "check": "tsc --noEmit",
     "lint": "bunx --bun @biomejs/biome lint",
     "lint:fix": "bunx --bun @biomejs/biome lint --write ./src",
