@@ -78,6 +78,7 @@ async function tagger(
         modelKey?: string
         existingTags?: Map<string, string[]>
         embeddingProvider?: ModelProvider
+        structure?: string
     }
 ): Promise<TaggerResult> {
     const existing = opts?.existingTags ?? new Map()
@@ -86,12 +87,21 @@ async function tagger(
         : undefined
     const systemPrompt = buildPrompt(categories, existing, !!tools)
 
+    const userContent = opts?.structure
+        ? `## 文章概要\n${summary}\n\n## 文章结构\n${opts.structure}`
+        : summary
+
     // Cache key from stable inputs only (excludes existingTags which
-    // change over time — same summary should hit cache regardless of
-    // when imported).
+    // change over time — same summary+structure should hit cache
+    // regardless of when imported).
     const toolsSuffix = tools ? '|tools' : ''
     const cacheKey = opts?.modelKey
-        ? md5(JSON.stringify(categories) + summary + toolsSuffix)
+        ? md5(
+              JSON.stringify(categories) +
+                  summary +
+                  (opts.structure ?? '') +
+                  toolsSuffix
+          )
         : undefined
 
     // Cache read
@@ -127,7 +137,7 @@ async function tagger(
         messages: [
             {
                 role: 'user',
-                content: summary,
+                content: userContent,
                 timestamp: Date.now(),
             },
         ],
@@ -166,7 +176,8 @@ async function extractAndSaveTags(
     summary: string,
     modelKey: string,
     embeddingProvider?: ModelProvider,
-    onProgress?: (progress: TagProgress) => void
+    onProgress?: (progress: TagProgress) => void,
+    structure?: string
 ): Promise<TagStats> {
     onProgress?.({ phase: 'loading' })
 
@@ -185,6 +196,7 @@ async function extractAndSaveTags(
         modelKey,
         existingTags,
         embeddingProvider,
+        structure,
     })
 
     return saveTagResult(docId, result, embeddingProvider, onProgress)

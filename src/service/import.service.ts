@@ -4,7 +4,7 @@ import { saveTagResult, tagger } from '../ai/index'
 import { getProjectRoot, logger } from '../config'
 import type { ModelProvider, ProjectConfig } from '../config/type'
 import * as store from '../store'
-import { mdToTree } from '../tree/markdown_split'
+import { mdToTree, renderDocOutline } from '../tree/markdown_split'
 import { md5 } from '../utils/common'
 import { segmentText } from '../utils/segment'
 
@@ -53,6 +53,7 @@ type ParsedFile = {
     rootSummary: string | undefined
     bodySummary: string | undefined
     needsCleanup: boolean
+    structure: string
 }
 
 type ParseChunkResult =
@@ -87,6 +88,7 @@ async function parseOneFile(
             summary: { summarizer },
         })
         const rootSummary = tree.value.summary
+        const structure = renderDocOutline(tree)
         const bodySummary = rootSummary
             ? await segmentText(rootSummary, segmenter)
             : undefined
@@ -101,6 +103,7 @@ async function parseOneFile(
                 tree,
                 rootSummary,
                 bodySummary,
+                structure,
                 needsCleanup: !!existing,
             },
         }
@@ -132,6 +135,7 @@ type TagEntry = {
     docId: string
     docName: string
     rootSummary: string
+    structure: string
     nodeCount: number
 }
 
@@ -147,6 +151,7 @@ async function tagOneDocument(
             modelKey: modelKeyStr,
             existingTags: existingTagsMap,
             embeddingProvider,
+            structure: entry.structure,
         })
         if (result.categories.length === 0) {
             return { tagCount: 0, categoryCount: 0, error: false }
@@ -258,6 +263,7 @@ export async function importBatch(
                         docId: r.parsed.docId,
                         docName: r.parsed.docName,
                         rootSummary: r.parsed.rootSummary,
+                        structure: r.parsed.structure,
                         nodeCount,
                     })
                 }
