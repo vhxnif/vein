@@ -71,9 +71,18 @@ src/
 │   ├── tagger.ts     # 标签提取与分类 Agent（支持 tool-calling 模式的向量搜索）
 │   ├── tools.ts      # Agent 工具工厂（searchSimilarTags、searchDocsByKeyword）
 │   └── index.ts      # 统一导出
-├── command/      # CLI 命令
-│   └── vein.ts       # 主命令 (new / markdown / ask / hs / tags / config)
+├── command/      # CLI 命令（每个命令独立文件，导出 register(program)）
+│   ├── vein.ts           # 入口：Command 创建 + 各命令注册（薄层，~20 行）
+│   ├── command-utils.ts  # 共享工具：setupProjectModel、createCachedSummarizer
+│   ├── new.command.ts    # vein new（项目初始化）
+│   ├── markdown.command.ts # vein markdown（markdown 导入，调用 service 层）
+│   ├── ask.command.ts    # vein ask（文档检索）
+│   ├── history.command.ts # vein history（历史回顾，含 formatHistoryDetail）
+│   ├── tags.command.ts   # vein tags（标签管理）
+│   └── config.command.ts # vein config（交互式配置修改）
 ├── config/       # 配置（logger、项目初始化和配置读写）
+├── service/      # 业务逻辑层（与 CLI I/O 分离）
+│   └── import.service.ts # markdown 导入管道（Phase 1 并行 LLM + Phase 2 串行 DB）
 ├── store/        # 数据库层
 │   ├── schema.ts     # Drizzle schema 定义
 │   ├── client.ts     # 数据库连接（bun:sqlite + 自动检测 Homebrew SQLite + sqlite-vec）
@@ -82,6 +91,7 @@ src/
 │   └── migrations/   # SQL 迁移文件 + config.schema.json
 ├── tree/         # 树形数据结构与 Markdown 拆分
 └── utils/        # 通用工具
+    ├── cli-helpers.ts # CLI 公共 helper：pluralize、formatDuration、colorize、VERDICT_ICON 等
     ├── common.ts     # uuid, md5
     └── segment.ts    # LLM 中文分词（将中文切词后用空格连接，适配 FTS5 unicode61 tokenizer）
 ```
@@ -265,9 +275,9 @@ vein config
 
 ## 批量导入管道
 
-`vein markdown <files...>` 分两阶段处理：
+`vein markdown <files...>` 分两阶段处理，核心逻辑在 `src/service/import.service.ts` 的 `importBatch()` 函数中：
 
-**Phase 1 — 并行 LLM（4 文件并发）：**
+**Phase 1 — 并行 LLM（`IMPORT_PARALLEL = 4` 文件并发）：**
 ```
 readFile → mdToTree (解析 + LLM 摘要) → segmentText (LLM 分词)
 ```
@@ -276,10 +286,11 @@ readFile → mdToTree (解析 + LLM 摘要) → segmentText (LLM 分词)
 
 **Phase 2 — 串行 DB（WAL 模式）：**
 ```
-insertTree → insertDoc (含 docs_fts) → extractAndSaveTags
+insertTree → insertDoc (含 docs_fts) → tagger (并行 LLM, TAG_PARALLEL = 4) → saveTagResult (串行)
 ```
 - SQLite WAL 模式优化写入性能，写事务不阻塞
-- 单文件模式保留原有详细 spinner 进度
+- Tag 阶段 LLM 调用仍可并行（`TAG_PARALLEL = 4`），但 DB 写入必须串行
+- 单文件模式同样走 `importBatch()`，输出详细的 per-phase spinner 进度
 
 **缓存层级：**
 
@@ -291,6 +302,9 @@ insertTree → insertDoc (含 docs_fts) → extractAndSaveTags
 
 ## 开发约定
 
+- **命令组织**：每个命令独立文件（`src/command/xxx.command.ts`），导出 `register(program: Command)` 函数；入口 `vein.ts` 仅负责创建 Command 并调用各 register
+- **CLI/Business 分离**：命令文件只处理 CLI I/O（spinner、prompt、outro），核心业务逻辑放 `src/service/`
+- **共享工具**：`command-utils.ts` 中 `setupProjectModel` 和 `createCachedSummarizer` 供所有命令复用
 - 迁移 SQL 内联在 `src/store/migrations/sql.ts`，按数组顺序执行，无外部 .sql 文件
 - 迁移全部使用 `IF NOT EXISTS` / `INSERT OR IGNORE`，保证幂等，新增表后执行 `vein new --migrate` 即可
 - `tag_embeddings` vec0 表不在迁移中创建，由 `upsertTagEmbedding` 首次调用时懒创建（自动匹配维度）
