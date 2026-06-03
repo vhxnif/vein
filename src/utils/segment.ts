@@ -23,6 +23,10 @@ async function segmentText(
 ): Promise<string> {
     if (!text) return ''
 
+    if (!/[\u4e00-\u9fff]/.test(text)) {
+        return text
+    }
+
     const systemPrompt = `你是一个中文分词工具。将输入文本按语义切分为词语，用空格分隔后输出。不要添加任何解释、标点或其他内容，只输出分词后的结果。对于英文/数字部分保持原样，仅对中文部分进行分词。
 
 示例输入：人工智能技术正在迅速发展
