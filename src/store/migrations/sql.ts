@@ -119,4 +119,18 @@ CREATE VIRTUAL TABLE IF NOT EXISTS tags_fts USING fts5(
 );
         `.trim(),
     },
+    {
+        name: 'v0.1.0_strengthen_constraints.sql',
+        sql: `
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_doc_tags_pair ON doc_tags(tag_id, doc_id);
+CREATE INDEX IF NOT EXISTS idx_docs_created_at ON docs(created_at);
+DROP INDEX IF EXISTS idx_model_cache_md5_model;
+CREATE UNIQUE INDEX idx_model_cache_md5_model ON model_cache(md5, model);
+CREATE TABLE IF NOT EXISTS _migrations (
+    name TEXT PRIMARY KEY,
+    executed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+        `.trim(),
+    },
 ]

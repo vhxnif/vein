@@ -1,4 +1,4 @@
-import { and, count, eq, sql } from 'drizzle-orm'
+import { count, eq, sql } from 'drizzle-orm'
 import { logger } from '../config'
 import type { ModelProvider } from '../config/type'
 import type { TreeNode } from '../tree/type'
@@ -331,21 +331,17 @@ async function getCachedResponse(
     md5: string,
     model: string
 ): Promise<string | undefined> {
-    const row = await db
-        .select()
-        .from(modelCache)
-        .where(and(eq(modelCache.md5, md5), eq(modelCache.model, model)))
-        .get()
+    const client = getRawClient()
+    const result = await client.execute({
+        sql: `UPDATE model_cache SET hit_count = hit_count + 1 WHERE md5 = ?1 AND model = ?2 RETURNING response`,
+        args: [md5, model],
+    })
 
+    const row = result.rows[0] as { response: string } | undefined
     if (!row) {
         log.debug({ md5: md5.slice(0, 16), model, content: 'Cache miss' })
         return void 0
     }
-
-    await db
-        .update(modelCache)
-        .set({ hitCount: row.hitCount + 1 })
-        .where(eq(modelCache.id, row.id))
 
     return row.response
 }
@@ -355,27 +351,22 @@ async function setCachedResponse(
     model: string,
     response: string
 ): Promise<void> {
-    const existing = await db
-        .select({ id: modelCache.id })
-        .from(modelCache)
-        .where(and(eq(modelCache.md5, md5), eq(modelCache.model, model)))
-        .get()
-
-    if (existing) {
-        await db
-            .update(modelCache)
-            .set({ response })
-            .where(eq(modelCache.id, existing.id))
-        log.debug({ md5: md5.slice(0, 16), model, content: 'Cache updated' })
-    } else {
-        await db.insert(modelCache).values({
+    await db
+        .insert(modelCache)
+        .values({
             id: Bun.randomUUIDv7(),
             md5,
             model,
             response,
         })
-        log.debug({ md5: md5.slice(0, 16), model, content: 'Cache inserted' })
-    }
+        .onConflictDoUpdate({
+            target: [modelCache.md5, modelCache.model],
+            set: {
+                response,
+                updatedAt: sql`(datetime('now'))`,
+            },
+        })
+    log.debug({ md5: md5.slice(0, 16), model, content: 'Cache upserted' })
 }
 
 async function purgeModelCache(
@@ -412,20 +403,30 @@ async function insertDoc(
     summary?: string
 ) {
     const client = getRawClient()
-    const result = db
-        .insert(docs)
-        .values({ id, metadata: JSON.stringify(metadata) })
-        .onConflictDoNothing()
-        .returning()
+    try {
+        await client.execute('BEGIN')
+        const result = db
+            .insert(docs)
+            .values({ id, metadata: JSON.stringify(metadata) })
+            .onConflictDoNothing()
+            .returning()
 
-    if (summary) {
-        await client.execute({
-            sql: `INSERT OR REPLACE INTO docs_fts (doc_id, summary) VALUES (?1, ?2)`,
-            args: [id, summary],
-        })
+        if (summary) {
+            await client.execute({
+                sql: `DELETE FROM docs_fts WHERE doc_id = ?1`,
+                args: [id],
+            })
+            await client.execute({
+                sql: `INSERT INTO docs_fts (doc_id, summary) VALUES (?1, ?2)`,
+                args: [id, summary],
+            })
+        }
+        await client.execute('COMMIT')
+        return result
+    } catch (e) {
+        await client.execute('ROLLBACK')
+        throw e
     }
-
-    return result
 }
 
 async function getDoc(id: string) {
@@ -448,7 +449,11 @@ async function updateDocMetadata(
 async function updateDocFts(docId: string, segmented: string): Promise<void> {
     const client = getRawClient()
     await client.execute({
-        sql: `INSERT OR REPLACE INTO docs_fts (doc_id, summary) VALUES (?1, ?2)`,
+        sql: `DELETE FROM docs_fts WHERE doc_id = ?1`,
+        args: [docId],
+    })
+    await client.execute({
+        sql: `INSERT INTO docs_fts (doc_id, summary) VALUES (?1, ?2)`,
         args: [docId, segmented],
     })
 }
@@ -469,11 +474,18 @@ async function getDocFtsSummary(docId: string): Promise<string | undefined> {
 async function deleteDoc(id: string) {
     log.info({ docId: id, content: 'Deleting doc' })
     const client = getRawClient()
-    client.execute({
-        sql: `DELETE FROM docs_fts WHERE doc_id = ?1`,
-        args: [id],
-    })
-    return db.delete(docs).where(eq(docs.id, id))
+    try {
+        await client.execute('BEGIN')
+        await client.execute({
+            sql: `DELETE FROM docs_fts WHERE doc_id = ?1`,
+            args: [id],
+        })
+        await db.delete(docs).where(eq(docs.id, id))
+        await client.execute('COMMIT')
+    } catch (e) {
+        await client.execute('ROLLBACK')
+        throw e
+    }
 }
 
 async function getCategories(): Promise<{ id: string; content: string }[]> {
@@ -550,44 +562,53 @@ async function upsertTag(
     if (!normalized) {
         throw new Error(`Tag name is empty after normalization: "${tagName}"`)
     }
+
+    const id = uuid()
+    const conflictResult = await db
+        .insert(tags)
+        .values({ id, tag: normalized })
+        .onConflictDoNothing({ target: tags.tag })
+        .returning({ id: tags.id, tag: tags.tag })
+
+    if (conflictResult.length > 0) {
+        let segmented: string | undefined
+        if (segmenter) {
+            try {
+                segmented = await segmentText(normalized, segmenter)
+            } catch (err) {
+                log.warn({
+                    err,
+                    tagName: normalized,
+                    content: 'Tag segmentation failed, inserting raw',
+                })
+            }
+        }
+
+        const client = getRawClient()
+        await client.execute({
+            sql: `INSERT INTO tags_fts (tag_id, tag) VALUES (?1, ?2)`,
+            args: [id, segmented ?? normalized],
+        })
+
+        return conflictResult[0]!
+    }
+
     const existing = await db
-        .select()
+        .select({ id: tags.id, tag: tags.tag })
         .from(tags)
         .where(eq(tags.tag, normalized))
         .get()
-    if (existing) {
-        return { id: existing.id, tag: existing.tag }
-    }
-
-    // Segment for FTS index (unicode61 tokenizer needs space-separated words)
-    let segmented: string | undefined
-    if (segmenter) {
-        try {
-            segmented = await segmentText(normalized, segmenter)
-        } catch (err) {
-            log.warn({
-                err,
-                tagName: normalized,
-                content: 'Tag segmentation failed, inserting raw',
-            })
-        }
-    }
-
-    const id = uuid()
-    await db.insert(tags).values({ id, tag: normalized })
-
-    const client = getRawClient()
-    await client.execute({
-        sql: `INSERT INTO tags_fts (tag_id, tag) VALUES (?1, ?2)`,
-        args: [id, segmented ?? normalized],
-    })
-
-    return { id, tag: normalized }
+    return existing!
 }
 
 async function insertDocTag(tagId: string, docId: string): Promise<void> {
     const id = uuid()
-    await db.insert(doc_tags).values({ id, tagId, docId }).onConflictDoNothing()
+    await db
+        .insert(doc_tags)
+        .values({ id, tagId, docId })
+        .onConflictDoNothing({
+            target: [doc_tags.tagId, doc_tags.docId],
+        })
 }
 
 async function insertCategorieTag(

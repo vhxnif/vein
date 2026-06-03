@@ -374,12 +374,20 @@ function structureToList(structure: DocNode[]): DocNode[] {
 async function enrichStructureWithSummaries(
     structure: DocNode[],
     summary: Summary,
-    tokenCalculator?: TokenCalculator
+    tokenCalculator?: TokenCalculator,
+    concurrency = 4
 ): Promise<DocNode[]> {
     const nodes = structureToList(structure)
-    const summaries = await Promise.all(
-        nodes.map((node) => getNodeSummary(node, summary, tokenCalculator))
-    )
+    const summaries: string[] = []
+
+    for (let i = 0; i < nodes.length; i += concurrency) {
+        const batch = nodes.slice(i, i + concurrency)
+        const batchResults = await Promise.all(
+            batch.map((node) => getNodeSummary(node, summary, tokenCalculator))
+        )
+        summaries.push(...batchResults)
+    }
+
     for (let i = 0; i < nodes.length; i++) {
         if (nodes[i]!.nodes.length === 0) {
             nodes[i]!.value.summary = summaries[i]!

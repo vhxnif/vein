@@ -48,8 +48,28 @@ After installing, re-run: vein new --migrate`,
         })
     }
 
+    // Ensure migration tracking table exists before the loop
+    db.run(`CREATE TABLE IF NOT EXISTS _migrations (
+        name TEXT PRIMARY KEY,
+        executed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`)
+
+    // Query already-applied migrations
+    const applied = new Set<string>()
+    const rows = db.query('SELECT name FROM _migrations').all() as Array<{
+        name: string
+    }>
+    for (const row of rows) {
+        applied.add(row.name)
+    }
+
     for (const { name, sql } of schema) {
+        if (applied.has(name)) {
+            log.debug({ sql: name, content: 'Migration already applied.' })
+            continue
+        }
         execMulti(db, sql)
+        db.run('INSERT INTO _migrations (name) VALUES (?)', [name])
         log.info({ sql: name, content: 'Migration applied successfully.' })
     }
     db.close()

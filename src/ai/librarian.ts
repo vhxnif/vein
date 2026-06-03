@@ -484,14 +484,143 @@ function pruneContext(messages: AgentMessage[]): AgentMessage[] {
     })
 }
 
-const stepLabels: Record<string, string> = {
-    getCategories: 'Browsing categories...',
-    getTagsByCategory: 'Checking tags...',
-    getDocsByTag: 'Finding documents...',
-    searchDocsByKeyword: 'Searching documents...',
-    getDocStructure: 'Loading document structure...',
-    getDocNodeDetails: 'Reading section...',
-    reviewResult: 'Reviewing results...',
+const CATEGORY_LABELS: Record<string, string> = {
+    cat_000: '计算机与信息技术',
+    cat_100: '哲学与心理学',
+    cat_200: '社会科学',
+    cat_300: '经济与管理',
+    cat_400: '语言与教育',
+    cat_500: '数学与自然科学',
+    cat_600: '工程与技术',
+    cat_700: '医学与健康',
+    cat_800: '艺术与设计',
+    cat_900: '文学与写作',
+    cat_A00: '历史与地理',
+    cat_B00: '法律与政治',
+}
+
+function buildStepLabel(
+    toolName: string,
+    args: Record<string, unknown>
+): string {
+    switch (toolName) {
+        case 'getCategories':
+            return 'Browsing categories...'
+        case 'getTagsByCategory': {
+            const cid = args.categoryId as string | undefined
+            const name = cid ? CATEGORY_LABELS[cid] : undefined
+            return name ? `Browsing tags in "${name}"...` : 'Browsing tags...'
+        }
+        case 'getDocsByTag':
+            return 'Finding documents by tag...'
+        case 'searchDocsByKeyword':
+            return `Searching: "${ellipsis(String(args.query ?? ''), 36)}"...`
+        case 'getDocStructure':
+            return 'Loading document structure...'
+        case 'getDocNodeDetails':
+            return `Reading section ${args.nodeId ?? '?'}...`
+        case 'reviewResult':
+            return 'Reviewing results...'
+        default:
+            return `Calling ${toolName}...`
+    }
+}
+
+function buildResultLabel(
+    toolName: string,
+    resultText: string
+): string | undefined {
+    if (!resultText) return undefined
+    try {
+        switch (toolName) {
+            case 'getDocStructure': {
+                const lines = resultText.split('\n')
+                const firstTitle = lines
+                    .find((l) => /^\s*\d{4}\s/.test(l))
+                    ?.replace(/^\s*\d{4}\s/, '')
+                    .trim()
+                const nodeCount = lines.filter((l) => l.trim()).length
+                if (firstTitle && firstTitle.length > 0) {
+                    return `Loaded "${ellipsis(firstTitle, 40)}" · ${nodeCount} nodes`
+                }
+                return `Loaded structure · ${nodeCount} nodes`
+            }
+            case 'getTagsByCategory': {
+                const parsed = JSON.parse(resultText) as Array<{
+                    tag?: string
+                }>
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    const names = parsed.map((t) => t.tag ?? '').filter(Boolean)
+                    if (names.length > 0) {
+                        const preview = names.slice(0, 5).join(', ')
+                        return `Found ${parsed.length} tag${parsed.length > 1 ? 's' : ''}: ${preview}${names.length > 5 ? '...' : ''}`
+                    }
+                    return `Found ${parsed.length} tags`
+                }
+                return undefined
+            }
+            case 'getDocsByTag': {
+                const parsed = JSON.parse(resultText) as Array<{
+                    metadata?: string
+                }>
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    const titles = parsed
+                        .map((d) => {
+                            try {
+                                return (
+                                    JSON.parse(d.metadata ?? '{}') as {
+                                        title?: string
+                                    }
+                                ).title
+                            } catch {
+                                return ''
+                            }
+                        })
+                        .filter(Boolean)
+                    if (titles.length > 0) {
+                        const preview = titles.slice(0, 3).join(', ')
+                        return `Found ${parsed.length} doc${parsed.length > 1 ? 's' : ''}: ${preview}${titles.length > 3 ? '...' : ''}`
+                    }
+                    return `Found ${parsed.length} docs`
+                }
+                return undefined
+            }
+            case 'searchDocsByKeyword': {
+                const parsed = JSON.parse(resultText) as Array<{
+                    metadata?: string
+                }>
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    const titles = parsed
+                        .map((d) => {
+                            try {
+                                return (
+                                    JSON.parse(d.metadata ?? '{}') as {
+                                        title?: string
+                                    }
+                                ).title
+                            } catch {
+                                return ''
+                            }
+                        })
+                        .filter(Boolean)
+                    if (titles.length > 0) {
+                        const preview = titles.slice(0, 3).join(', ')
+                        return `Found ${parsed.length} result${parsed.length > 1 ? 's' : ''}: ${preview}${titles.length > 3 ? '...' : ''}`
+                    }
+                    return `Found ${parsed.length} results`
+                }
+                return undefined
+            }
+            default:
+                return undefined
+        }
+    } catch {
+        return undefined
+    }
+}
+
+function ellipsis(s: string, max: number): string {
+    return s.length > max ? `${s.slice(0, max)}...` : s
 }
 
 async function librarian(
@@ -515,8 +644,25 @@ async function librarian(
         agent.subscribe((event) => {
             if (event.type === 'tool_execution_start') {
                 onStep(
-                    stepLabels[event.toolName] ?? `Calling ${event.toolName}...`
+                    buildStepLabel(
+                        event.toolName,
+                        (event.args as Record<string, unknown>) ?? {}
+                    )
                 )
+            }
+            if (event.type === 'tool_execution_end') {
+                const resultText =
+                    event.result?.content
+                        ?.filter(
+                            (it: { type: string; text?: string }) =>
+                                it.type === 'text'
+                        )
+                        .map((it: { text?: string }) => it.text)
+                        .join('') ?? ''
+                const label = buildResultLabel(event.toolName, resultText)
+                if (label) {
+                    onStep(label)
+                }
             }
         })
     }

@@ -46,12 +46,12 @@ nodes ──(tree_closure)──→ nodes (树形层级)
 |---|---|
 | `nodes` + `tree_closure` | 树形层级（文档内节点），闭包表存储祖先-后代关系 |
 | `docs` | 文档实体 |
-| `tags` | 标签（tag name 经 NFC 规范化 + 全角转半角 + ASCII 小写后存储） |
-| `doc_tags` | 文档-标签多对多 |
+| `tags` | 标签（tag name 经 NFC 规范化 + 全角转半角 + ASCII 小写后存储，有 UNIQUE 约束） |
+| `doc_tags` | 文档-标签多对多（`(tag_id, doc_id)` 有复合唯一约束） |
 | `categories` | 宏观分类（仿图书馆分类法） |
-| `categorie_tags` | 分类-标签多对多 |
-| `model_cache` | 模型响应缓存（按输入 MD5 + 模型名索引，含命中次数） |
-| `docs_fts` | **FTS5 虚拟表（unicode61 tokenizer）**，索引文档所有节点的 summary/prefixSummary 合并文本，写入时经 `segmentText()` 分词后用空格连接，查询时同样分词后搜索。支持 BM25 排序 |
+| `categorie_tags` | 分类-标签多对多（`(categorie_id, tag_id)` 有复合唯一约束） |
+| `model_cache` | 模型响应缓存（`(md5, model)` 有复合唯一约束，命中时 hit_count + 1） |
+| `docs_fts` | **FTS5 虚拟表（unicode61 tokenizer）**，索引文档所有节点的 summary/prefixSummary 合并文本，写入时经 `segmentText()` 分词后用空格连接，查询时同样分词后搜索。支持 BM25 排序。FTS5 不支持 `INSERT OR REPLACE` 按业务键去重，统一用 `DELETE` → `INSERT` 防止 doc_id 重复。列名 `summary` 实际存储分词后的 token 文本（非原始摘要） |
 | `tags_fts` | **FTS5 虚拟表（unicode61 tokenizer）**，索引分词后的标签名。写入时经 `segmentText()` 分词，查询时同样分词后搜索。作为 vec0 向量搜索的并行兜底 |
 | `tag_embeddings` | **vec0 虚拟表**，存储标签的向量 embedding，支持 KNN 语义搜索。首次 `upsertTagEmbedding` 时懒创建，维度自动匹配当前 embedding 模型 |
 
@@ -344,33 +344,50 @@ insertTree → insertDoc (含 docs_fts) → tagger (并行 LLM, TAG_PARALLEL = 4
 
 ## 开发约定
 
+### 架构
+
 - **命令组织**：每个命令独立文件（`src/command/xxx.command.ts`），导出 `register(program: Command)` 函数；入口 `vein.ts` 负责创建 Command、注册子命令、全局 `--project` 选项和 `preAction` hook
 - **CLI/Business 分离**：命令文件只处理 CLI I/O（spinner、prompt、outro），核心业务逻辑放 `src/service/`
-- **共享工具**：`command-utils.ts` 中 `setupProjectModel`（使用 `resolveProjectRoot`）和 `createCachedSummarizer` 供所有命令复用
 - **项目定位**：始终使用 `resolveProjectRoot()` 而非直接 `getProjectRoot(process.cwd())`，以正确支持 `--project` 全局选项
-- **构建**：单一入口 `bun build ./src/command/vein.ts`，所有子命令通过 import 被卷入一个 `vein.js`（非 glob 多入口，避免共享代码重复打包）
-- 迁移 SQL 内联在 `src/store/migrations/sql.ts`，按数组顺序执行，无外部 .sql 文件
-- 迁移全部使用 `IF NOT EXISTS` / `INSERT OR IGNORE`，保证幂等，新增表后执行 `vein new --migrate` 即可
-- 迁移命名以版本号为前缀（如 `v0.1.0_create_fts_tables`），后续版本新增迁移只需追加条目
-- `tag_embeddings` vec0 表不在迁移中创建，由 `upsertTagEmbedding` 首次调用时懒创建（自动匹配维度）
-- `docs_fts` 和 `tags_fts` FTS5 表在 `v0.1.0_create_fts_tables` 迁移中创建，均使用 unicode61 tokenizer
+- **构建**：单一入口 `bun build ./src/command/vein.ts`，所有子命令通过 import 被卷入一个 `vein.js`
+- **共享工具**：`command-utils.ts` 中 `setupProjectModel` 和 `createCachedSummarizer` 供所有命令复用
+- **导出**：统一起名导出，避免 default export
+
+### 数据库
+
+- 迁移 SQL 内联在 `src/store/migrations/sql.ts`，按数组顺序执行
+- 迁移全部使用 `IF NOT EXISTS` / `INSERT OR IGNORE`，保证幂等
+- `_migrations` 表追踪已执行的迁移名和时间戳，`runMigrations` 启动时先查表跳过已执行条目
+- 迁移命名以版本号为前缀（如 `v0.1.0_create_fts_tables`）
 - 种子数据放独立迁移条目（如 `v0.1.0_seed_categories`）
-- AI Agent 工具遵循 `base.ts` 的 `ToolDef` 模式
-- summarizer 调用自动走 `model_cache` 缓存，按 prompt MD5 + 模型名去重，命中时 hit_count + 1
-- 每次 summarizer 调用有 60s 超时，超时后抛出错误并记录日志
-- 不同 Agent 职责分离：tagger 只做标签提取和分类，librarian 只做渐进式文档检索，reviewer 只做结果审查
-- Librarian 检索时展示实时进度（spinner 文字随步骤变化：Searching documents... / Browsing categories... / Checking tags... → ...）
-- `searchSimilarTags` 融合 vec0 向量搜索 + FTS5 关键词搜索（tags_fts unicode61 分词），并行执行后合并去重
-- Tagger 的 `searchSimilarTags` 工具在 vec0 表不存在时优雅降级（仅 FTS5），不抛错
-- `getTagsWithoutEmbeddings` 在 vec0 表不存在时 fallback 为返回全部 tag
-- 中文分词：`segmentText()` 通过 LLM 调用实现，文档摘要和标签名均在写入 FTS 前分词。分词结果写入 `model_cache` 缓存
-- `upsertTag` 接受可选的 `segmenter` 参数，若提供则在写入 `tags_fts` 前分词；分词失败时降级为原始文本
-- `upsertTag` 插入 `tags_fts` 需 `await`，FTS5 不支持 `OR REPLACE` 语法
-- 生成 tag embedding 前先调用 `hasTagEmbedding()` 检查是否已存在，避免重复 API 调用
-- 批量导入两阶段分离：LLM 阶段可并行（Phase 1），DB 写入必须串行（Phase 2），不可混用并发写入同一 SQLite 连接
-- SQLite 使用 WAL 模式（`PRAGMA journal_mode=WAL`），在 `client.ts` 和 `migrate.ts` 中创建连接时统一设置
-- 无注释代码风格（除非必要）
+- `tag_embeddings` vec0 表不在迁移中创建，由 `upsertTagEmbedding` 首次调用时懒创建
+- `docs_fts` 和 `tags_fts` 在迁移中创建，均使用 unicode61 tokenizer
+- SQLite 使用 WAL 模式（`PRAGMA journal_mode=WAL`），在 `client.ts` 和 `migrate.ts` 中连接时统一设置
 - SQL 不写在命令模块中，统一封装在 store 层
+
+### 数据一致性
+
+- `tags.tag` 有 UNIQUE 约束；`upsertTag` 使用 `INSERT ... ON CONFLICT(tag) DO NOTHING RETURNING` 原子操作
+- `doc_tags` 有 `(tag_id, doc_id)` 复合唯一约束；`insertDocTag` 使用 `ON CONFLICT(target) DO NOTHING`
+- `categorie_tags` 有 `(categorie_id, tag_id)` 复合唯一约束
+- `model_cache` 有 `(md5, model)` 复合唯一约束；`setCachedResponse` 使用 `ON CONFLICT DO UPDATE` 原子 upsert
+- `insertDoc` 和 `deleteDoc` 包裹在 `BEGIN/COMMIT` 事务中，docs + docs_fts 原子操作
+- `insertTree` 和 `deleteTree` 同样包裹在事务中
+- FTS5 虚拟表不支持按业务键 `INSERT OR REPLACE`，统一用 `DELETE` → `INSERT` 防止 doc_id/tag_id 重复
+
+### AI 调用
+
+- Agent 工具遵循 `base.ts` 的 `ToolDef` 模式
+- 不同 Agent 职责分离：tagger（标签提取+分类）、librarian（渐进式文档检索）、reviewer（结果审查）
+- summarizer 调用自动走 `model_cache` 缓存，60s 超时保护
+- 中文分词：`segmentText()` 通过 LLM 调用实现，写入 FTS 前分词。长文本（>3000 字符）自动按行切分为多个 chunk 独立分词
+- Librarian 检索进度：执行中显示通用提示（如 "Browsing tags in 计算机与信息技术..."），完成后自动更新为具体结果（如 "Found 5 tags: JVM, GC, 内存管理..."）
+- `searchSimilarTags` 融合 vec0 向量搜索 + FTS5 关键词搜索，并行执行后合并去重
+- vec0 表不存在时优雅降级（仅 FTS5），`getTagsWithoutEmbeddings` 回退为返回全部 tag
+- 生成 tag embedding 前先调用 `hasTagEmbedding()` 检查是否已存在
+- 批量导入两阶段分离：LLM 阶段可并行，DB 写入必须串行
+
+### 代码风格
 
 ## 数据库连接
 

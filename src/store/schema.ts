@@ -1,5 +1,11 @@
 import { sql } from 'drizzle-orm'
-import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import {
+    integer,
+    primaryKey,
+    sqliteTable,
+    text,
+    uniqueIndex,
+} from 'drizzle-orm/sqlite-core'
 
 const docs = sqliteTable('docs', {
     id: text('id').primaryKey(),
@@ -32,22 +38,26 @@ const treeClosure = sqliteTable(
 
 const tags = sqliteTable('tags', {
     id: text('id').primaryKey(),
-    tag: text('tag').notNull(),
+    tag: text('tag').notNull().unique(),
     createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
     updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
 })
 
-const doc_tags = sqliteTable('doc_tags', {
-    id: text('id').primaryKey(),
-    tagId: text('tag_id')
-        .notNull()
-        .references(() => tags.id, { onDelete: 'cascade' }),
-    docId: text('doc_id')
-        .notNull()
-        .references(() => docs.id, { onDelete: 'cascade' }),
-    createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
-    updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
-})
+const doc_tags = sqliteTable(
+    'doc_tags',
+    {
+        id: text('id').primaryKey(),
+        tagId: text('tag_id')
+            .notNull()
+            .references(() => tags.id, { onDelete: 'cascade' }),
+        docId: text('doc_id')
+            .notNull()
+            .references(() => docs.id, { onDelete: 'cascade' }),
+        createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+        updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+    },
+    (table) => [uniqueIndex('idx_doc_tags_pair').on(table.tagId, table.docId)]
+)
 
 const categories = sqliteTable('categories', {
     id: text('id').primaryKey(),
@@ -64,15 +74,21 @@ const categorie_tags = sqliteTable('categorie_tags', {
     updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
 })
 
-const modelCache = sqliteTable('model_cache', {
-    id: text('id').primaryKey(),
-    md5: text('md5').notNull(),
-    model: text('model').notNull(),
-    response: text('response').notNull(),
-    hitCount: integer('hit_count').notNull().default(0),
-    createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
-    updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
-})
+const modelCache = sqliteTable(
+    'model_cache',
+    {
+        id: text('id').primaryKey(),
+        md5: text('md5').notNull(),
+        model: text('model').notNull(),
+        response: text('response').notNull(),
+        hitCount: integer('hit_count').notNull().default(0),
+        createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+        updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+    },
+    (table) => [
+        uniqueIndex('idx_model_cache_md5_model').on(table.md5, table.model),
+    ]
+)
 
 export {
     categorie_tags,
