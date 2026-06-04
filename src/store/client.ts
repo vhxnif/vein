@@ -1,10 +1,10 @@
-import { Database } from 'bun:sqlite'
-import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite'
-import { drizzle } from 'drizzle-orm/bun-sqlite'
+import Database from 'better-sqlite3'
+import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { resolveProjectRoot } from '../config'
 import * as schema from './schema'
 
-export type { BunSQLiteDatabase }
+export type { BetterSQLite3Database }
 
 type RawClient = {
     execute(sqlOrParams: string | { sql: string; args?: unknown[] }): Promise<{
@@ -12,16 +12,16 @@ type RawClient = {
     }>
 }
 
-function createRawWrapper(db: Database): RawClient {
+function createRawWrapper(db: Database.Database): RawClient {
     return {
         async execute(sqlOrParams) {
             if (typeof sqlOrParams === 'string') {
-                db.run(sqlOrParams)
+                db.exec(sqlOrParams)
                 return { rows: [] }
             }
             const isSelect = /^\s*SELECT\b/i.test(sqlOrParams.sql)
             const stmt = db.prepare(sqlOrParams.sql)
-            const args = (sqlOrParams.args ?? []) as Parameters<typeof stmt.all>
+            const args = sqlOrParams.args ?? []
             if (isSelect) {
                 return { rows: stmt.all(...args) }
             }
@@ -33,8 +33,8 @@ function createRawWrapper(db: Database): RawClient {
 
 function createDb(dbPath: string) {
     const db = new Database(dbPath)
-    db.run('PRAGMA journal_mode=WAL')
-    db.run('PRAGMA foreign_keys = ON')
+    db.pragma('journal_mode = WAL')
+    db.pragma('foreign_keys = ON')
 
     const raw = createRawWrapper(db)
     const drizzleDb = drizzle(db, { schema })
@@ -72,7 +72,7 @@ function getRawClient(): RawClient {
     return getInstance().raw
 }
 
-function getNativeDb(): Database {
+function getNativeDb(): Database.Database {
     return getInstance().native
 }
 

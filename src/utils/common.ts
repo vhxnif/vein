@@ -1,15 +1,15 @@
+import { createHash } from 'node:crypto'
+
 function uuid() {
-    return Bun.randomUUIDv7().replaceAll('-', '')
+    return crypto.randomUUID().replaceAll('-', '')
 }
 
 function md5(content: string) {
-    const hasher = new Bun.CryptoHasher('md5')
-    hasher.update(content)
-    return hasher.digest('hex')
+    return createHash('md5').update(content).digest('hex')
 }
 
-function hash(content: string) {
-    return Bun.hash(content)
+function hash(content: string): string {
+    return createHash('sha256').update(content).digest('hex')
 }
 
 export { hash, md5, uuid }

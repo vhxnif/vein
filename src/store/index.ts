@@ -81,13 +81,13 @@ async function insertTree<T>(
         for (const fn of flatNodes) {
             const nodeId = fn.node.nodeId
             await client.execute({
-                sql: 'INSERT INTO nodes (id, doc_id, data) VALUES (?1, ?2, ?3)',
+                sql: 'INSERT INTO nodes (id, doc_id, data) VALUES (?, ?, ?)',
                 args: [nodeId, docId ?? null, nodeToJson(fn.node)],
             })
             indexToId.set(fn.index, nodeId)
 
             await client.execute({
-                sql: 'INSERT INTO tree_closure (ancestor_id, descendant_id, depth) VALUES (?1, ?2, 0)',
+                sql: 'INSERT INTO tree_closure (ancestor_id, descendant_id, depth) VALUES (?, ?, 0)',
                 args: [nodeId, nodeId],
             })
         }
@@ -99,14 +99,14 @@ async function insertTree<T>(
             const parentId = indexToId.get(fn.parentIndex)!
 
             await client.execute({
-                sql: 'INSERT INTO tree_closure (ancestor_id, descendant_id, depth) VALUES (?1, ?2, 1)',
+                sql: 'INSERT INTO tree_closure (ancestor_id, descendant_id, depth) VALUES (?, ?, 1)',
                 args: [parentId, nodeId],
             })
 
             await client.execute({
                 sql: `INSERT INTO tree_closure (ancestor_id, descendant_id, depth)
-                      SELECT ancestor_id, ?1, depth + 1
-                      FROM tree_closure WHERE descendant_id = ?2 AND depth > 0`,
+                      SELECT ancestor_id, ?, depth + 1
+                      FROM tree_closure WHERE descendant_id = ? AND depth > 0`,
                 args: [nodeId, parentId],
             })
         }
@@ -129,11 +129,11 @@ async function deleteTree(docId?: string): Promise<void> {
         if (docId !== undefined) {
             await client.execute({
                 sql: `DELETE FROM tree_closure
-                      WHERE descendant_id IN (SELECT id FROM nodes WHERE doc_id = ?1)`,
+                      WHERE descendant_id IN (SELECT id FROM nodes WHERE doc_id = ?)`,
                 args: [docId],
             })
             await client.execute({
-                sql: 'DELETE FROM nodes WHERE doc_id = ?1',
+                sql: 'DELETE FROM nodes WHERE doc_id = ?',
                 args: [docId],
             })
         } else {
@@ -154,7 +154,7 @@ async function getSubTree<T>(nodeId: string): Promise<TreeNode<T>[]> {
     const result = await client.execute({
         sql: `SELECT n.id, n.data FROM nodes n
               JOIN tree_closure tc ON n.id = tc.descendant_id
-              WHERE tc.ancestor_id = ?1
+              WHERE tc.ancestor_id = ?
               ORDER BY n.id`,
         args: [nodeId],
     })
@@ -207,7 +207,7 @@ async function getAncestors<T>(nodeId: string): Promise<TreeNode<T>[]> {
     const result = await client.execute({
         sql: `SELECT n.id, n.data FROM nodes n
               JOIN tree_closure tc ON n.id = tc.ancestor_id
-              WHERE tc.descendant_id = ?1 AND tc.depth > 0
+              WHERE tc.descendant_id = ? AND tc.depth > 0
               ORDER BY tc.depth DESC`,
         args: [nodeId],
     })
@@ -222,7 +222,7 @@ async function getSiblings<T>(nodeId: string): Promise<TreeNode<T>[]> {
 
     const parentResult = await client.execute({
         sql: `SELECT ancestor_id FROM tree_closure
-              WHERE descendant_id = ?1 AND depth = 1`,
+              WHERE descendant_id = ? AND depth = 1`,
         args: [nodeId],
     })
 
@@ -234,7 +234,7 @@ async function getSiblings<T>(nodeId: string): Promise<TreeNode<T>[]> {
     const result = await client.execute({
         sql: `SELECT n.id, n.data FROM nodes n
               JOIN tree_closure tc ON n.id = tc.descendant_id
-              WHERE tc.ancestor_id = ?1 AND tc.depth = 1 AND tc.descendant_id != ?2
+              WHERE tc.ancestor_id = ? AND tc.depth = 1 AND tc.descendant_id != ?
               ORDER BY n.id`,
         args: [parentRow.ancestor_id, nodeId],
     })
@@ -250,7 +250,7 @@ async function getFullTree<T>(docId?: string): Promise<TreeNode<T>[]> {
         docId !== undefined
             ? await client.execute({
                   sql: `SELECT n.id FROM nodes n
-                  WHERE n.doc_id = ?1
+                  WHERE n.doc_id = ?
                   AND NOT EXISTS (
                       SELECT 1 FROM tree_closure tc
                       WHERE tc.descendant_id = n.id AND tc.depth = 1
@@ -298,7 +298,7 @@ async function getCachedResponse(
 ): Promise<string | undefined> {
     const client = getRawClient()
     const result = await client.execute({
-        sql: `UPDATE model_cache SET hit_count = hit_count + 1 WHERE md5 = ?1 AND model = ?2 RETURNING response`,
+        sql: `UPDATE model_cache SET hit_count = hit_count + 1 WHERE md5 = ? AND model = ? RETURNING response`,
         args: [md5, model],
     })
 
@@ -319,7 +319,7 @@ async function setCachedResponse(
     await db
         .insert(modelCache)
         .values({
-            id: Bun.randomUUIDv7(),
+            id: crypto.randomUUID().replaceAll('-', ''),
             md5,
             model,
             response,
@@ -378,11 +378,11 @@ async function insertDoc(
 
         if (summary) {
             await client.execute({
-                sql: `DELETE FROM docs_fts WHERE doc_id = ?1`,
+                sql: `DELETE FROM docs_fts WHERE doc_id = ?`,
                 args: [id],
             })
             await client.execute({
-                sql: `INSERT INTO docs_fts (doc_id, summary) VALUES (?1, ?2)`,
+                sql: `INSERT INTO docs_fts (doc_id, summary) VALUES (?, ?)`,
                 args: [id, summary],
             })
         }
@@ -414,11 +414,11 @@ async function updateDocMetadata(
 async function updateDocFts(docId: string, segmented: string): Promise<void> {
     const client = getRawClient()
     await client.execute({
-        sql: `DELETE FROM docs_fts WHERE doc_id = ?1`,
+        sql: `DELETE FROM docs_fts WHERE doc_id = ?`,
         args: [docId],
     })
     await client.execute({
-        sql: `INSERT INTO docs_fts (doc_id, summary) VALUES (?1, ?2)`,
+        sql: `INSERT INTO docs_fts (doc_id, summary) VALUES (?, ?)`,
         args: [docId, segmented],
     })
 }
@@ -426,7 +426,7 @@ async function updateDocFts(docId: string, segmented: string): Promise<void> {
 async function getDocFtsSummary(docId: string): Promise<string | undefined> {
     try {
         const result = await getRawClient().execute({
-            sql: `SELECT summary FROM docs_fts WHERE doc_id = ?1`,
+            sql: `SELECT summary FROM docs_fts WHERE doc_id = ?`,
             args: [docId],
         })
         const row = result.rows[0] as { summary: string } | undefined
@@ -442,7 +442,7 @@ async function deleteDoc(id: string) {
     try {
         await client.execute('BEGIN')
         await client.execute({
-            sql: `DELETE FROM docs_fts WHERE doc_id = ?1`,
+            sql: `DELETE FROM docs_fts WHERE doc_id = ?`,
             args: [id],
         })
         await db.delete(docs).where(eq(docs.id, id))
@@ -470,9 +470,9 @@ async function searchDocsByKeyword(
             sql: `
                 SELECT doc_id, rank
                 FROM docs_fts
-                WHERE docs_fts MATCH ?1
+                WHERE docs_fts MATCH ?
                 ORDER BY rank
-                LIMIT ?2
+                LIMIT ?
             `,
             args: [segmentedQuery, k],
         })
@@ -543,7 +543,7 @@ async function getDocsPaginated(
             LEFT JOIN nodes n ON n.doc_id = d.id
             GROUP BY d.id
             ORDER BY d.created_at DESC
-            LIMIT ?1 OFFSET ?2
+            LIMIT ? OFFSET ?
         `,
         args: [limit, offset],
     })

@@ -22,7 +22,7 @@
             "trailingCommas": "es5",
             "arrowParentheses": "always"
         },
-        "globals": ["Bun"]
+        "globals": []
     },
     "linter": {
         "enabled": true,

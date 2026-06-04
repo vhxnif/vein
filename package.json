@@ -1,21 +1,21 @@
 {
   "name": "vein",
   "version": "0.1.0",
-  "module": "index.ts",
   "type": "module",
   "bin": {
     "vein": "build/vein.js"
   },
   "scripts": {
-    "build": "bun build ./src/command/vein.ts --outdir ./build --target bun --minify --sourcemap=linked --entry-naming [name].[ext] --external clipboardy",
+    "build": "esbuild src/command/vein.ts --bundle --platform=node --target=node20 --format=esm --outfile=build/vein.js --sourcemap --external:'node:*' --packages=external",
     "check": "tsc --noEmit",
-    "lint": "bunx --bun @biomejs/biome lint",
-    "lint:fix": "bunx --bun @biomejs/biome lint --write ./src",
-    "format": "bunx --bun @biomejs/biome check --write ./src"
+    "lint": "npx @biomejs/biome lint",
+    "lint:fix": "npx @biomejs/biome lint --write ./src",
+    "format": "npx @biomejs/biome check --write ./src"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "drizzle-kit": "^0.31.10"
+    "@types/better-sqlite3": "^7.6.13",
+    "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.25.12"
   },
   "peerDependencies": {
     "typescript": "^5"
@@ -25,9 +25,9 @@
     "@clack/prompts": "^1.4.0",
     "@earendil-works/pi-agent-core": "^0.78.0",
     "@earendil-works/pi-ai": "^0.74.1",
+    "better-sqlite3": "^12.10.0",
     "commander": "^14.0.3",
     "drizzle-orm": "^0.45.2",
-    "pino": "^10.3.1",
-    "sqlite-vec": "^0.1.9"
+    "pino": "^10.3.1"
   }
 }

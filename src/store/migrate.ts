@@ -1,34 +1,23 @@
-import { Database } from 'bun:sqlite'
+import Database from 'better-sqlite3'
 import { logger } from '../config'
 import { schema } from './migrations/sql'
 
 const log = logger.child({ module: 'migrate' })
 
-/** Split a multi-statement SQL string and run each statement separately. */
-function execMulti(db: Database, sql: string): void {
-    const statements = sql
-        .split(';')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0)
-    for (const stmt of statements) {
-        db.run(stmt)
-    }
-}
-
 async function runMigrations(dbPath: string) {
     const db = new Database(dbPath)
-    db.run('PRAGMA journal_mode=WAL')
-    db.run('PRAGMA foreign_keys = ON')
+    db.pragma('journal_mode = WAL')
+    db.pragma('foreign_keys = ON')
 
     // Ensure migration tracking table exists before the loop
-    db.run(`CREATE TABLE IF NOT EXISTS _migrations (
+    db.exec(`CREATE TABLE IF NOT EXISTS _migrations (
         name TEXT PRIMARY KEY,
         executed_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`)
 
     // Query already-applied migrations
     const applied = new Set<string>()
-    const rows = db.query('SELECT name FROM _migrations').all() as Array<{
+    const rows = db.prepare('SELECT name FROM _migrations').all() as Array<{
         name: string
     }>
     for (const row of rows) {
@@ -40,8 +29,8 @@ async function runMigrations(dbPath: string) {
             log.debug({ sql: name, content: 'Migration already applied.' })
             continue
         }
-        execMulti(db, sql)
-        db.run('INSERT INTO _migrations (name) VALUES (?)', [name])
+        db.exec(sql)
+        db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(name)
         log.info({ sql: name, content: 'Migration applied successfully.' })
     }
     db.close()

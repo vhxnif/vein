@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { access, constants, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import pino from 'pino'
@@ -45,7 +46,7 @@ function getProjectRoot(cwd: string): string | undefined {
     while (true) {
         const veinPath = path.join(dir, veinDir)
         try {
-            require('node:fs').accessSync(veinPath, constants.F_OK)
+            existsSync(veinPath)
             return dir
         } catch {
             const parent = path.dirname(dir)
