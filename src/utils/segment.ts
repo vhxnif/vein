@@ -27,7 +27,7 @@ async function segmentText(
     const CHUNK_SIZE = 3000
     if (text.length > CHUNK_SIZE) {
         const chunks = splitText(text, CHUNK_SIZE)
-        log.info({
+        log.debug({
             textLen: text.length,
             chunks: chunks.length,
             chunkSizes: chunks.map((c) => c.length),
@@ -37,7 +37,7 @@ async function segmentText(
             chunks.map((chunk) => segmentChunk(chunk, segmenter))
         )
         const joined = results.join(' ')
-        log.info({
+        log.debug({
             textLen: text.length,
             resultLen: joined.length,
             content: 'Chunk segmentation done',
@@ -81,7 +81,7 @@ async function segmentChunk(
         : getModelKey()
     const cached = await store.getCachedResponse(cacheMd5, cacheModel)
     if (cached) {
-        log.info({
+        log.debug({
             textLen: text.length,
             resultLen: cached.length,
             cache: 'hit',
@@ -90,7 +90,7 @@ async function segmentChunk(
         return cached
     }
 
-    log.info({
+    log.debug({
         textLen: text.length,
         inputPreview: text.slice(0, 120),
         content: 'Segmenting chunk',
@@ -119,7 +119,7 @@ async function segmentChunk(
     }
 
     await store.setCachedResponse(cacheMd5, cacheModel, result)
-    log.info({
+    log.debug({
         inputLen: text.length,
         resultLen: result.length,
         outputPreview: result.slice(0, 120),

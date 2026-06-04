@@ -129,6 +129,11 @@ export async function importBatch(
     force: boolean,
     onProgress?: (p: BatchProgress) => void
 ): Promise<ImportResult[]> {
+    log.info({
+        fileCount: files.length,
+        force,
+        content: 'Import batch start',
+    })
     const results: ImportResult[] = []
     const filesWithIndex = files.map((fp, i) => ({ fp, i }))
     const total = files.length
@@ -206,6 +211,16 @@ export async function importBatch(
             }
         }
     }
+
+    const imported = results.filter((r) => r.status === 'imported').length
+    const skipped = results.filter((r) => r.status === 'skipped').length
+    const failed = results.filter((r) => r.status === 'failed').length
+    log.info({
+        imported,
+        skipped,
+        failed,
+        content: 'Import batch complete',
+    })
 
     return results
 }

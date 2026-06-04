@@ -231,7 +231,15 @@ function summarizeResult(tool: string, raw: string): string {
         return `${raw.length} chars`
     }
     if (tool === 'getDocStructure') {
-        const nodeCount = raw.split('\n').filter((l) => l.trim()).length
+        const lines = raw.split('\n')
+        const nodeCount = lines.filter((l) => l.trim()).length
+        const docTitle = lines
+            .find((l) => /^\s*\d{4}\s/.test(l))
+            ?.replace(/^\s*\d{4}\s/, '')
+            .trim()
+        if (docTitle) {
+            return `"${ellipsis(docTitle, 40)}" · ${nodeCount} nodes`
+        }
         return `${nodeCount} nodes`
     }
     try {
@@ -436,6 +444,24 @@ function ellipsis(s: string, max: number): string {
     return s.length > max ? `${s.slice(0, max)}...` : s
 }
 
+function buildToolDetail(
+    toolName: string,
+    args: Record<string, unknown>
+): string {
+    switch (toolName) {
+        case 'searchDocsByKeyword':
+            return `"${String(args.query ?? '')}"`
+        case 'getDocStructure':
+            return `doc=${(String(args.docId ?? '')).slice(0, 8)}`
+        case 'getDocNodeDetails':
+            return `doc=${(String(args.docId ?? '')).slice(0, 8)}/${args.nodeId ?? '?'}`
+        case 'reviewResult':
+            return `"${ellipsis(String(args.query ?? ''), 60)}"`
+        default:
+            return ''
+    }
+}
+
 async function librarian(
     msg: string,
     onStep?: (label: string) => void,
@@ -489,17 +515,21 @@ async function librarian(
             toolStartTimes.set(event.toolCallId, performance.now())
             log.info({
                 toolName: event.toolName,
-                args: event.args,
+                detail: buildToolDetail(
+                    event.toolName,
+                    (event.args as Record<string, unknown>) ?? {}
+                ),
                 content: 'Tool start',
             })
         }
         if (event.type === 'tool_execution_end') {
             const start = toolStartTimes.get(event.toolCallId)
-            if (start !== undefined) {
-                toolTimings.set(
-                    event.toolCallId,
-                    Math.round(performance.now() - start)
-                )
+            const elapsedMs =
+                start !== undefined
+                    ? Math.round(performance.now() - start)
+                    : undefined
+            if (elapsedMs !== undefined) {
+                toolTimings.set(event.toolCallId, elapsedMs)
             }
             const resultText =
                 event.result?.content
@@ -513,6 +543,7 @@ async function librarian(
                 toolName: event.toolName,
                 resultLen: resultText.length,
                 resultSummary: summarizeResult(event.toolName, resultText),
+                elapsedMs,
                 content: 'Tool end',
             })
         }

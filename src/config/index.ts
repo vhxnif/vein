@@ -24,16 +24,18 @@ export function resolveProjectRoot(): string | undefined {
     return getProjectRoot(process.cwd())
 }
 
-const logs = `${process.env.HOME}/.config/${name}/logs`
+// ── logger (file-only JSON output to ~/.config/vein/logs/) ──────
 
-await mkdir(logs, { recursive: true })
+const logsDir = `${process.env.HOME}/.config/${name}/logs`
+await mkdir(logsDir, { recursive: true })
 
 const today = new Date().toISOString().slice(0, 10)
+
 const logger = pino(
     {
         level: 'debug',
     },
-    pino.destination({ dest: `${logs}/vein-${today}.log`, sync: true })
+    pino.destination({ dest: `${logsDir}/vein-${today}.log`, sync: true })
 )
 
 const veinDir = '.vein'

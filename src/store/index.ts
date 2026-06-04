@@ -218,7 +218,6 @@ async function getAncestors<T>(nodeId: string): Promise<TreeNode<T>[]> {
 }
 
 async function getSiblings<T>(nodeId: string): Promise<TreeNode<T>[]> {
-    const traceId = Bun.randomUUIDv7()
     const client = getRawClient()
 
     const parentResult = await client.execute({
@@ -226,8 +225,6 @@ async function getSiblings<T>(nodeId: string): Promise<TreeNode<T>[]> {
               WHERE descendant_id = ?1 AND depth = 1`,
         args: [nodeId],
     })
-
-    logger.info({ traceId, nodeId, parent: parentResult })
 
     const parentRow = parentResult.rows[0] as
         | { ancestor_id: string }
@@ -241,7 +238,6 @@ async function getSiblings<T>(nodeId: string): Promise<TreeNode<T>[]> {
               ORDER BY n.id`,
         args: [parentRow.ancestor_id, nodeId],
     })
-    logger.info({ traceId, nodeId, result })
     return (result.rows as unknown as NodeRow[]).map((row) =>
         jsonToTreeNode(row)
     )

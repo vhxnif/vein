@@ -295,12 +295,14 @@ db.exec('PRAGMA foreign_keys = ON')
 - **TypeScript**: ESNext target, strict 模式, `verbatimModuleSyntax`（type 导入需显式 `import type`）
 - **命名**: 文件 kebab-case, 函数 camelCase, 类型 PascalCase
 - **日志**: 使用 `logger.child({ module: 'xxx' })` 创建模块级 logger
+- **日志输出**: 仅写文件 `~/.config/vein/logs/vein-YYYY-MM-DD.log`（JSON 每行一条），不输出到控制台（避免干扰 CLI spinner/交互）。logger 在 `src/config/index.ts` 中通过 pino 创建，`sync: true` 保证崩溃不丢数据。用 `tail -f ~/.config/vein/logs/vein-$(date +%Y-%m-%d).log` 实时追踪。
 - **日志级别**:
-  - `log.info` 仅记录关键流程节点（Agent 工具调用开始/结束、检索完成、迁移、错误恢复等）
-  - `log.debug` 记录内部细节（缓存命中/未命中、markdown 解析流水线步骤、LLM 消息收发等）
+  - `log.info` 仅记录关键流程节点：Agent 工具调用开始/结束、检索会话开始/完成、批量导入开始/完成、迁移、项目注册/注销、错误恢复
+  - `log.debug` 记录内部细节：缓存命中/未命中、分词流水线步骤、LLM 消息收发、DB 查询细节
   - `log.warn` 记录需关注但非致命的操作（如强制覆盖、降级行为）
   - `log.error` 记录异常（传入 `err` 字段，含 stack trace）
-- **日志内容约束**: 禁止在日志中打印完整 LLM prompt/messages/response 或大型数据结构（如完整文档树）。Agent 工具结果仅记录摘要（resultSummary + resultLen），不记录完整 result 字段。
+- **日志内容约束**: 禁止在日志中打印完整 LLM prompt/messages/response 或大型数据结构（如完整文档树）。Agent 工具结果仅记录摘要（resultSummary + resultLen），不记录完整 result 字段。`args` 字段不在日志中输出（改用 `detail` 可读摘要）。
 - **日志格式**: 结构化对象 `log.info({ docId, key: value, content: '描述' })`，`content` 字段用英文描述操作，避免在 msg 中拼接变量
+- **检索追踪字段**: ask 会话使用 `sessionId`（`crypto.randomUUID().slice(0, 8)`）关联同一次查询的所有日志。Librarian 工具调用使用 `detail`（可读上下文摘要）+ `elapsedMs`（执行耗时）辅助追踪。
 - **导出**: 统一起名导出（避免 default export）
 - **运行时**: `bun run src/command/vein.ts`, `bun run build` 构建（单入口 vein.ts）, `bun run check` 类型检查, `bun run lint` 检查代码, `bun run format` 格式化（含 import 排序）

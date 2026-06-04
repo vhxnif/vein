@@ -5,6 +5,7 @@ import type { Command } from 'commander'
 import type { LibrarianResult } from '../ai/index'
 import { librarian } from '../ai/index'
 import { logger, resolveProjectRoot, veinDir } from '../config'
+import * as store from '../store'
 import {
     colorize,
     formatDuration,
@@ -60,23 +61,54 @@ async function saveHistory(
     return id
 }
 
-function formatTrace(result: LibrarianResult): string {
+async function resolveDocNames(
+    trace: LibrarianResult['trace']
+): Promise<Map<string, string>> {
+    const docIds = new Set<string>()
+    for (const s of trace) {
+        const docId = (s.args as { docId?: string })?.docId
+        if (docId) docIds.add(docId)
+    }
+    const map = new Map<string, string>()
+    await Promise.all(
+        [...docIds].map(async (id) => {
+            const doc = await store.getDoc(id)
+            if (doc) {
+                try {
+                    const meta = JSON.parse(doc.metadata) as {
+                        title?: string
+                    }
+                    map.set(id, meta.title ?? id.slice(0, 8))
+                } catch {
+                    map.set(id, id.slice(0, 8))
+                }
+            } else {
+                map.set(id, id.slice(0, 8))
+            }
+        })
+    )
+    return map
+}
+
+function formatTrace(
+    result: LibrarianResult,
+    docNames: Map<string, string>
+): string {
     if (result.trace.length === 0) return ''
     const traceLines = result.trace
         .map((s, i) => {
             const num = String(i + 1).padStart(2, ' ')
             const tool = s.tool
             let detail = s.resultSummary
-            if (tool === 'getDocStructure') {
-                const docId = (s.args as { docId?: string })?.docId
-                detail = docId
-                    ? `${docId.slice(0, 8)} → ${s.resultSummary}`
-                    : s.resultSummary
-            } else if (tool === 'getDocNodeDetails') {
+            if (tool === 'getDocNodeDetails') {
                 const a = s.args as { docId?: string; nodeId?: string }
+                const name =
+                    (a.docId && docNames.get(a.docId)) ||
+                    a.docId?.slice(0, 8) ||
+                    '?'
                 detail =
                     a.docId && a.nodeId
-                        ? `${a.docId.slice(0, 8)}/${a.nodeId} → ${s.resultSummary}`
+                        ? `${name}/${a.nodeId} → ${s.resultSummary}`
                         : s.resultSummary
             }
             return `  ${num}. ${tool}  ${detail}`
@@ -153,6 +185,9 @@ export function register(program: Command) {
                 const searchSpinner = interactive ? spinner() : undefined
                 searchSpinner?.start('Searching...')
 
+                const sessionId = crypto.randomUUID().slice(0, 8)
+                log.info({ sessionId, query, content: 'Ask session start' })
+
                 const startedAt = performance.now()
                 let result: LibrarianResult
                 try {
@@ -225,10 +260,12 @@ export function register(program: Command) {
                 }
 
                 if (showTrace && result.trace.length > 0) {
-                    note(formatTrace(result))
+                    const docNames = await resolveDocNames(result.trace)
+                    note(formatTrace(result, docNames))
                 }
 
                 log.info({
+                    sessionId,
                     query,
                     elapsedMs,
                     verdict: result.review?.verdict,
