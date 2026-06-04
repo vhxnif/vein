@@ -43,10 +43,8 @@ export function register(program: Command) {
 
             if (total > 1) {
                 // Batch mode: use shared pipeline with progress callbacks
-                const sPhase1 = spinner()
-                const sWrite = spinner()
-                const sTagLLM = spinner()
-                const sTagSave = spinner()
+                const s = spinner()
+                s.start('Preparing...')
 
                 const results = await importBatch(
                     files,
@@ -54,22 +52,10 @@ export function register(program: Command) {
                     summarize,
                     force,
                     (p) => {
-                        switch (p.phase) {
-                            case 'parse':
-                                sPhase1.message(p.message)
-                                break
-                            case 'write':
-                                sWrite.message(p.message)
-                                break
-                            case 'tag-llm':
-                                sTagLLM.message(p.message)
-                                break
-                            case 'tag-save':
-                                sTagSave.message(p.message)
-                                break
-                        }
+                        s.message(p.message)
                     }
                 )
+                s.stop('Import complete.')
 
                 const imported = results.filter(
                     (r): r is ImportedResult => r.status === 'imported'
@@ -113,6 +99,7 @@ export function register(program: Command) {
             } else {
                 // Single-file mode: importBatch handles single file too
                 const s = spinner()
+                s.start('Preparing...')
                 const results = await importBatch(
                     files,
                     config,
@@ -122,6 +109,7 @@ export function register(program: Command) {
                         s.message(p.message)
                     }
                 )
+                s.stop('Import complete.')
                 const [result] = results
                 if (result?.status === 'imported') {
                     note(
@@ -141,10 +129,12 @@ export function register(program: Command) {
         .addCommand(
             new Command('resegment')
                 .alias('rs')
-                .description(
-                    're-segment documents whose summaries changed and update FTS index'
+                .description('re-segment documents and update FTS index')
+                .option(
+                    '-F, --force',
+                    'force re-segment even if summaries unchanged'
                 )
-                .action(async () => {
+                .action(async (options: { force?: boolean }) => {
                     const config = await setupProjectModel()
                     if (!config) {
                         outro('Not in a vein project. Run "vein new" first.')
@@ -160,6 +150,8 @@ export function register(program: Command) {
                     }
 
                     intro(`Re-segmenting ${allDocs.length} document(s)`)
+
+                    const force = options.force ?? false
 
                     // Phase 1: identify documents needing resegment
                     const toResegment: Array<{
@@ -200,9 +192,13 @@ export function register(program: Command) {
 
                         if (!combinedSummary) continue
 
-                        const newHash = md5(combinedSummary)
-                        const oldHash = meta.summaryHash as string | undefined
-                        if (oldHash && newHash === oldHash) continue
+                        if (!force) {
+                            const newHash = md5(combinedSummary)
+                            const oldHash = meta.summaryHash as
+                                | string
+                                | undefined
+                            if (oldHash && newHash === oldHash) continue
+                        }
 
                         toResegment.push({
                             docId: d.id,
