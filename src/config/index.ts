@@ -70,8 +70,7 @@ async function loadProjectConfig(
 async function initProject(
     cwd: string,
     projectName: string,
-    model: ModelProvider,
-    embedding?: ModelProvider
+    model: ModelProvider
 ): Promise<ProjectConfig> {
     const veinPath = path.join(cwd, veinDir)
     const configPath = path.join(veinPath, 'config.json')
@@ -96,17 +95,13 @@ async function initProject(
     const dbPath = '.vein/data.db'
     const fullDbPath = path.join(veinPath, 'data.db')
     const { runMigrations } = await import('../store/migrate')
-    await runMigrations(fullDbPath, { requireExtension: !!embedding })
+    await runMigrations(fullDbPath)
 
     const config: ProjectConfig = {
         $schema: './config.schema.json',
         name: projectName,
         db: dbPath,
         model,
-        embedding,
-        ...(process.env.VEIN_SQLITE_LIB_PATH
-            ? { sqliteLibPath: process.env.VEIN_SQLITE_LIB_PATH }
-            : {}),
     }
 
     await writeFile(configPath, JSON.stringify(config, null, 2))

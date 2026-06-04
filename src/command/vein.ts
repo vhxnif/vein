@@ -9,7 +9,6 @@ import { register as registerHistory } from './history.command'
 import { register as registerMarkdown } from './markdown.command'
 import { register as registerNew } from './new.command'
 import { register as registerProjects } from './projects.command'
-import { register as registerTags } from './tags.command'
 
 const vein = new Command()
     .name('vein')
@@ -23,7 +22,6 @@ registerNew(vein)
 registerMarkdown(vein)
 registerAsk(vein)
 registerHistory(vein)
-registerTags(vein)
 registerConfig(vein)
 registerBrowse(vein)
 registerProjects(vein)

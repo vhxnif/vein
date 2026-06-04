@@ -1,4 +1,4 @@
-import { autocomplete, intro, note, outro, select, text } from '@clack/prompts'
+import { autocomplete, intro, note, outro, select } from '@clack/prompts'
 import { getModels, getProviders } from '@earendil-works/pi-ai'
 import type { Command } from 'commander'
 import { setModelProvider } from '../ai/index'
@@ -18,8 +18,6 @@ function display(c: ProjectConfig): string {
         `Model:    ${formatMd(c.model)}`,
         `Summarizer: ${formatMd(c.summarizer)}`,
         `Segmenter:  ${formatMd(c.segmenter)}`,
-        `Embedding:  ${c.embedding ? `openrouter/${c.embedding.model}` : '(unset)'}`,
-        `SQLite:   ${c.sqliteLibPath ?? '(auto)'}`,
     ].join('\n')
 }
 
@@ -106,18 +104,6 @@ export function register(program: Command) {
                             label: 'Segmenter',
                             hint: formatMd(config.segmenter),
                         },
-                        {
-                            value: 'embedding',
-                            label: 'Embedding',
-                            hint: config.embedding
-                                ? config.embedding.model
-                                : '(unset)',
-                        },
-                        {
-                            value: 'sqlite',
-                            label: 'SQLite lib path',
-                            hint: config.sqliteLibPath ?? '(auto)',
-                        },
                         { value: 'done', label: 'Done — save and exit' },
                     ],
                 })
@@ -146,64 +132,6 @@ export function register(program: Command) {
                             'defaults to Model if unset'
                         )
                         config = { ...config, segmenter: md }
-                        break
-                    }
-                    case 'embedding': {
-                        const embAction = await select({
-                            message: `Embedding (current: ${config.embedding?.model ?? 'unset'})`,
-                            options: [
-                                {
-                                    value: 'change',
-                                    label: 'Change model',
-                                    hint: 'enter OpenRouter model ID',
-                                },
-                                {
-                                    value: 'remove',
-                                    label: 'Remove',
-                                    hint: 'disable embedding',
-                                },
-                                { value: 'keep', label: 'Keep as-is' },
-                            ],
-                        })
-                        if (embAction === 'change') {
-                            const embModel = await text({
-                                message:
-                                    'Embedding model (OpenRouter model ID):',
-                                placeholder: 'openai/text-embedding-3-small',
-                                defaultValue:
-                                    config.embedding?.model ??
-                                    'openai/text-embedding-3-small',
-                            })
-                            if (
-                                typeof embModel === 'string' &&
-                                embModel.trim()
-                            ) {
-                                config = {
-                                    ...config,
-                                    embedding: {
-                                        provider: 'openrouter',
-                                        model: embModel.trim(),
-                                    },
-                                }
-                            }
-                        } else if (embAction === 'remove') {
-                            config = { ...config, embedding: undefined }
-                        }
-                        break
-                    }
-                    case 'sqlite': {
-                        const libPath = await text({
-                            message: 'SQLite library path:',
-                            placeholder:
-                                '/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib',
-                            defaultValue: config.sqliteLibPath ?? '',
-                        })
-                        if (typeof libPath === 'string') {
-                            config = {
-                                ...config,
-                                sqliteLibPath: libPath.trim() || undefined,
-                            }
-                        }
                         break
                     }
                 }

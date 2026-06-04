@@ -28,59 +28,6 @@ CREATE INDEX IF NOT EXISTS idx_closure_ancestor ON tree_closure(ancestor_id);
 CREATE INDEX IF NOT EXISTS idx_closure_descendant ON tree_closure(descendant_id);
 CREATE INDEX IF NOT EXISTS idx_nodes_doc_id ON nodes(doc_id);
 
-CREATE TABLE IF NOT EXISTS tags (
-    id TEXT PRIMARY KEY,
-    tag TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS doc_tags (
-    id TEXT PRIMARY KEY,
-    tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-    doc_id TEXT NOT NULL REFERENCES docs(id) ON DELETE CASCADE,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_doc_tags_tag_id ON doc_tags(tag_id);
-CREATE INDEX IF NOT EXISTS idx_doc_tags_doc_id ON doc_tags(doc_id);
-
-CREATE TABLE IF NOT EXISTS categories (
-    id TEXT PRIMARY KEY,
-    content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS categorie_tags (
-    id TEXT PRIMARY KEY,
-    categorie_id TEXT NOT NULL,
-    tag_id TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_categorie_tags_categorie_id ON categorie_tags(categorie_id);
-CREATE INDEX IF NOT EXISTS idx_categorie_tags_tag_id ON categorie_tags(tag_id);
-`.trim(),
-    },
-    {
-        name: 'v0.1.0_seed_categories.sql',
-        sql: `
-INSERT OR IGNORE INTO categories (id, content) VALUES
-('cat_000', '计算机与信息技术'),
-('cat_100', '哲学与心理学'),
-('cat_200', '社会科学'),
-('cat_300', '经济与管理'),
-('cat_400', '语言与教育'),
-('cat_500', '数学与自然科学'),
-('cat_600', '工程与技术'),
-('cat_700', '医学与健康'),
-('cat_800', '艺术与设计'),
-('cat_900', '文学与写作'),
-('cat_A00', '历史与地理'),
-('cat_B00', '法律与政治');
 `.trim(),
     },
     {
@@ -100,30 +47,17 @@ CREATE INDEX IF NOT EXISTS idx_model_cache_md5_model ON model_cache(md5, model);
         `.trim(),
     },
     {
-        name: 'v0.1.0_unique_categorie_tags.sql',
-        sql: `
-CREATE UNIQUE INDEX IF NOT EXISTS idx_categorie_tags_pair ON categorie_tags(categorie_id, tag_id);
-        `.trim(),
-    },
-    {
         name: 'v0.1.0_create_fts_tables.sql',
         sql: `
 CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
     doc_id,
     summary
 );
-
-CREATE VIRTUAL TABLE IF NOT EXISTS tags_fts USING fts5(
-    tag_id,
-    tag
-);
         `.trim(),
     },
     {
         name: 'v0.1.0_strengthen_constraints.sql',
         sql: `
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_doc_tags_pair ON doc_tags(tag_id, doc_id);
 CREATE INDEX IF NOT EXISTS idx_docs_created_at ON docs(created_at);
 DROP INDEX IF EXISTS idx_model_cache_md5_model;
 CREATE UNIQUE INDEX idx_model_cache_md5_model ON model_cache(md5, model);

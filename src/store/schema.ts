@@ -36,44 +36,6 @@ const treeClosure = sqliteTable(
     (table) => [primaryKey({ columns: [table.ancestorId, table.descendantId] })]
 )
 
-const tags = sqliteTable('tags', {
-    id: text('id').primaryKey(),
-    tag: text('tag').notNull().unique(),
-    createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
-    updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
-})
-
-const doc_tags = sqliteTable(
-    'doc_tags',
-    {
-        id: text('id').primaryKey(),
-        tagId: text('tag_id')
-            .notNull()
-            .references(() => tags.id, { onDelete: 'cascade' }),
-        docId: text('doc_id')
-            .notNull()
-            .references(() => docs.id, { onDelete: 'cascade' }),
-        createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
-        updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
-    },
-    (table) => [uniqueIndex('idx_doc_tags_pair').on(table.tagId, table.docId)]
-)
-
-const categories = sqliteTable('categories', {
-    id: text('id').primaryKey(),
-    content: text('content').notNull(),
-    createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
-    updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
-})
-
-const categorie_tags = sqliteTable('categorie_tags', {
-    id: text('id').primaryKey(),
-    categorieId: text('categorie_id').notNull(),
-    tagId: text('tag_id').notNull(),
-    createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
-    updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
-})
-
 const modelCache = sqliteTable(
     'model_cache',
     {
@@ -90,13 +52,4 @@ const modelCache = sqliteTable(
     ]
 )
 
-export {
-    categorie_tags,
-    categories,
-    doc_tags,
-    docs,
-    modelCache,
-    nodes,
-    tags,
-    treeClosure,
-}
+export { docs, modelCache, nodes, treeClosure }

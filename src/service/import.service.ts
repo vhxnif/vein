@@ -1,19 +1,17 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { saveTagResult, tagger } from '../ai/index'
 import { logger, resolveProjectRoot } from '../config'
 import type { ModelProvider, ProjectConfig } from '../config/type'
 import * as store from '../store'
-import { mdToTree, renderDocOutline } from '../tree/markdown_split'
+import { mdToTree } from '../tree/markdown_split'
 import type { DocNode } from '../tree/type'
-import { getErrorMessage, modelKey, pluralize } from '../utils/cli-helpers'
+import { getErrorMessage } from '../utils/cli-helpers'
 import { md5 } from '../utils/common'
 import { segmentText } from '../utils/segment'
 
 const log = logger.child({ module: 'import' })
 
 export const IMPORT_PARALLEL = 4
-export const TAG_PARALLEL = 4
 
 export type ImportResult =
     | { status: 'imported'; docName: string; docId: string; nodeCount: number }
@@ -24,13 +22,6 @@ export type ImportedResult = ImportResult & { status: 'imported' }
 export type SkippedResult = ImportResult & { status: 'skipped' }
 export type FailedResult = ImportResult & { status: 'failed' }
 
-export type ImportProgress = {
-    phase: 'parse' | 'write' | 'tag' | 'tag-save'
-    message: string
-    completed?: number
-    total?: number
-}
-
 type ParsedFile = {
     docId: string
     docName: string
@@ -38,11 +29,9 @@ type ParsedFile = {
     absolutePath: string
     relativePath: string
     tree: Awaited<ReturnType<typeof mdToTree>>
-    rootSummary: string | undefined
     combinedSummary: string | undefined
     bodySummary: string | undefined
     needsCleanup: boolean
-    structure: string
 }
 
 type ParseChunkResult =
@@ -76,8 +65,6 @@ async function parseOneFile(
         const tree = await mdToTree(docId, docName, content, {
             summary: { summarizer },
         })
-        const rootSummary = tree.value.summary
-        const structure = renderDocOutline(tree)
         const allSummaries = collectAllSummaries(tree)
         const combinedSummary = allSummaries.filter(Boolean).join('\n')
         const bodySummary = combinedSummary
@@ -92,10 +79,8 @@ async function parseOneFile(
                 absolutePath,
                 relativePath,
                 tree,
-                rootSummary,
                 combinedSummary: combinedSummary || undefined,
                 bodySummary,
-                structure,
                 needsCleanup: !!existing,
             },
         }
@@ -126,60 +111,15 @@ async function writeOneDocument(parsed: ParsedFile): Promise<number> {
     return nodeCount
 }
 
-type TagEntry = {
-    docId: string
-    docName: string
-    rootSummary: string
-    structure: string
-    nodeCount: number
-}
-
-async function tagOneDocument(
-    entry: TagEntry,
-    modelKeyStr: string,
-    embeddingProvider: ModelProvider | undefined,
-    categories: Array<{ id: string; name: string }>,
-    existingTagsMap: Map<string, string[]>,
-    segmenter: ModelProvider | undefined
-): Promise<{ tagCount: number; categoryCount: number; error: boolean }> {
-    try {
-        const result = await tagger(entry.rootSummary, categories, {
-            modelKey: modelKeyStr,
-            existingTags: existingTagsMap,
-            embeddingProvider,
-            segmenter,
-            structure: entry.structure,
-        })
-        if (result.categories.length === 0) {
-            return { tagCount: 0, categoryCount: 0, error: false }
-        }
-        const { tagCount, categoryCount } = await saveTagResult(
-            entry.docId,
-            result,
-            embeddingProvider,
-            undefined,
-            segmenter
-        )
-        return { tagCount, categoryCount, error: false }
-    } catch (err) {
-        log.warn({
-            err,
-            docId: entry.docId,
-            content: 'Tag analysis failed',
-        })
-        return { tagCount: 0, categoryCount: 0, error: true }
-    }
-}
-
 type BatchProgress = {
-    phase: 'parse' | 'write' | 'tag-llm' | 'tag-save'
+    phase: 'parse' | 'write'
     message: string
     completed?: number
     total?: number
 }
 
 /**
- * Full import pipeline: parallel Phase 1 (parse+summarize) → serial DB write → parallel Phase 2 (tagger LLM) → serial tag save.
+ * Full import pipeline: parallel Phase 1 (parse+summarize) → serial DB write.
  * Returns structured results; progress callbacks enable CLI spinner updates.
  */
 export async function importBatch(
@@ -194,9 +134,7 @@ export async function importBatch(
     const total = files.length
     let completed = 0
 
-    const toTag: TagEntry[] = []
-
-    // ── Phase 1: parallel LLM → serial DB ──
+    // Phase 1: parallel LLM → serial DB
     for (let j = 0; j < files.length; j += IMPORT_PARALLEL) {
         const chunk = filesWithIndex.slice(j, j + IMPORT_PARALLEL)
 
@@ -248,30 +186,6 @@ export async function importBatch(
 
             try {
                 const nodeCount = await writeOneDocument(r.parsed)
-                if (nodeCount <= 1) {
-                    results.push({
-                        status: 'imported',
-                        docName: r.parsed.docName,
-                        docId: r.parsed.docId,
-                        nodeCount,
-                    })
-                    continue
-                }
-                if (r.parsed.rootSummary) {
-                    toTag.push({
-                        docId: r.parsed.docId,
-                        docName: r.parsed.docName,
-                        rootSummary: r.parsed.rootSummary,
-                        structure: r.parsed.structure,
-                        nodeCount,
-                    })
-                } else if (nodeCount > 1) {
-                    log.debug({
-                        docId: r.parsed.docId,
-                        docName: r.parsed.docName,
-                        content: 'No root summary, skipping tag analysis',
-                    })
-                }
                 results.push({
                     status: 'imported',
                     docName: r.parsed.docName,
@@ -290,86 +204,6 @@ export async function importBatch(
                     error: getErrorMessage(err),
                 })
             }
-        }
-    }
-
-    // ── Phase 2: parallel tagger → serial save ──
-    if (toTag.length > 0) {
-        const [categoryRows, existingTagsMap] = await Promise.all([
-            store.getCategories(),
-            store.getAllTagsGrouped(),
-        ])
-        const categories = categoryRows.map((c) => ({
-            id: c.id,
-            name: c.content,
-        }))
-        const mk = modelKey(config.model)
-
-        // Parallel tagger LLM calls
-        const taggerResults: Array<{
-            entry: TagEntry
-            tagCount: number
-            categoryCount: number
-            error: boolean
-        }> = []
-        let tagged = 0
-
-        for (let j = 0; j < toTag.length; j += TAG_PARALLEL) {
-            const chunk = toTag.slice(j, j + TAG_PARALLEL)
-            onProgress?.({
-                phase: 'tag-llm',
-                message: `Analyzing tags (${tagged}/${toTag.length})...`,
-                completed: tagged,
-                total: toTag.length,
-            })
-            const chunkResults = await Promise.all(
-                chunk.map((entry) =>
-                    tagOneDocument(
-                        entry,
-                        mk,
-                        config.embedding,
-                        categories,
-                        existingTagsMap,
-                        config.segmenter
-                    )
-                )
-            )
-            tagged += chunk.length
-            onProgress?.({
-                phase: 'tag-llm',
-                message: `Analyzed tags (${tagged}/${toTag.length})`,
-                completed: tagged,
-                total: toTag.length,
-            })
-            for (let k = 0; k < chunk.length; k++) {
-                taggerResults.push({ entry: chunk[k]!, ...chunkResults[k]! })
-            }
-        }
-
-        // Serial save notifications
-        for (const { entry, tagCount, categoryCount, error } of taggerResults) {
-            if (error) {
-                onProgress?.({
-                    phase: 'tag-save',
-                    message: `${entry.docName}: Tag save failed`,
-                })
-                continue
-            }
-            if (tagCount === 0) {
-                onProgress?.({
-                    phase: 'tag-save',
-                    message: `${entry.docName}: no tags extracted`,
-                })
-                continue
-            }
-            const tagsPart =
-                tagCount > 0
-                    ? `${tagCount} tag(s) / ${categoryCount} ${pluralize(categoryCount, 'category', 'categories')}`
-                    : 'no tags extracted'
-            onProgress?.({
-                phase: 'tag-save',
-                message: `${entry.docName} → ${entry.nodeCount} nodes, ${tagsPart}`,
-            })
         }
     }
 

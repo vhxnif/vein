@@ -8,13 +8,7 @@ import { Agent } from '@earendil-works/pi-agent-core'
 import { getModel, Type } from '@earendil-works/pi-ai'
 import { logger } from '../config'
 import type { ModelProvider } from '../config/type'
-import {
-    getCategories,
-    getDocsByTag,
-    getFullTree,
-    getNodeDetails,
-    getTagsByCategory,
-} from '../store'
+import { getFullTree, getNodeDetails } from '../store'
 import type { BaseDocNode, TreeNode } from '../tree/type'
 import { getModelProvider } from './base'
 import type { ReviewResult, SourceRef } from './reviewer'
@@ -23,33 +17,7 @@ import { searchDocsByKeyword } from './tools'
 
 const log = logger.child({ module: 'librarian' })
 
-const BASE_PROMPT = `你是一个文档检索 Librarian。按 categories → tags → docs → tree → node 逐层缩小范围，返回最相关的文档原文。
-
-## 步骤
-
-| 步骤 | 工具 | 返回 |
-|------|------|------|
-| 1 | getCategories | [{id, content}] |
-| 2 | getTagsByCategory(categoryId) | [{id, tag}] |
-| 3 | getDocsByTag(tagId) | [{id, metadata}] |
-| 4 | getDocStructure(docId) | 缩进树：每行 nodeId + title，叶子尾随 summary，非叶子尾随 (目录) + prefixSummary |
-| 5 | getDocNodeDetails(docId, nodeId) | 节点完整原文 |
-
-## 约束
-
-- 严格按顺序，不可跳步；无匹配时回溯到上一层换候选
-- 同一标签下返回多篇文档时，尽可能看完所有相关文档的结构，确认无信息遗漏后再整理答案
-- 优先纵深：先看完一个文档的全部相关节点，再看下一个
-- 最终返回 getDocNodeDetails 的原文，不是 summary
-- 步骤预算：单次 ≤20，含重试 ≤50；已获取的信息不要重复
-
-## 自检
-
-检索完成后调用 reviewResult(query, result, sources)，sources 为 JSON 字符串如 '[{"docId":"abc","nodeId":"0001"}]'。
-- pass → 返回结果
-- partial / fail → 增量调整（换标签 / 换节点 / 补节点），不重查 categories，最多重试 2 次`
-
-const QUICK_PROMPT = `你是一个文档检索 Librarian（快速模式）。通过关键词直达文档，跳过分类/标签。
+const PROMPT = `你是一个文档检索 Librarian。通过关键词搜索直达文档，找到最相关的原文。
 
 ## 步骤
 
@@ -72,13 +40,6 @@ const QUICK_PROMPT = `你是一个文档检索 Librarian（快速模式）。通
 检索完成后调用 reviewResult(query, result, sources)，sources 为 JSON 字符串如 '[{"docId":"abc","nodeId":"0001"}]'。
 - pass → 返回结果
 - partial / fail → 增量调整（换文档 / 换节点 / 补节点），最多重试 2 次`
-
-function buildPrompt(quick?: boolean): string {
-    if (quick) {
-        return QUICK_PROMPT
-    }
-    return BASE_PROMPT
-}
 
 function renderDocStructure(
     nodes: TreeNode<BaseDocNode>[],
@@ -222,65 +183,9 @@ function makeSearchDocsByKeyword(ctx: ToolCtx, segmenter?: ModelProvider): any {
     }
 }
 
-function makeGetCategories({ cached, ok, tool }: ToolCtx): any {
-    return {
-        name: 'getCategories',
-        description:
-            '获取所有分类列表，返回 [{id, content}]。分类列表不变，整个检索只需调用一次！',
-        parameters: Type.Object({}),
-        execute: tool(async () => {
-            const result = await cached('getCategories', async () => {
-                const categories = await getCategories()
-                return JSON.stringify(categories)
-            })
-            return ok(result)
-        }),
-    }
-}
-
-function makeGetTagsByCategory({ cached, ok, tool }: ToolCtx): any {
-    return {
-        name: 'getTagsByCategory',
-        description:
-            '根据分类 ID 获取该分类下的所有标签，返回 [{id, tag}]。只查与查询主题明显相关的分类，无需遍历所有分类。',
-        parameters: Type.Object({
-            categoryId: Type.String({ description: '分类 ID' }),
-        }),
-        execute: tool(async (_, p) => {
-            const { categoryId } = p as { categoryId: string }
-            const result = await cached(
-                `getTagsByCategory:${categoryId}`,
-                async () => {
-                    const tags = await getTagsByCategory(categoryId)
-                    return JSON.stringify(tags)
-                }
-            )
-            return ok(result)
-        }),
-    }
-}
-
-function makeGetDocsByTag({ cached, ok, tool }: ToolCtx): any {
-    return {
-        name: 'getDocsByTag',
-        description: '根据标签 ID 获取关联的所有文档，返回 [{id, metadata}]',
-        parameters: Type.Object({
-            tagId: Type.String({ description: '标签 ID' }),
-        }),
-        execute: tool(async (_, p) => {
-            const { tagId } = p as { tagId: string }
-            const result = await cached(`getDocsByTag:${tagId}`, async () => {
-                const docs = await getDocsByTag(tagId)
-                return JSON.stringify(docs)
-            })
-            return ok(result)
-        }),
-    }
-}
-
 // ── Builder ───────────────────────────────────────────────────
 
-function buildTools(segmenter?: ModelProvider, quick?: boolean): any[] {
+function buildTools(segmenter?: ModelProvider): any[] {
     const cache = new Map<string, string>()
 
     const ctx: ToolCtx = {
@@ -298,21 +203,11 @@ function buildTools(segmenter?: ModelProvider, quick?: boolean): any[] {
         tool: (fn) => fn,
     }
 
-    const shared = [
+    return [
+        makeSearchDocsByKeyword(ctx, segmenter),
         makeGetDocStructure(ctx),
         makeGetDocNodeDetails(ctx),
         makeReviewResult(ctx),
-    ]
-
-    if (quick) {
-        return [makeSearchDocsByKeyword(ctx, segmenter), ...shared]
-    }
-
-    return [
-        makeGetCategories(ctx),
-        makeGetTagsByCategory(ctx),
-        makeGetDocsByTag(ctx),
-        ...shared,
     ]
 }
 
@@ -341,37 +236,18 @@ function summarizeResult(tool: string, raw: string): string {
     }
     try {
         const parsed = JSON.parse(raw) as unknown
-        if (tool === 'getCategories') {
+        if (tool === 'searchDocsByKeyword') {
             if (Array.isArray(parsed)) {
-                const names = (parsed as Array<{ content?: string }>)
-                    .map((c) => c.content ?? '')
-                    .filter(Boolean)
-                const head = names.slice(0, 5).join(', ')
-                return `${parsed.length} categories: ${head}${names.length > 5 ? '…' : ''}`
-            }
-        }
-        if (tool === 'getTagsByCategory') {
-            if (Array.isArray(parsed)) {
-                const names = (parsed as Array<{ tag?: string }>)
-                    .map((t) => t.tag ?? '')
-                    .filter(Boolean)
-                const head = names.slice(0, 6).join(', ')
-                return `${parsed.length} tags: ${head}${names.length > 6 ? '…' : ''}`
-            }
-        }
-        if (tool === 'getDocsByTag') {
-            if (Array.isArray(parsed)) {
-                const titles = (parsed as Array<{ metadata?: string }>)
+                const titles = (
+                    parsed as Array<{ metadata?: Record<string, unknown> }>
+                )
                     .map((d) => {
-                        try {
-                            return (
-                                JSON.parse(d.metadata ?? '{}') as {
-                                    title?: string
-                                }
-                            ).title
-                        } catch {
-                            return ''
-                        }
+                        const meta = d.metadata
+                        return meta &&
+                            typeof meta === 'object' &&
+                            'title' in meta
+                            ? String(meta.title)
+                            : ''
                     })
                     .filter(Boolean)
                 const head = titles.slice(0, 3).join(', ')
@@ -485,35 +361,11 @@ function pruneContext(messages: AgentMessage[]): AgentMessage[] {
     })
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-    cat_000: '计算机与信息技术',
-    cat_100: '哲学与心理学',
-    cat_200: '社会科学',
-    cat_300: '经济与管理',
-    cat_400: '语言与教育',
-    cat_500: '数学与自然科学',
-    cat_600: '工程与技术',
-    cat_700: '医学与健康',
-    cat_800: '艺术与设计',
-    cat_900: '文学与写作',
-    cat_A00: '历史与地理',
-    cat_B00: '法律与政治',
-}
-
 function buildStepLabel(
     toolName: string,
     args: Record<string, unknown>
 ): string {
     switch (toolName) {
-        case 'getCategories':
-            return 'Browsing categories...'
-        case 'getTagsByCategory': {
-            const cid = args.categoryId as string | undefined
-            const name = cid ? CATEGORY_LABELS[cid] : undefined
-            return name ? `Browsing tags in "${name}"...` : 'Browsing tags...'
-        }
-        case 'getDocsByTag':
-            return 'Finding documents by tag...'
         case 'searchDocsByKeyword':
             return `Searching: "${ellipsis(String(args.query ?? ''), 36)}"...`
         case 'getDocStructure':
@@ -545,46 +397,6 @@ function buildResultLabel(
                     return `Loaded "${ellipsis(firstTitle, 40)}" · ${nodeCount} nodes`
                 }
                 return `Loaded structure · ${nodeCount} nodes`
-            }
-            case 'getTagsByCategory': {
-                const parsed = JSON.parse(resultText) as Array<{
-                    tag?: string
-                }>
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    const names = parsed.map((t) => t.tag ?? '').filter(Boolean)
-                    if (names.length > 0) {
-                        const preview = names.slice(0, 5).join(', ')
-                        return `Found ${parsed.length} tag${parsed.length > 1 ? 's' : ''}: ${preview}${names.length > 5 ? '...' : ''}`
-                    }
-                    return `Found ${parsed.length} tags`
-                }
-                return undefined
-            }
-            case 'getDocsByTag': {
-                const parsed = JSON.parse(resultText) as Array<{
-                    metadata?: string
-                }>
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    const titles = parsed
-                        .map((d) => {
-                            try {
-                                return (
-                                    JSON.parse(d.metadata ?? '{}') as {
-                                        title?: string
-                                    }
-                                ).title
-                            } catch {
-                                return ''
-                            }
-                        })
-                        .filter(Boolean)
-                    if (titles.length > 0) {
-                        const preview = titles.slice(0, 3).join(', ')
-                        return `Found ${parsed.length} doc${parsed.length > 1 ? 's' : ''}: ${preview}${titles.length > 3 ? '...' : ''}`
-                    }
-                    return `Found ${parsed.length} docs`
-                }
-                return undefined
             }
             case 'searchDocsByKeyword': {
                 const parsed = JSON.parse(resultText) as Array<{
@@ -627,16 +439,16 @@ function ellipsis(s: string, max: number): string {
 async function librarian(
     msg: string,
     onStep?: (label: string) => void,
-    opts?: { quick?: boolean; segmenter?: ModelProvider }
+    opts?: { segmenter?: ModelProvider }
 ): Promise<LibrarianResult> {
     const provider = getModelProvider()
     const model = getModel(provider.provider as never, provider.model)
 
     const agent = new Agent({
         initialState: {
-            systemPrompt: buildPrompt(opts?.quick),
+            systemPrompt: PROMPT,
             model,
-            tools: buildTools(opts?.segmenter, opts?.quick),
+            tools: buildTools(opts?.segmenter),
         },
         transformContext: async (messages) => pruneContext(messages),
     })

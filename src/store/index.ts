@@ -1,39 +1,8 @@
 import { count, eq, sql } from 'drizzle-orm'
 import { logger } from '../config'
-import type { ModelProvider } from '../config/type'
 import type { TreeNode } from '../tree/type'
-import { uuid } from '../utils/common'
-import { segmentText } from '../utils/segment'
 import { db, getRawClient } from './client'
-import {
-    categorie_tags,
-    categories,
-    doc_tags,
-    docs,
-    modelCache,
-    nodes,
-    tags,
-} from './schema'
-
-// ── tag normalization ───────────────────────────────────────────────
-
-/**
- * Normalize a raw tag string before persisting:
- * - Unicode NFC normalization
- * - Trim & collapse whitespace
- * - Full-width ASCII → half-width
- * - ASCII uppercase → lowercase
- */
-function normalizeTag(raw: string): string {
-    return raw
-        .normalize('NFC')
-        .trim()
-        .replace(/\s+/g, ' ')
-        .replace(/[\uFF01-\uFF5E]/g, (ch) =>
-            String.fromCharCode(ch.charCodeAt(0) - 0xfee0)
-        )
-        .replace(/[A-Z]+/g, (m) => m.toLowerCase())
-}
+import { docs, modelCache, nodes } from './schema'
 
 const log = logger.child({ module: 'store' })
 
@@ -488,140 +457,6 @@ async function deleteDoc(id: string) {
     }
 }
 
-async function getCategories(): Promise<{ id: string; content: string }[]> {
-    const rows = await db.select().from(categories).all()
-    return rows.map((r) => ({ id: r.id, content: r.content }))
-}
-
-/**
- * Returns existing tags grouped by category, ordered by usage count (desc).
- * Used to inject a "preferred vocabulary" into the tagger prompt.
- */
-async function getAllTagsGrouped(): Promise<Map<string, string[]>> {
-    const rows = await db
-        .select({
-            tag: tags.tag,
-            categoryId: categorie_tags.categorieId,
-            docCount: count(doc_tags.docId),
-        })
-        .from(tags)
-        .innerJoin(categorie_tags, eq(tags.id, categorie_tags.tagId))
-        .leftJoin(doc_tags, eq(tags.id, doc_tags.tagId))
-        .groupBy(tags.id, categorie_tags.categorieId)
-        .orderBy(sql`${count(doc_tags.docId)} DESC`)
-        .all()
-
-    const map = new Map<string, string[]>()
-    for (const row of rows) {
-        const list = map.get(row.categoryId) ?? []
-        list.push(row.tag)
-        map.set(row.categoryId, list)
-    }
-    return map
-}
-
-async function getTagsByCategory(
-    categoryId: string
-): Promise<{ id: string; tag: string }[]> {
-    return db
-        .select({ id: tags.id, tag: tags.tag })
-        .from(tags)
-        .innerJoin(categorie_tags, eq(tags.id, categorie_tags.tagId))
-        .where(eq(categorie_tags.categorieId, categoryId))
-        .all()
-}
-
-async function getDocsByTag(
-    tagId: string
-): Promise<{ id: string; metadata: string }[]> {
-    return db
-        .select({ id: docs.id, metadata: docs.metadata })
-        .from(docs)
-        .innerJoin(doc_tags, eq(docs.id, doc_tags.docId))
-        .where(eq(doc_tags.tagId, tagId))
-        .all()
-}
-
-async function getDocTags(
-    docId: string
-): Promise<{ id: string; tag: string }[]> {
-    return db
-        .select({ id: tags.id, tag: tags.tag })
-        .from(tags)
-        .innerJoin(doc_tags, eq(tags.id, doc_tags.tagId))
-        .where(eq(doc_tags.docId, docId))
-        .orderBy(tags.tag)
-        .all()
-}
-
-async function upsertTag(
-    tagName: string,
-    segmenter?: ModelProvider
-): Promise<{ id: string; tag: string }> {
-    const normalized = normalizeTag(tagName)
-    if (!normalized) {
-        throw new Error(`Tag name is empty after normalization: "${tagName}"`)
-    }
-
-    const id = uuid()
-    const conflictResult = await db
-        .insert(tags)
-        .values({ id, tag: normalized })
-        .onConflictDoNothing({ target: tags.tag })
-        .returning({ id: tags.id, tag: tags.tag })
-
-    if (conflictResult.length > 0) {
-        let segmented: string | undefined
-        if (segmenter) {
-            try {
-                segmented = await segmentText(normalized, segmenter)
-            } catch (err) {
-                log.warn({
-                    err,
-                    tagName: normalized,
-                    content: 'Tag segmentation failed, inserting raw',
-                })
-            }
-        }
-
-        const client = getRawClient()
-        await client.execute({
-            sql: `INSERT INTO tags_fts (tag_id, tag) VALUES (?1, ?2)`,
-            args: [id, segmented ?? normalized],
-        })
-
-        return conflictResult[0]!
-    }
-
-    const existing = await db
-        .select({ id: tags.id, tag: tags.tag })
-        .from(tags)
-        .where(eq(tags.tag, normalized))
-        .get()
-    return existing!
-}
-
-async function insertDocTag(tagId: string, docId: string): Promise<void> {
-    const id = uuid()
-    await db
-        .insert(doc_tags)
-        .values({ id, tagId, docId })
-        .onConflictDoNothing({
-            target: [doc_tags.tagId, doc_tags.docId],
-        })
-}
-
-async function insertCategorieTag(
-    categorieId: string,
-    tagId: string
-): Promise<void> {
-    const id = uuid()
-    await db
-        .insert(categorie_tags)
-        .values({ id, categorieId, tagId })
-        .onConflictDoNothing()
-}
-
 // ── FTS5 keyword search ────────────────────────────────────────────
 
 type KeywordDocResult = {
@@ -655,196 +490,6 @@ async function searchDocsByKeyword(
         // docs_fts table may not exist yet
         return []
     }
-}
-
-async function searchTagsByKeyword(
-    query: string,
-    k: number
-): Promise<SimilarTag[]> {
-    const raw = getRawClient()
-    try {
-        const result = await raw.execute({
-            sql: `
-                SELECT tf.tag_id, t.tag, tf.rank
-                FROM tags_fts tf
-                JOIN tags t ON t.id = tf.tag_id
-                WHERE tags_fts MATCH ?1
-                ORDER BY rank
-                LIMIT ?2
-            `,
-            args: [query, k],
-        })
-        // Convert BM25 rank to a similarity-like score: 1 / (1 + rank)
-        // Lower BM25 rank = better match, so invert it
-        return (
-            result.rows as Array<{ tag_id: string; tag: string; rank: number }>
-        ).map((r) => ({
-            tagId: r.tag_id,
-            tag: r.tag,
-            similarity: Math.round((1 / (1 + r.rank)) * 10000) / 10000,
-        }))
-    } catch {
-        return []
-    }
-}
-
-// ── embedding (sqlite-vec vec0) ─────────────────────────────────────
-
-let _embeddingDim = 0
-
-async function hasTagEmbedding(tagId: string): Promise<boolean> {
-    try {
-        const result = await getRawClient().execute({
-            sql: `SELECT 1 FROM tag_embeddings WHERE tag_id = ?1 LIMIT 1`,
-            args: [tagId],
-        })
-        return (result.rows as unknown[]).length > 0
-    } catch {
-        return false
-    }
-}
-
-async function upsertTagEmbedding(
-    tagId: string,
-    embedding: number[]
-): Promise<void> {
-    const raw = getRawClient()
-
-    // Lazily create vec0 table with actual embedding dimension on first use
-    if (_embeddingDim === 0) {
-        _embeddingDim = embedding.length
-        raw.execute({
-            sql: `CREATE VIRTUAL TABLE IF NOT EXISTS tag_embeddings USING vec0(
-                tag_id TEXT PRIMARY KEY,
-                embedding FLOAT[${embedding.length}]
-            )`,
-        })
-    }
-
-    // Skip if already exists
-    try {
-        const existing = await raw.execute({
-            sql: `SELECT 1 FROM tag_embeddings WHERE tag_id = ?1 LIMIT 1`,
-            args: [tagId],
-        })
-        if ((existing.rows as unknown[]).length > 0) return
-    } catch {
-        // Table may not exist yet
-    }
-
-    raw.execute({
-        sql: `INSERT INTO tag_embeddings (tag_id, embedding) VALUES (?1, ?2)`,
-        args: [tagId, JSON.stringify(embedding)],
-    })
-}
-
-async function getTagsWithoutEmbeddings(): Promise<
-    Array<{ id: string; tag: string }>
-> {
-    try {
-        const result = await getRawClient().execute({
-            sql: `
-                SELECT t.id, t.tag
-                FROM tags t
-                LEFT JOIN tag_embeddings te ON te.tag_id = t.id
-                WHERE te.tag_id IS NULL
-            `,
-        })
-        return result.rows as Array<{ id: string; tag: string }>
-    } catch {
-        // tag_embeddings table doesn't exist yet — all tags need embeddings
-        const result = await getRawClient().execute({
-            sql: `SELECT t.id, t.tag FROM tags t`,
-        })
-        return result.rows as Array<{ id: string; tag: string }>
-    }
-}
-
-type SimilarTag = {
-    tagId: string
-    tag: string
-    similarity: number
-}
-
-async function searchSimilarTags(
-    embedding: number[],
-    categoryId: string,
-    k: number,
-    threshold: number
-): Promise<SimilarTag[]> {
-    // cosine distance = 1 - cosine similarity
-    const maxDistance = 1 - threshold
-    const raw = getRawClient()
-
-    let rows: Array<{ id: string; tag: string; distance: number }> = []
-    try {
-        const result = await raw.execute({
-            sql: `
-                SELECT t.id, t.tag, te.distance
-                FROM tag_embeddings te
-                JOIN tags t ON t.id = te.tag_id
-                JOIN categorie_tags ct ON ct.tag_id = t.id
-                WHERE te.embedding MATCH ?1
-                  AND ct.categorie_id = ?2
-                  AND k = ?3
-            `,
-            args: [JSON.stringify(embedding), categoryId, k],
-        })
-        rows = result.rows as Array<{
-            id: string
-            tag: string
-            distance: number
-        }>
-    } catch {
-        // tag_embeddings table not created yet (no embeddings exist)
-        return []
-    }
-
-    return rows
-        .filter((r) => r.distance <= maxDistance)
-        .map((r) => ({
-            tagId: r.id,
-            tag: r.tag,
-            similarity: Math.round((1 - r.distance) * 10000) / 10000,
-        }))
-}
-
-async function searchAllSimilarTags(
-    embedding: number[],
-    k: number,
-    threshold: number
-): Promise<SimilarTag[]> {
-    const maxDistance = 1 - threshold
-    const raw = getRawClient()
-
-    let rows: Array<{ id: string; tag: string; distance: number }> = []
-    try {
-        const result = await raw.execute({
-            sql: `
-                SELECT t.id, t.tag, te.distance
-                FROM tag_embeddings te
-                JOIN tags t ON t.id = te.tag_id
-                WHERE te.embedding MATCH ?1
-                  AND k = ?2
-            `,
-            args: [JSON.stringify(embedding), k],
-        })
-        rows = result.rows as Array<{
-            id: string
-            tag: string
-            distance: number
-        }>
-    } catch {
-        return []
-    }
-
-    return rows
-        .filter((r) => r.distance <= maxDistance)
-        .map((r) => ({
-            tagId: r.id,
-            tag: r.tag,
-            similarity: Math.round((1 - r.distance) * 10000) / 10000,
-        }))
 }
 
 // ── browse / overview helpers ──────────────────────────────────────
@@ -930,106 +575,25 @@ async function getDocCount(): Promise<number> {
     return row?.count ?? 0
 }
 
-async function getTagCategories(
-    tagId: string
-): Promise<{ id: string; content: string }[]> {
-    return db
-        .select({ id: categories.id, content: categories.content })
-        .from(categories)
-        .innerJoin(
-            categorie_tags,
-            eq(categories.id, categorie_tags.categorieId)
-        )
-        .where(eq(categorie_tags.tagId, tagId))
-        .all()
-}
-
-type TagWithDocCount = {
-    id: string
-    tag: string
-    docCount: number
-}
-
-async function getTagsWithDocCount(): Promise<TagWithDocCount[]> {
-    const rows = await db
-        .select({
-            id: tags.id,
-            tag: tags.tag,
-            docCount: count(doc_tags.docId),
-        })
-        .from(tags)
-        .leftJoin(doc_tags, eq(tags.id, doc_tags.tagId))
-        .groupBy(tags.id)
-        .orderBy(sql`${count(doc_tags.docId)} DESC`)
-        .all()
-    return rows.map((r) => ({
-        id: r.id,
-        tag: r.tag,
-        docCount: r.docCount,
-    }))
-}
-
-type CategoryWithTagCount = {
-    id: string
-    content: string
-    tagCount: number
-}
-
-async function getCategoriesWithTagCount(): Promise<CategoryWithTagCount[]> {
-    const rows = await db
-        .select({
-            id: categories.id,
-            content: categories.content,
-            tagCount: count(categorie_tags.tagId),
-        })
-        .from(categories)
-        .leftJoin(categorie_tags, eq(categories.id, categorie_tags.categorieId))
-        .groupBy(categories.id)
-        .orderBy(categories.id)
-        .all()
-    return rows.map((r) => ({
-        id: r.id,
-        content: r.content,
-        tagCount: r.tagCount,
-    }))
-}
-
 export {
     deleteDoc,
     deleteTree,
     getAllDocs,
-    getAllTagsGrouped,
     getAncestors,
     getCachedResponse,
-    getCategories,
-    getCategoriesWithTagCount,
     getDoc,
     getDocCount,
     getDocFtsSummary,
-    getDocsByTag,
     getDocsPaginated,
-    getDocTags,
     getFullTree,
     getNodeDetails,
     getSiblings,
     getSubTree,
-    getTagCategories,
-    getTagsByCategory,
-    getTagsWithDocCount,
-    getTagsWithoutEmbeddings,
-    hasTagEmbedding,
-    insertCategorieTag,
     insertDoc,
-    insertDocTag,
     insertTree,
     purgeModelCache,
-    searchAllSimilarTags,
     searchDocsByKeyword,
-    searchSimilarTags,
-    searchTagsByKeyword,
     setCachedResponse,
     updateDocFts,
     updateDocMetadata,
-    upsertTag,
-    upsertTagEmbedding,
 }

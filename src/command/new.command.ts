@@ -1,7 +1,6 @@
 import path from 'node:path'
 import {
     autocomplete,
-    confirm,
     note,
     outro,
     select,
@@ -88,34 +87,13 @@ export function register(program: Command) {
                 return
             }
 
-            let embedding: ModelProvider | undefined
-            const useEmbedding = await confirm({
-                message: 'Configure embedding for tag deduplication?',
-                initialValue: false,
-            })
-            if (useEmbedding === true) {
-                const rawEmbed = await text({
-                    message: 'Embedding model (OpenRouter model ID):',
-                    placeholder: 'openai/text-embedding-3-small',
-                    defaultValue: 'openai/text-embedding-3-small',
-                })
-                if (typeof rawEmbed === 'string' && rawEmbed.trim()) {
-                    embedding = {
-                        provider: 'openrouter' as ModelProvider['provider'],
-                        model: rawEmbed.trim(),
-                    }
-                }
-            }
-
             const initSpinner = spinner()
             initSpinner.start('Initializing project...')
             try {
-                const config = await initProject(
-                    cwd,
-                    projectName,
-                    { provider, model: rawModel },
-                    embedding
-                )
+                const config = await initProject(cwd, projectName, {
+                    provider,
+                    model: rawModel,
+                })
                 setModelProvider(config.model)
                 await registerProject(config.name, cwd)
                 initSpinner.stop('Initialized')

@@ -23,7 +23,7 @@ export const configSchema = {
         },
         model: {
             type: 'object',
-            description: 'Default AI model for chat/librarian/tagger.',
+            description: 'Default AI model for chat/librarian/summarizer.',
             required: ['provider', 'model'],
             properties: {
                 provider: {
@@ -102,37 +102,6 @@ export const configSchema = {
                     description: 'Model identifier.',
                 },
             },
-        },
-        embedding: {
-            type: 'object',
-            description:
-                'Optional embedding model for tag vector deduplication. When absent, tagger uses prompt-only mode. Requires OPENROUTER_API_KEY.',
-            required: ['provider', 'model'],
-            properties: {
-                provider: {
-                    type: 'string',
-                    description:
-                        "Provider for embeddings. Default: 'openrouter'.",
-                    default: 'openrouter',
-                    enum: ['openrouter'],
-                },
-                model: {
-                    type: 'string',
-                    description:
-                        "Embedding model identifier (e.g. 'openai/text-embedding-3-small').",
-                    default: 'openai/text-embedding-3-small',
-                    examples: [
-                        'openai/text-embedding-3-small',
-                        'openai/text-embedding-3-large',
-                        'google/text-embedding-004',
-                    ],
-                },
-            },
-        },
-        sqliteLibPath: {
-            type: 'string',
-            description:
-                'Path to a custom libsqlite3 shared library for loading extensions (sqlite-vec). Set via env var VEIN_SQLITE_LIB_PATH for the global default, or configure per-project here. Example (Homebrew): /opt/homebrew/opt/sqlite/lib/libsqlite3.dylib',
         },
     },
 }
