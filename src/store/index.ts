@@ -465,6 +465,10 @@ async function searchDocsByKeyword(
     k: number
 ): Promise<KeywordDocResult[]> {
     const raw = getRawClient()
+    // Wrap multi-token queries with OR semantics: FTS5 default is AND,
+    // which fails when LLM segmentation doesn't exactly match index tokens.
+    // OR allows partial token matches with BM25 ranking still sorting best first.
+    const ftsQuery = buildFtsQuery(segmentedQuery)
     try {
         const result = await raw.execute({
             sql: `
@@ -474,7 +478,7 @@ async function searchDocsByKeyword(
                 ORDER BY rank
                 LIMIT ?
             `,
-            args: [segmentedQuery, k],
+            args: [ftsQuery, k],
         })
         return (result.rows as Array<{ doc_id: string; rank: number }>).map(
             (r) => ({
@@ -486,6 +490,13 @@ async function searchDocsByKeyword(
         // docs_fts table may not exist yet
         return []
     }
+}
+
+/** Build an OR-wrapped FTS5 query from space-separated tokens. */
+function buildFtsQuery(segmented: string): string {
+    const tokens = segmented.trim().split(/\s+/)
+    if (tokens.length <= 1) return segmented
+    return tokens.map((t) => `"${t}"`).join(' OR ')
 }
 
 // ── browse / overview helpers ──────────────────────────────────────
