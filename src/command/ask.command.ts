@@ -100,6 +100,14 @@ function formatTrace(
             const num = String(i + 1).padStart(2, ' ')
             const tool = s.tool
             let detail = s.resultSummary
+            if (tool === 'analyzeDocument') {
+                const a = s.args as { docId?: string; userQuery?: string }
+                const name =
+                    (a.docId && docNames.get(a.docId)) ||
+                    a.docId?.slice(0, 8) ||
+                    '?'
+                detail = `${name} → ${s.resultSummary}`
+            }
             if (tool === 'getDocNodeDetails') {
                 const a = s.args as { docId?: string; nodeId?: string }
                 const name =

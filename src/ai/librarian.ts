@@ -16,30 +16,97 @@ import { reviewer } from './reviewer'
 import { searchDocsByKeyword } from './tools'
 
 const log = logger.child({ module: 'librarian' })
+const subLog = logger.child({ module: 'doc-analyzer' })
 
-const PROMPT = `你是一个文档检索 Librarian。通过关键词搜索直达文档，找到最相关的原文。
+// ── Prompts ───────────────────────────────────────────────────
 
-## 步骤
+const PROMPT = `你是一个文档检索 Librarian。通过关键词搜索定位文档，然后将深度分析委托给文档分析子 Agent，最后汇总结果。
+
+## 工具
 
 | 步骤 | 工具 | 返回 |
 |------|------|------|
 | 1 | searchDocsByKeyword(query) | [{docId, metadata, rank}] |
-| 2 | getDocStructure(docId) | 缩进树：每行 nodeId + title，叶子尾随 summary，非叶子尾随 (目录) + prefixSummary |
-| 3 | getDocNodeDetails(docId, nodeId) | 节点完整原文 |
+| 2 | analyzeDocument(docId, userQuery) | 子 Agent 深度分析结果（Markdown 格式） |
+| 3 | reviewResult(query, result, sources) | 审查结果 |
+
+## 流程
+
+1. 从用户查询提取 2-5 个核心关键词，调用 searchDocsByKeyword
+2. 对搜索结果中排名靠前的文档（≤5 篇），在同一轮中并行调用 analyzeDocument 委托子 Agent 深度分析
+   - 每个 analyzeDocument 传入 docId 和原始用户查询，多个调用放在同一条 assistant 消息中即可并行执行
+   - 子 Agent 返回 Markdown 格式分析，包含：## 相关性、## 概述、## 关键发现、## 数据来源、## 详细分析
+3. 汇总所有文档的分析结果，综合形成最终答案
+   - 对相关性为 high/medium 的文档重点引用
+   - 对相关性为 low 的可简要提及或忽略
+   - 对相关性为 none 的忽略
+4. 调用 reviewResult 自检
 
 ## 约束
 
-- 从用户查询提取 2-5 个核心关键词，优先专业术语
-- 搜索结果有多篇时，尽可能看完所有相关文档的结构，防止遗漏互补信息
-- 优先纵深：先看完一篇的全部相关节点，再看下一篇；全部候选文档浏览完毕后再整理答案
-- 最终返回 getDocNodeDetails 的原文，不是 summary
-- 步骤预算：单次 ≤20，含重试 ≤40；已获取的信息不要重复
+- 最终答案必须包含原文引用和出处（nodeId）
+- 步骤预算：单次 ≤15，含重试 ≤30
+- 优先纵深：先分析完一篇再考虑下一篇
+- 已获取的信息不要重复获取
 
 ## 自检
 
 检索完成后调用 reviewResult(query, result, sources)，sources 为 JSON 字符串如 '[{"docId":"abc","nodeId":"0001"}]'。
 - pass → 返回结果
 - partial / fail → 增量调整（换文档 / 换节点 / 补节点），最多重试 2 次`
+
+const DOC_ANALYZER_PROMPT = `你是一个文档深度分析员。分析单个文档中与用户查询相关的内容。
+
+## 工具
+
+| 工具 | 返回 |
+|------|------|
+| getDocStructure(docId) | 缩进树：nodeId + title，叶子尾随 summary，非叶子尾随 (目录) + prefixSummary |
+| getDocNodeDetails(docId, nodeId) | 节点完整原文 |
+
+## 流程
+
+1. 调用 getDocStructure 获取文档结构，了解全貌
+2. 识别与用户查询最相关的章节节点
+3. 深入阅读相关节点的完整原文（getDocNodeDetails）
+4. 综合分析后按以下格式输出
+
+## 输出格式
+
+按以下 Markdown 结构输出分析结果：
+
+\`\`\`
+## 相关性
+
+high / medium / low / none
+
+## 概述
+
+文档中与查询相关的核心内容概述（2-3句）
+
+## 关键发现
+
+- 发现点1
+- 发现点2
+
+## 数据来源
+
+- nodeId: 章节标题
+- nodeId: 章节标题
+
+## 详细分析
+
+详细的原文分析和引用（必须包含 nodeId 出处）
+\`\`\`
+
+
+## 约束
+
+- 步骤预算 ≤10
+- 优先阅读最相关的章节
+- 详细分析中必须包含原文引用和 nodeId 出处
+- 如果文档与查询完全无关，相关性设为 "none"，概述说明原因
+- 不要编造文档中不存在的内容`
 
 function renderDocStructure(
     nodes: TreeNode<BaseDocNode>[],
@@ -70,19 +137,20 @@ function renderDocStructure(
     return lines.join('\n')
 }
 
-// ── Tool factories (shared helpers) ──────────────────────────
+// ── Tool factories (shared by main agent and subagent) ────────
 
 type ToolCtx = {
     cached: (key: string, fn: () => Promise<string>) => Promise<string>
     ok: (s: string) => AgentToolResult<any>
     tool: (fn: AgentTool['execute']) => AgentTool['execute']
+    /** Progress callback for surfacing subagent steps to the user. */
+    onStep?: (label: string) => void
 }
 
 function makeGetDocStructure({ cached, ok, tool }: ToolCtx): any {
     return {
         name: 'getDocStructure',
-        description:
-            '获取文档结构（含标题和摘要），返回缩进树形文本。只对最有把握的少量文档调用（≤5个），先纵深看完一个再考虑下一个。',
+        description: '获取文档结构（含标题和摘要），返回缩进树形文本。',
         parameters: Type.Object({
             docId: Type.String({ description: '文章Id' }),
         }),
@@ -103,7 +171,7 @@ function makeGetDocStructure({ cached, ok, tool }: ToolCtx): any {
 function makeGetDocNodeDetails({ cached, ok, tool }: ToolCtx): any {
     return {
         name: 'getDocNodeDetails',
-        description: '获取文章节点详细信息',
+        description: '获取文章节点详细原文',
         parameters: Type.Object({
             docId: Type.String({ description: '文章Id' }),
             nodeId: Type.String({ description: '文章节点Id' }),
@@ -183,9 +251,184 @@ function makeSearchDocsByKeyword(ctx: ToolCtx, segmenter?: ModelProvider): any {
     }
 }
 
-// ── Builder ───────────────────────────────────────────────────
+// ── Document Analyzer Subagent ─────────────────────────────────
 
-function buildTools(segmenter?: ModelProvider): any[] {
+/**
+ * Runs a subagent that deeply analyzes a single document against the user's
+ * query. The subagent has its own tool set (getDocStructure,
+ * getDocNodeDetails) and returns a structured Markdown analysis.
+ */
+async function analyzeDocument(
+    docId: string,
+    userQuery: string,
+    onStep?: (label: string) => void
+): Promise<string> {
+    const provider = getModelProvider()
+    const model = getModel(provider.provider as never, provider.model)
+
+    const cache = new Map<string, string>()
+    const subCtx: ToolCtx = {
+        cached: async (key, fn) => {
+            const hit = cache.get(key)
+            if (hit !== undefined) return hit
+            const val = await fn()
+            cache.set(key, val)
+            return val
+        },
+        ok: (s) => ({
+            content: [{ type: 'text' as const, text: s }],
+            details: {},
+        }),
+        tool: (fn) => fn,
+    }
+
+    const MAX_STEPS = 10
+    let stepCount = 0
+
+    const subAgent = new Agent({
+        initialState: {
+            systemPrompt: DOC_ANALYZER_PROMPT,
+            model,
+            tools: [makeGetDocStructure(subCtx), makeGetDocNodeDetails(subCtx)],
+        },
+        beforeToolCall: async () => {
+            stepCount++
+            if (stepCount > MAX_STEPS) {
+                subLog.warn({
+                    docId: docId.slice(0, 8),
+                    stepCount,
+                    content: 'Subagent step budget exceeded, blocking tool',
+                })
+                return {
+                    block: true,
+                    reason: '已达到步骤预算上限，请基于已有信息输出最终分析结果',
+                }
+            }
+        },
+    })
+
+    const toolStartTimes = new Map<string, number>()
+    subAgent.subscribe((event) => {
+        if (event.type === 'tool_execution_start') {
+            toolStartTimes.set(event.toolCallId, performance.now())
+            const label = buildStepLabel(
+                event.toolName,
+                (event.args as Record<string, unknown>) ?? {}
+            )
+            // Surface subagent progress to the user via the main onStep
+            onStep?.(`  ${label}`)
+            subLog.debug({
+                docId: docId.slice(0, 8),
+                toolName: event.toolName,
+                stepCount,
+                content: 'Subagent tool start',
+            })
+        }
+        if (event.type === 'tool_execution_end') {
+            const start = toolStartTimes.get(event.toolCallId)
+            const elapsedMs =
+                start !== undefined
+                    ? Math.round(performance.now() - start)
+                    : undefined
+            const resultText =
+                event.result?.content
+                    ?.filter(
+                        (it: { type: string; text?: string }) =>
+                            it.type === 'text'
+                    )
+                    .map((it: { text?: string }) => it.text)
+                    .join('') ?? ''
+            const label = buildResultLabel(event.toolName, resultText)
+            if (label) {
+                onStep?.(`  ${label}`)
+            }
+            subLog.debug({
+                docId: docId.slice(0, 8),
+                toolName: event.toolName,
+                resultLen: resultText.length,
+                elapsedMs,
+                content: 'Subagent tool end',
+            })
+        }
+    })
+
+    subLog.info({
+        docId: docId.slice(0, 8),
+        queryLen: userQuery.length,
+        content: 'Subagent start',
+    })
+
+    await subAgent.prompt(
+        `文档 ID: ${docId}\n用户查询: ${userQuery}\n\n请分析此文档中与查询相关的内容。`
+    )
+
+    const messages = subAgent.state.messages
+    subLog.info({
+        docId: docId.slice(0, 8),
+        msgCount: messages.length,
+        content: 'Subagent complete',
+    })
+
+    const lastAssistant = [...messages]
+        .reverse()
+        .find((m) => m.role === 'assistant')
+
+    const raw =
+        lastAssistant?.content
+            .filter((it) => it.type === 'text')
+            .map((it) => it.text)
+            .join('\n') ?? ''
+
+    return (
+        raw ||
+        ['## 相关性', '', 'none', '', '## 概述', '', '子 Agent 无输出'].join(
+            '\n'
+        )
+    )
+}
+
+/** Extract relevance and summary from the subagent's markdown output. */
+function parseAnalyzeResult(raw: string): {
+    relevance: string
+    summary: string
+} {
+    const relMatch = raw.match(/##\s*相关性\s*\n+([^\n#]+)/i)
+    const relevance = relMatch?.[1]?.trim().toLowerCase() || 'unknown'
+    const sumMatch = raw.match(/##\s*概述\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i)
+    const summary = sumMatch?.[1]?.trim() || raw.slice(0, 120)
+    return { relevance, summary }
+}
+
+// ── Main Agent Tools ───────────────────────────────────────────
+
+function makeAnalyzeDocument({ ok, tool, onStep }: ToolCtx): any {
+    return {
+        name: 'analyzeDocument',
+        description:
+            '委托子 Agent 深度分析单篇文档中与用户查询相关的内容。' +
+            '返回 Markdown 格式分析（## 相关性 / ## 概述 / ## 关键发现 / ## 数据来源 / ## 详细分析）。' +
+            '可同时并行调用多个（≤5），子 Agent 独立运行互不干扰。',
+        parameters: Type.Object({
+            docId: Type.String({ description: '文章Id' }),
+            userQuery: Type.String({
+                description: '用户原始查询，透传给子 Agent',
+            }),
+        }),
+        execute: tool(async (_, p) => {
+            const { docId, userQuery } = p as {
+                docId: string
+                userQuery: string
+            }
+            const result = await analyzeDocument(docId, userQuery, onStep)
+            return ok(result)
+        }),
+    }
+}
+
+function buildMainTools(
+    segmenter?: ModelProvider,
+    onStep?: (label: string) => void
+): any[] {
     const cache = new Map<string, string>()
 
     const ctx: ToolCtx = {
@@ -201,12 +444,12 @@ function buildTools(segmenter?: ModelProvider): any[] {
             details: {},
         }),
         tool: (fn) => fn,
+        onStep,
     }
 
     return [
         makeSearchDocsByKeyword(ctx, segmenter),
-        makeGetDocStructure(ctx),
-        makeGetDocNodeDetails(ctx),
+        makeAnalyzeDocument(ctx),
         makeReviewResult(ctx),
     ]
 }
@@ -240,6 +483,10 @@ function summarizeResult(tool: string, raw: string): string {
             return `"${ellipsis(docTitle, 40)}" · ${raw.length} chars`
         }
         return `${raw.length} chars`
+    }
+    if (tool === 'analyzeDocument') {
+        const { relevance, summary } = parseAnalyzeResult(raw)
+        return `${relevance}: ${ellipsis(summary, 80)}`
     }
     try {
         const parsed = JSON.parse(raw) as unknown
@@ -327,10 +574,19 @@ function compactDocText(text: string): string {
         .join('\n')
 }
 
+/**
+ * Compact older analyzeDocument results to save context.
+ * Keep the N most recent full; compact the rest to just relevance + summary.
+ */
+function compactAnalyzeResult(text: string): string {
+    const { relevance, summary } = parseAnalyzeResult(text)
+    return `[compacted] relevance=${relevance} summary=${ellipsis(summary, 100)}`
+}
+
 function pruneContext(messages: AgentMessage[]): AgentMessage[] {
     const MAX_FULL = 5
 
-    // Scan from the end to find doc structure positions
+    // Scan from the end to find analyzeDocument result positions
     const structIndices: number[] = []
     for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i]
@@ -338,7 +594,8 @@ function pruneContext(messages: AgentMessage[]): AgentMessage[] {
             msg &&
             msg.role === 'toolResult' &&
             'toolName' in msg &&
-            msg.toolName === 'getDocStructure'
+            (msg.toolName === 'analyzeDocument' ||
+                msg.toolName === 'getDocStructure')
         ) {
             structIndices.push(i)
         }
@@ -356,12 +613,18 @@ function pruneContext(messages: AgentMessage[]): AgentMessage[] {
         const c = (msg as { content: Array<{ type: string; text?: string }> })
             .content[0]
         if (!c || !('text' in c) || !c.text) return msg
+        const toolName =
+            'toolName' in msg ? (msg as { toolName: string }).toolName : ''
+        const compacted =
+            toolName === 'analyzeDocument'
+                ? compactAnalyzeResult(c.text)
+                : compactDocText(c.text)
         return {
             ...msg,
             content: [
                 {
                     type: 'text' as const,
-                    text: compactDocText(c.text),
+                    text: compacted,
                 },
             ],
         }
@@ -375,6 +638,8 @@ function buildStepLabel(
     switch (toolName) {
         case 'searchDocsByKeyword':
             return `Searching: "${ellipsis(String(args.query ?? ''), 36)}"...`
+        case 'analyzeDocument':
+            return `Analyzing document ${(String(args.docId ?? '')).slice(0, 8)}...`
         case 'getDocStructure':
             return 'Loading document structure...'
         case 'getDocNodeDetails':
@@ -393,6 +658,11 @@ function buildResultLabel(
     if (!resultText) return undefined
     try {
         switch (toolName) {
+            case 'analyzeDocument': {
+                const { relevance } = parseAnalyzeResult(resultText)
+                const kb = (resultText.length / 1024).toFixed(1)
+                return `Analysis: ${relevance} · ${kb}KB`
+            }
             case 'getDocStructure': {
                 const lines = resultText.split('\n')
                 const firstTitle = lines
@@ -449,6 +719,8 @@ function buildToolDetail(
     switch (toolName) {
         case 'searchDocsByKeyword':
             return `"${String(args.query ?? '')}"`
+        case 'analyzeDocument':
+            return `doc=${(String(args.docId ?? '')).slice(0, 8)}`
         case 'getDocStructure':
             return `doc=${(String(args.docId ?? '')).slice(0, 8)}`
         case 'getDocNodeDetails':
@@ -472,7 +744,7 @@ async function librarian(
         initialState: {
             systemPrompt: PROMPT,
             model,
-            tools: buildTools(opts?.segmenter),
+            tools: buildMainTools(opts?.segmenter, onStep),
         },
         transformContext: async (messages) => pruneContext(messages),
     })

@@ -46,7 +46,7 @@ nodes ──(tree_closure)──→ nodes (树形层级)
 src/
 ├── ai/           # AI 模型调用与 Agent 工具
 │   ├── base.ts       # 模型调用基础设施（call 函数 + ToolDef 类型 + onToolCall 进度回调）
-│   ├── librarian.ts  # 文档检索 Librarian Agent（关键词搜索 + 自检审查）
+│   ├── librarian.ts  # 文档检索 Librarian Agent（主 Agent：搜索 + 委托子 Agent 分析 + 汇总 + 自检审查）
 │   ├── reviewer.ts   # 检索结果审查 Agent（无工具纯评估）
 │   ├── tools.ts      # 共享业务逻辑（searchDocsByKeyword）
 │   └── index.ts      # 统一导出
@@ -81,16 +81,49 @@ src/
 
 ## 查询路径（Librarian 检索）
 
-通过关键词分词搜索直达文档，然后深入文档节点查找原文：
+采用 **主 Agent + 子 Agent 委托** 架构：主 Agent 负责搜索和汇总，子 Agent（Document Analyzer）负责逐文档深度分析：
+
+### 主 Agent（Librarian）
 
 | 步骤 | 工具 | 作用 |
 |------|------|------|
 | 1 | `searchDocsByKeyword` | 关键词在 `docs_fts` 中全文搜索，返回 [{docId, metadata, rank}] |
-| 2 | `getDocStructure` | 获取文档树结构（title + summary/prefixSummary） |
-| 3 | `getDocNodeDetails` | 获取节点完整文本 |
-| 4 | `reviewResult` | 自检：审查检索结果是否满足用户需求 |
+| 2 | `analyzeDocument(docId, userQuery)` | 委托子 Agent 深度分析单篇文档，返回 Markdown 格式分析结果 |
+| 3 | `reviewResult` | 自检：审查检索结果是否满足用户需求 |
 
-自检后若 verdict 为 partial/fail，会根据 suggestion 回溯重试（最多 2 次）。
+- 步骤 2 并行调用：对搜索排名靠前的 ≤5 篇文档，在同一轮中并行发起所有 `analyzeDocument`
+- 自检后若 verdict 为 partial/fail，会根据 suggestion 回溯重试（最多 2 次）
+
+### 子 Agent（Document Analyzer）
+
+独立的 `Agent` 实例，拥有自己的工具集和 ≤10 步预算（`beforeToolCall` 强制约束）：
+
+| 工具 | 作用 |
+|------|------|
+| `getDocStructure(docId)` | 获取文档树结构（title + summary/prefixSummary） |
+| `getDocNodeDetails(docId, nodeId)` | 获取节点完整原文 |
+
+子 Agent 输出 Markdown 格式（`## 相关性` / `## 概述` / `## 关键发现` / `## 数据来源` / `## 详细分析`），主 Agent 直接读取并汇总。
+
+### 数据流
+
+```
+User Query
+  │
+  ▼
+Main Librarian Agent
+  ├─ searchDocsByKeyword(query)         → [{docId, metadata, rank}]
+  ├─ analyzeDocument(docId, userQuery)  → spawns Subagent (×5 parallel) ─┐
+  │                                                │                      │
+  │                                                ▼                      │
+  │                                    Document Analyzer Subagent
+  │                                    ├─ getDocStructure(docId)
+  │                                    └─ getDocNodeDetails(docId, nodeId)
+  │                                                │                      │
+  │                                                └──────────────────────┘
+  │                                          returns Markdown analysis
+  └─ reviewResult(query, finalAnswer, sources)
+```
 
 Librarian 返回结构化 `LibrarianResult`：
 ```typescript
@@ -268,10 +301,15 @@ insertTree → insertDoc (含 docs_fts)
 ### AI 调用
 
 - Agent 工具遵循 `base.ts` 的 `ToolDef` 模式
-- Agent 职责分离：librarian（文档检索）、reviewer（结果审查）
+- Agent 职责分离：
+  - **librarian（主 Agent）**：搜索 + 委托子 Agent 分析 + 汇总结果 + 自检，使用 `pi-agent-core` 的 `Agent` 类
+  - **Document Analyzer（子 Agent）**：独立的 `Agent` 实例，逐文档深度分析，通过 `analyzeDocument` tool 被主 Agent 调用。≤10 步预算（`beforeToolCall` hook 强制约束），输出 Markdown 格式
+  - **reviewer（审查 Agent）**：独立的纯评估 Agent，使用 `base.ts` 的 `call` 函数
+- 子 Agent 并行执行：主 Agent 同一轮 assistant 消息中的多个 `analyzeDocument` tool call 由 `pi-agent-core` 默认并行执行
+- 子 Agent 进度同步：子 Agent 内部 tool 调用通过 `onStep` 回调透传到主 Agent 的 spinner 显示（如 `  Loading document structure...`）
 - summarizer 调用自动走 `model_cache` 缓存，60s 超时保护
 - 中文分词：`segmentText()` 通过 LLM 调用实现，写入 FTS 前分词。长文本（>3000 字符）自动按行切分为多个 chunk 独立分词
-- Librarian 检索进度：执行中显示通用提示（如 "Searching: ..."），完成后自动更新为具体结果
+- Librarian 检索进度：执行中显示通用提示，完成后自动更新为具体结果。子 Agent 输出结果的 spinner 显示格式为 `Analysis: high · 1.2KB`
 
 ### 数据库连接
 
@@ -296,7 +334,7 @@ db.pragma('foreign_keys = ON')
 - **Lint**: Biome, 推荐规则 + 严格 correctness/suspicious 规则, 启用 organizeImports
 - **TypeScript**: ESNext target, strict 模式, `verbatimModuleSyntax`（type 导入需显式 `import type`）
 - **命名**: 文件 kebab-case, 函数 camelCase, 类型 PascalCase
-- **日志**: 使用 `logger.child({ module: 'xxx' })` 创建模块级 logger
+- **日志**: 使用 `logger.child({ module: 'xxx' })` 创建模块级 logger。子 Agent 使用独立模块 `doc-analyzer`（`subLog`）
 - **日志输出**: 仅写文件 `~/.config/vein/logs/vein-YYYY-MM-DD.log`（JSON 每行一条），不输出到控制台（避免干扰 CLI spinner/交互）。logger 在 `src/config/index.ts` 中通过 pino 创建，`sync: true` 保证崩溃不丢数据。用 `tail -f ~/.config/vein/logs/vein-$(date +%Y-%m-%d).log` 实时追踪。
 - **日志级别**:
   - `log.info` 仅记录关键流程节点：Agent 工具调用开始/结束、检索会话开始/完成、批量导入开始/完成、迁移、项目注册/注销、错误恢复
@@ -307,4 +345,5 @@ db.pragma('foreign_keys = ON')
 - **日志格式**: 结构化对象 `log.info({ docId, key: value, content: '描述' })`，`content` 字段用英文描述操作，避免在 msg 中拼接变量
 - **检索追踪字段**: ask 会话使用 `sessionId`（`crypto.randomUUID().slice(0, 8)`）关联同一次查询的所有日志。Librarian 工具调用使用 `detail`（可读上下文摘要）+ `elapsedMs`（执行耗时）辅助追踪。
 - **导出**: 统一起名导出（避免 default export）
+- **禁止**: 不得创建测试用空文件、临时文件（如 `nul`、`test.js`、`temp.md` 等）。测试逻辑写在 `__tests__/` 或使用 `bun test`，临时输出写入系统临时目录
 - **运行时**: 开发用 `bun run src/command/vein.ts`，生产用 `node build/vein.js`；`bun run build` 构建（单入口 vein.ts, `--target node --external better-sqlite3`），`bun run check` 类型检查，`bun run lint` 检查代码，`bun run format` 格式化（含 import 排序）
