@@ -33,19 +33,19 @@ const PROMPT = `你是一个文档检索 Librarian。通过关键词搜索定位
 ## 流程
 
 1. 从用户查询提取 2-5 个核心关键词，调用 searchDocsByKeyword
-2. 对搜索结果中排名靠前的文档（≤5 篇），调用 analyzeDocument 委托子 Agent 深度分析
-   - 每个 analyzeDocument 传入 docId 和原始用户查询，多个调用放在同一条 assistant 消息中即可并行执行（系统限制最多同时 3 个，超出排队）
+2. 对搜索结果中排名靠前的文档调用 analyzeDocument 委托子 Agent 深度分析
+   - 每个 analyzeDocument 传入 docId 和原始用户查询，多个调用放在同一条 assistant 消息中即可并行执行（系统限制最多同时 5 个，超出排队）
    - 子 Agent 返回 Markdown 格式分析，包含：## 相关性、## 概述、## 关键发现、## 数据来源、## 详细分析
-3. 汇总所有文档的分析结果，综合形成最终答案
-   - 对相关性为 high/medium 的文档重点引用
-   - 对相关性为 low 的可简要提及或忽略
-   - 对相关性为 none 的忽略
+3. 整理所有文档的分析结果，形成最终答案
+   - 按文档逐一列出，每篇包含：文档标题、相关性、子 Agent 的「详细分析」原文
+   - 不要用自己的话重新概括子 Agent 的分析——直接引用子 Agent 返回的内容
+   - 对 relevance 为 low 的可压缩，none 的忽略
 4. 调用 reviewResult 自检
 
 ## 约束
 
 - 最终答案必须包含原文引用和出处（nodeId）
-- 步骤预算：单次 ≤15，含重试 ≤30
+- 步骤预算：单次 ≤20，含重试 ≤40
 - 优先纵深：先分析完一篇再考虑下一篇
 - 已获取的信息不要重复获取
 
@@ -401,7 +401,7 @@ function parseAnalyzeResult(raw: string): {
 
 // ── Concurrency limiter ────────────────────────────────────────
 
-const MAX_PARALLEL_ANALYZE = 3
+const MAX_PARALLEL_ANALYZE = 5
 
 class Semaphore {
     private waiters: (() => void)[] = []
@@ -439,7 +439,7 @@ function makeAnalyzeDocument(
         description:
             '委托子 Agent 深度分析单篇文档中与用户查询相关的内容。' +
             '返回 Markdown 格式分析（## 相关性 / ## 概述 / ## 关键发现 / ## 数据来源 / ## 详细分析）。' +
-            `最多同时运行 ${MAX_PARALLEL_ANALYZE} 个，超出排队等待。可对搜索结果排名靠前的 ≤5 篇文档调用。`,
+            `最多同时运行 ${MAX_PARALLEL_ANALYZE} 个，超出排队等待。`,
         parameters: Type.Object({
             docId: Type.String({ description: '文章Id' }),
             userQuery: Type.String({

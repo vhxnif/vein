@@ -38,7 +38,7 @@ nodes ──(tree_closure)──→ nodes (树形层级)
 | `nodes` + `tree_closure` | 树形层级（文档内节点），闭包表存储祖先-后代关系 |
 | `docs` | 文档实体 |
 | `model_cache` | 模型响应缓存（`(md5, model)` 有复合唯一约束，命中时 hit_count + 1） |
-| `docs_fts` | **FTS5 虚拟表（unicode61 tokenizer）**，索引文档所有节点的 summary/prefixSummary 合并文本，写入时经 `segmentText()` 分词后用空格连接，查询时同样分词后搜索。**查询使用 OR 语义**（token 之间 `OR` 连接），避免 LLM 分词非确定性导致 AND 全量匹配失败。支持 BM25 排序。FTS5 不支持 `INSERT OR REPLACE` 按业务键去重，统一用 `DELETE` → `INSERT` 防止 doc_id 重复。列名 `summary` 实际存储分词后的 token 文本（非原始摘要） |
+| `docs_fts` | **FTS5 虚拟表（unicode61 tokenizer）**，索引文档所有节点的 summary/prefixSummary 合并文本，写入时经 `segmentText()` 分词后用空格连接，查询时同样分词后搜索。**查询优先 AND，0 结果时回退 OR：LLM 分词与索引对齐时 AND 精确匹配，不对齐时 OR 兜底。BM25 排序，k=10。FTS5 不支持 `INSERT OR REPLACE` 按业务键去重，统一用 `DELETE` → `INSERT` 防止 doc_id 重复 |
 
 ## 目录结构
 
@@ -91,7 +91,8 @@ src/
 | 2 | `analyzeDocument(docId, userQuery)` | 委托子 Agent 深度分析单篇文档，返回 Markdown 格式分析结果 |
 | 3 | `reviewResult` | 自检：审查检索结果是否满足用户需求 |
 
-- 步骤 2 并发控制：对搜索排名靠前的 ≤5 篇文档调用 `analyzeDocument`，系统通过 `Semaphore` 限制最多同时运行 3 个子 Agent，超出排队等待
+- 步骤 2 并发控制：对搜索结果中的文档调用 `analyzeDocument`（数量不限），系统通过 `Semaphore` 限制最多同时运行 5 个子 Agent，超出排队等待
+- 步骤 3 输出要求：按文档逐一列出，直接引用子 Agent 的「详细分析」内容，不重新概括
 - 自检后若 verdict 为 partial/fail，会根据 suggestion 回溯重试（最多 2 次）
 
 ### 子 Agent（Document Analyzer）
@@ -113,7 +114,7 @@ User Query
   ▼
 Main Librarian Agent
   ├─ searchDocsByKeyword(query)         → [{docId, metadata, rank}]
-  ├─ analyzeDocument(docId, userQuery)  → spawns Subagent (≤5, max 3 concurrent) ─┐
+  ├─ analyzeDocument(docId, userQuery)  → spawns Subagent (max 5 concurrent) ─┐
   │                                                │                      │
   │                                                ▼                      │
   │                                    Document Analyzer Subagent
@@ -305,7 +306,7 @@ insertTree → insertDoc (含 docs_fts)
   - **librarian（主 Agent）**：搜索 + 委托子 Agent 分析 + 汇总结果 + 自检，使用 `pi-agent-core` 的 `Agent` 类
   - **Document Analyzer（子 Agent）**：独立的 `Agent` 实例，逐文档深度分析，通过 `analyzeDocument` tool 被主 Agent 调用。≤10 步预算（`beforeToolCall` hook 强制约束），输出 Markdown 格式
   - **reviewer（审查 Agent）**：独立的纯评估 Agent，使用 `base.ts` 的 `call` 函数
-- 子 Agent 并发控制：通过 `Semaphore(3)` 限制最多 3 个子 Agent 同时运行，超出排队。`buildMainTools` 创建共享信号量，`makeAnalyzeDocument` 的 `execute` 中 `acquire/release`
+- 子 Agent 并发控制：通过 `Semaphore(5)` 限制最多 5 个子 Agent 同时运行，超出排队。`buildMainTools` 创建共享信号量，`makeAnalyzeDocument` 的 `execute` 中 `acquire/release`
 - 子 Agent 进度同步：子 Agent 内部 tool 调用通过 `onStep` 回调透传到主 Agent 的 spinner 显示（如 `  Loading document structure...`）
 - summarizer 调用自动走 `model_cache` 缓存，60s 超时保护
 - 中文分词：`segmentText()` 通过 LLM 调用实现，写入 FTS 前分词。长文本（>3000 字符）自动按行切分为多个 chunk 独立分词
