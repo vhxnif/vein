@@ -33,8 +33,8 @@ const PROMPT = `你是一个文档检索 Librarian。通过关键词搜索定位
 ## 流程
 
 1. 从用户查询提取 2-5 个核心关键词，调用 searchDocsByKeyword
-2. 对搜索结果中排名靠前的文档（≤5 篇），在同一轮中并行调用 analyzeDocument 委托子 Agent 深度分析
-   - 每个 analyzeDocument 传入 docId 和原始用户查询，多个调用放在同一条 assistant 消息中即可并行执行
+2. 对搜索结果中排名靠前的文档（≤5 篇），调用 analyzeDocument 委托子 Agent 深度分析
+   - 每个 analyzeDocument 传入 docId 和原始用户查询，多个调用放在同一条 assistant 消息中即可并行执行（系统限制最多同时 3 个，超出排队）
    - 子 Agent 返回 Markdown 格式分析，包含：## 相关性、## 概述、## 关键发现、## 数据来源、## 详细分析
 3. 汇总所有文档的分析结果，综合形成最终答案
    - 对相关性为 high/medium 的文档重点引用
@@ -399,15 +399,47 @@ function parseAnalyzeResult(raw: string): {
     return { relevance, summary }
 }
 
+// ── Concurrency limiter ────────────────────────────────────────
+
+const MAX_PARALLEL_ANALYZE = 3
+
+class Semaphore {
+    private waiters: (() => void)[] = []
+    private running = 0
+    constructor(private max: number) {}
+
+    async acquire(): Promise<void> {
+        if (this.running < this.max) {
+            this.running++
+            return
+        }
+        return new Promise<void>((resolve) => {
+            this.waiters.push(resolve)
+        })
+    }
+
+    release(): void {
+        this.running--
+        const next = this.waiters.shift()
+        if (next) {
+            this.running++
+            next()
+        }
+    }
+}
+
 // ── Main Agent Tools ───────────────────────────────────────────
 
-function makeAnalyzeDocument({ ok, tool, onStep }: ToolCtx): any {
+function makeAnalyzeDocument(
+    { ok, tool, onStep }: ToolCtx,
+    sem: Semaphore
+): any {
     return {
         name: 'analyzeDocument',
         description:
             '委托子 Agent 深度分析单篇文档中与用户查询相关的内容。' +
             '返回 Markdown 格式分析（## 相关性 / ## 概述 / ## 关键发现 / ## 数据来源 / ## 详细分析）。' +
-            '可同时并行调用多个（≤5），子 Agent 独立运行互不干扰。',
+            `最多同时运行 ${MAX_PARALLEL_ANALYZE} 个，超出排队等待。可对搜索结果排名靠前的 ≤5 篇文档调用。`,
         parameters: Type.Object({
             docId: Type.String({ description: '文章Id' }),
             userQuery: Type.String({
@@ -419,8 +451,13 @@ function makeAnalyzeDocument({ ok, tool, onStep }: ToolCtx): any {
                 docId: string
                 userQuery: string
             }
-            const result = await analyzeDocument(docId, userQuery, onStep)
-            return ok(result)
+            await sem.acquire()
+            try {
+                const result = await analyzeDocument(docId, userQuery, onStep)
+                return ok(result)
+            } finally {
+                sem.release()
+            }
         }),
     }
 }
@@ -429,6 +466,7 @@ function buildMainTools(
     segmenter?: ModelProvider,
     onStep?: (label: string) => void
 ): any[] {
+    const sem = new Semaphore(MAX_PARALLEL_ANALYZE)
     const cache = new Map<string, string>()
 
     const ctx: ToolCtx = {
@@ -449,7 +487,7 @@ function buildMainTools(
 
     return [
         makeSearchDocsByKeyword(ctx, segmenter),
-        makeAnalyzeDocument(ctx),
+        makeAnalyzeDocument(ctx, sem),
         makeReviewResult(ctx),
     ]
 }
