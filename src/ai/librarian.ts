@@ -232,15 +232,14 @@ function summarizeResult(tool: string, raw: string): string {
     }
     if (tool === 'getDocStructure') {
         const lines = raw.split('\n')
-        const nodeCount = lines.filter((l) => l.trim()).length
         const docTitle = lines
             .find((l) => /^\s*\d{4}\s/.test(l))
             ?.replace(/^\s*\d{4}\s/, '')
             .trim()
         if (docTitle) {
-            return `"${ellipsis(docTitle, 40)}" · ${nodeCount} nodes`
+            return `"${ellipsis(docTitle, 40)}" · ${raw.length} chars`
         }
-        return `${nodeCount} nodes`
+        return `${raw.length} chars`
     }
     try {
         const parsed = JSON.parse(raw) as unknown
@@ -400,11 +399,10 @@ function buildResultLabel(
                     .find((l) => /^\s*\d{4}\s/.test(l))
                     ?.replace(/^\s*\d{4}\s/, '')
                     .trim()
-                const nodeCount = lines.filter((l) => l.trim()).length
                 if (firstTitle && firstTitle.length > 0) {
-                    return `Loaded "${ellipsis(firstTitle, 40)}" · ${nodeCount} nodes`
+                    return `Loaded "${ellipsis(firstTitle, 40)}" · ${resultText.length} chars`
                 }
-                return `Loaded structure · ${nodeCount} nodes`
+                return `Loaded structure · ${resultText.length} chars`
             }
             case 'searchDocsByKeyword': {
                 const parsed = JSON.parse(resultText) as Array<{
