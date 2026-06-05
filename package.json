@@ -6,7 +6,7 @@
     "vein": "build/vein.js"
   },
   "scripts": {
-    "build": "bun build src/command/vein.ts --target node --outdir ./build --sourcemap --minify",
+    "build": "bun build src/command/vein.ts --target node --outdir ./build --sourcemap --minify --external better-sqlite3",
     "check": "tsc --noEmit",
     "lint": "bunx --bun @biomejs/biome lint",
     "lint:fix": "bunx --bun @biomejs/biome lint --write ./src",

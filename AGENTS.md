@@ -6,8 +6,8 @@ Vein 是一个基于 AI Agent 的文档管理与智能检索系统。核心理�
 
 ## 技术栈
 
-- **运行时**: Bun
-- **数据库**: SQLite (bun:sqlite, WAL 模式), ORM 用 Drizzle (`drizzle-orm/bun-sqlite`)
+- **运行时**: Node.js（开发用 Bun 运行 TS 源码，构建产物 `build/vein.js` 运行于 Node.js）
+- **数据库**: SQLite (better-sqlite3, WAL 模式), ORM 用 Drizzle (`drizzle-orm/better-sqlite3`)
 - **全文搜索**: FTS5 (BM25 排序)，文档内容中文分词后建立索引
 - **中文分词**: LLM 切词 + FTS5 unicode61 空格分词（写入侧，文档统一）
 - **AI 模型**: 通过 @earendil-works/pi-ai 调用，可在 .vein/config.json 中配置
@@ -68,7 +68,7 @@ src/
 │   └── import.service.ts # markdown 导入管道（并行 LLM + 串行 DB）
 ├── store/        # 数据库层
 │   ├── schema.ts     # Drizzle schema 定义
-│   ├── client.ts     # 数据库连接（bun:sqlite）
+│   ├── client.ts     # 数据库连接（better-sqlite3）
 │   ├── index.ts      # 树形结构 CRUD + doc/FTS5 操作
 │   ├── migrate.ts    # 迁移执行
 │   └── migrations/   # SQL 迁移文件 + config.schema.json
@@ -245,7 +245,7 @@ insertTree → insertDoc (含 docs_fts)
 - **命令组织**：每个命令独立文件（`src/command/xxx.command.ts`），导出 `register(program: Command)` 函数；入口 `vein.ts` 负责创建 Command、注册子命令、全局 `--project` 选项和 `preAction` hook
 - **CLI/Business 分离**：命令文件只处理 CLI I/O（spinner、prompt、outro），核心业务逻辑放 `src/service/`
 - **项目定位**：始终使用 `resolveProjectRoot()` 而非直接 `getProjectRoot(process.cwd())`，以正确支持 `--project` 全局选项
-- **构建**：单一入口 `bun build ./src/command/vein.ts`，所有子命令通过 import 被卷入一个 `vein.js`
+- **构建**：单一入口 `bun build ./src/command/vein.ts --target node --external better-sqlite3`，所有子命令通过 import 被卷入一个 `vein.js`。`better-sqlite3` 为原生模块，**必须标记 external**（否则打包后 `__dirname` 指向 `build/` 目录，找不到 `.node` 绑定文件）
 - **共享工具**：`command-utils.ts` 中 `setupProjectModel` 和 `createCachedSummarizer` 供所有命令复用
 - **导出**：统一起名导出，避免 default export
 
@@ -275,18 +275,20 @@ insertTree → insertDoc (含 docs_fts)
 
 ### 数据库连接
 
-使用 `bun:sqlite` 内置模块：
+使用 `better-sqlite3` 原生模块：
 
 ```typescript
-import { Database } from 'bun:sqlite'
+import Database from 'better-sqlite3'
 
 const db = new Database(dbPath)
-db.exec('PRAGMA journal_mode=WAL')
-db.exec('PRAGMA foreign_keys = ON')
+db.pragma('journal_mode = WAL')
+db.pragma('foreign_keys = ON')
 ```
 
-- Bun 内置 SQLite 支持 FTS5，无需额外配置
+- `better-sqlite3` 为原生 C++ 模块，需要 `node-gyp` 编译。安装时自动预编译，若 Node 版本不匹配需 `npm rebuild better-sqlite3`
+- **构建时**：`bun build` 必须加 `--external better-sqlite3`，否则打包后模块内部的路径解析会指向 `build/` 目录，导致找不到 `better_sqlite3.node` 绑定文件
 - `getRawClient()` 返回兼容包装器（`{ execute(sql | { sql, args }) → { rows } }`）。`getNativeDb()` 返回原始 `Database` 实例
+- Bun 开发模式下可直接 `bun run src/command/vein.ts`（Bun 兼容 better-sqlite3 的 API），无需经过构建步骤
 
 ### 代码风格
 
@@ -305,4 +307,4 @@ db.exec('PRAGMA foreign_keys = ON')
 - **日志格式**: 结构化对象 `log.info({ docId, key: value, content: '描述' })`，`content` 字段用英文描述操作，避免在 msg 中拼接变量
 - **检索追踪字段**: ask 会话使用 `sessionId`（`crypto.randomUUID().slice(0, 8)`）关联同一次查询的所有日志。Librarian 工具调用使用 `detail`（可读上下文摘要）+ `elapsedMs`（执行耗时）辅助追踪。
 - **导出**: 统一起名导出（避免 default export）
-- **运行时**: `bun run src/command/vein.ts`, `bun run build` 构建（单入口 vein.ts）, `bun run check` 类型检查, `bun run lint` 检查代码, `bun run format` 格式化（含 import 排序）
+- **运行时**: 开发用 `bun run src/command/vein.ts`，生产用 `node build/vein.js`；`bun run build` 构建（单入口 vein.ts, `--target node --external better-sqlite3`），`bun run check` 类型检查，`bun run lint` 检查代码，`bun run format` 格式化（含 import 排序）
