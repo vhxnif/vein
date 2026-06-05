@@ -6,11 +6,11 @@
     "vein": "build/vein.js"
   },
   "scripts": {
-    "build": "esbuild src/command/vein.ts --bundle --platform=node --target=node20 --format=esm --outfile=build/vein.js --sourcemap --external:'node:*' --packages=external",
+    "build": "bun build src/command/vein.ts --target node --outdir ./build --sourcemap --minify",
     "check": "tsc --noEmit",
-    "lint": "npx @biomejs/biome lint",
-    "lint:fix": "npx @biomejs/biome lint --write ./src",
-    "format": "npx @biomejs/biome check --write ./src"
+    "lint": "bunx --bun @biomejs/biome lint",
+    "lint:fix": "bunx --bun @biomejs/biome lint --write ./src",
+    "format": "bunx --bun @biomejs/biome check --write ./src"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
