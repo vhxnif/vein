@@ -1,13 +1,13 @@
 import { autocomplete, intro, note, outro, select } from '@clack/prompts'
 import { getModels, getProviders } from '@earendil-works/pi-ai'
-import type { Command } from 'commander'
-import { setModelProvider } from '../ai/index'
+import { setModelProvider } from '@vein/core/ai'
 import {
     loadProjectConfig,
     resolveProjectRoot,
     saveProjectConfig,
-} from '../config'
-import type { ModelProvider, ProjectConfig } from '../config/type'
+} from '@vein/core/config'
+import type { ModelProvider, ProjectConfig } from '@vein/core/config/type'
+import type { Command } from 'commander'
 
 const formatMd = (md?: ModelProvider) =>
     md ? `${md.provider}/${md.model}` : '(unset)'

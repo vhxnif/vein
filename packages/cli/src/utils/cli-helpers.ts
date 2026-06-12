@@ -1,10 +1,5 @@
-import type { ModelProvider } from '../config/type'
-
-function getErrorMessage(err: unknown): string {
-    return err instanceof Error
-        ? err.message || 'Unknown error'
-        : 'Unknown error'
-}
+import type { ModelProvider } from '@vein/core/config/type'
+import { getErrorMessage } from '@vein/core/utils/common'
 
 function modelKey(provider: ModelProvider): string {
     return `${provider.provider}/${provider.model}`

@@ -4,15 +4,25 @@
 
 Vein 是一个基于 AI Agent 的文档管理与智能检索系统。核心理念是通过关键词分词搜索直接定位到具体文档，然后深入文档节点查找原文。
 
+项目采用 **monorepo** 组织，包含以下包：
+
+| 包 | 路径 | 说明 |
+|---|---|---|
+| `@vein/core` | `packages/core/` | 核心能力：AI Agent、数据库、文档树、配置、工具函数、导入服务 |
+| `@vein/cli` | `packages/cli/` | CLI 层：命令注册、交互式 UI、全局项目注册表 |
+
+CLI 通过 workspace 依赖 `@vein/core`，core 不依赖 CLI。后续计划添加 `packages/web` 包。
+
 ## 技术栈
 
-- **运行时**: Node.js（开发用 Bun 运行 TS 源码，构建产物 `build/vein.js` 运行于 Node.js）
+- **运行时**: Node.js（开发用 Bun 运行 TS 源码，构建产物 `packages/cli/dist/vein.js` 运行于 Node.js）
 - **数据库**: SQLite (better-sqlite3, WAL 模式), ORM 用 Drizzle (`drizzle-orm/better-sqlite3`)
 - **全文搜索**: FTS5 (BM25 排序)，文档内容中文分词后建立索引
 - **中文分词**: LLM 切词 + FTS5 unicode61 空格分词（写入侧，文档统一）
 - **AI 模型**: 通过 @earendil-works/pi-ai 调用，可在 .vein/config.json 中配置
 - **批量导入**: 两阶段并行：LLM 阶段 4 文件并发（Promise.all），DB 阶段串行（WAL 模式优化写入）
 - **代码风格**: Biome (lint + format)
+- **包管理**: Bun workspaces (`workspaces: ["packages/*"]`)
 
 ## 核心数据模型
 
@@ -43,41 +53,83 @@ nodes ──(tree_closure)──→ nodes (树形层级)
 ## 目录结构
 
 ```
-src/
-├── ai/           # AI 模型调用与 Agent 工具
-│   ├── base.ts       # 模型调用基础设施（call 函数 + ToolDef 类型 + onToolCall 进度回调）
-│   ├── librarian.ts  # 文档检索 Librarian Agent（主 Agent：搜索 + 委托子 Agent 分析 + 汇总 + 自检审查）
-│   ├── reviewer.ts   # 检索结果审查 Agent（无工具纯评估）
-│   ├── tools.ts      # 共享业务逻辑（searchDocsByKeyword）
-│   └── index.ts      # 统一导出
-├── command/      # CLI 命令（每个命令独立文件，导出 register(program)）
-│   ├── vein.ts           # 入口：Command 创建 + 各命令注册 + --project 全局选项
-│   ├── command-utils.ts  # 共享工具：setupProjectModel、createCachedSummarizer
-│   ├── new.command.ts    # vein new（项目初始化，自动注册到全局）
-│   ├── markdown.command.ts # vein markdown（markdown 导入，调用 service 层）
-│   ├── ask.command.ts    # vein ask（文档检索）
-│   ├── history.command.ts # vein history（历史回顾，含 formatHistoryDetail）
-│   ├── config.command.ts # vein config（交互式配置修改）
-│   ├── browse.command.ts # vein browse（按 doc 维度浏览）
-│   └── projects.command.ts # vein projects（全局项目注册表管理）
-├── config/       # 配置（logger、项目初始化、全局项目注册表、root override）
-│   ├── index.ts      # 项目配置读写 + resolveProjectRoot / setProjectOverride
-│   ├── global.ts     # 全局项目注册表（~/.config/vein/projects.json）
-│   └── type.ts       # ProjectConfig / ModelProvider 类型
-├── service/      # 业务逻辑层（与 CLI I/O 分离）
-│   └── import.service.ts # markdown 导入管道（并行 LLM + 串行 DB）
-├── store/        # 数据库层
-│   ├── schema.ts     # Drizzle schema 定义
-│   ├── client.ts     # 数据库连接（better-sqlite3）
-│   ├── index.ts      # 树形结构 CRUD + doc/FTS5 操作
-│   ├── migrate.ts    # 迁移执行
-│   └── migrations/   # SQL 迁移文件 + config.schema.json
-├── tree/         # 树形数据结构与 Markdown 拆分
-└── utils/        # 通用工具
-    ├── cli-helpers.ts # CLI 公共 helper：pluralize、formatDuration、colorize、VERDICT_ICON 等
-    ├── common.ts     # uuid, md5
-    └── segment.ts    # LLM 中文分词（将中文切词后用空格连接，适配 FTS5 unicode61 tokenizer）
+vein/
+├── packages/
+│   ├── core/                          # @vein/core
+│   │   ├── src/
+│   │   │   ├── ai/                    # AI 模型调用与 Agent 工具
+│   │   │   │   ├── base.ts               # 模型调用基础设施（call 函数 + ToolDef 类型 + onToolCall 进度回调）
+│   │   │   │   ├── librarian.ts          # 文档检索 Librarian Agent（主 Agent：搜索 + 委托子 Agent 分析 + 汇总 + 自检审查）
+│   │   │   │   ├── reviewer.ts           # 检索结果审查 Agent（无工具纯评估）
+│   │   │   │   ├── tools.ts              # 共享业务逻辑（searchDocsByKeyword）
+│   │   │   │   └── index.ts              # 统一导出
+│   │   │   ├── config/                # 配置（logger、项目配置读写、root override）
+│   │   │   │   ├── index.ts              # 项目配置读写 + resolveProjectRoot / setProjectOverride + APP_NAME
+│   │   │   │   └── type.ts               # ProjectConfig / ModelProvider 类型
+│   │   │   ├── service/               # 业务逻辑层（与 CLI I/O 分离）
+│   │   │   │   └── import.service.ts     # markdown 导入管道（并行 LLM + 串行 DB）
+│   │   │   ├── store/                 # 数据库层
+│   │   │   │   ├── schema.ts             # Drizzle schema 定义
+│   │   │   │   ├── client.ts             # 数据库连接（better-sqlite3）
+│   │   │   │   ├── index.ts              # 树形结构 CRUD + doc/FTS5 操作
+│   │   │   │   ├── migrate.ts            # 迁移执行
+│   │   │   │   └── migrations/           # SQL 迁移文件 + config.schema.json
+│   │   │   ├── tree/                  # 树形数据结构与 Markdown 拆分
+│   │   │   │   ├── type.ts               # TreeNode / BaseDocNode / DocNode 类型
+│   │   │   │   └── markdown_split.ts     # markdown → 文档树 解析管道
+│   │   │   ├── utils/                 # 通用工具（core 共享）
+│   │   │   │   ├── common.ts             # uuid, md5, hash, getErrorMessage
+│   │   │   │   └── segment.ts            # LLM 中文分词
+│   │   │   └── index.ts               # 核心统一导出
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── drizzle.config.ts
+│   └── cli/                           # @vein/cli
+│       ├── src/
+│       │   ├── command/               # CLI 命令（每个命令独立文件，导出 register(program)）
+│       │   │   ├── vein.ts                # 入口：Command 创建 + 各命令注册 + --project 全局选项
+│       │   │   ├── command-utils.ts       # 共享工具：setupProjectModel、createCachedSummarizer
+│       │   │   ├── new.command.ts         # vein new
+│       │   │   ├── markdown.command.ts    # vein markdown
+│       │   │   ├── ask.command.ts         # vein ask
+│       │   │   ├── history.command.ts     # vein history
+│       │   │   ├── config.command.ts      # vein config
+│       │   │   ├── browse.command.ts      # vein browse
+│       │   │   └── projects.command.ts    # vein projects
+│       │   ├── config/
+│       │   │   └── global.ts             # 全局项目注册表（~/.config/vein/projects.json）
+│       │   └── utils/
+│       │       └── cli-helpers.ts         # CLI 专用 helper（formatDuration, colorize, VERDICT_ICON 等）
+│       ├── package.json
+│       └── tsconfig.json
+├── package.json                       # workspace 根
+├── tsconfig.json                      # base tsconfig（各包 extend）
+├── biome.json                         # 共享 lint/format 配置
+└── .gitignore
 ```
+
+### 包间依赖
+
+```
+@vein/cli  ──→  @vein/core
+  │                 │
+  │  commander      │  @earendil-works/pi-ai
+  │  @clack/prompts │  @earendil-works/pi-agent-core
+  │                 │  better-sqlite3
+  │                 │  drizzle-orm
+  │                 │  pino
+```
+
+CLI 通过 `@vein/core` 的 exports 子路径导入：
+- `@vein/core/ai` — AI agent
+- `@vein/core/config` — logger, resolveProjectRoot, loadProjectConfig 等
+- `@vein/core/config/type` — ModelProvider, ProjectConfig 类型
+- `@vein/core/store` — 数据库操作
+- `@vein/core/tree` — TreeNode / BaseDocNode 类型
+- `@vein/core/tree/markdown_split` — mdToTree
+- `@vein/core/service/import` — importBatch
+- `@vein/core/utils/common` — md5, uuid, getErrorMessage
+- `@vein/core/utils/segment` — segmentText
 
 ## 查询路径（Librarian 检索）
 
@@ -190,10 +242,10 @@ Reviewer 是独立的纯评估 Agent，评估维度：相关性、完整性、�
 `resolveProjectRoot()` 封装了上述逻辑，所有需要定位项目的地方（DB 连接、配置加载、历史保存等）统一使用该函数。`setProjectOverride(path)` 由 `vein.ts` 的 `preAction` hook 调用。
 
 **相关文件**：
-- `src/config/global.ts` — 全局注册表 CRUD（`registerProject`、`unregisterProject`、`getProjectPath`、`loadGlobalProjects`）
-- `src/config/index.ts` — `resolveProjectRoot()`、`setProjectOverride()`、`_projectOverridePath`
-- `src/store/client.ts` — `resolveDbPath()` 使用 `resolveProjectRoot()` 而非直接的 `getProjectRoot(cwd)`
-- `src/command/vein.ts` — `-p/--project` 全局选项 + `preAction` hook 解析并设置 override
+- `packages/cli/src/config/global.ts` — 全局注册表 CRUD（`registerProject`、`unregisterProject`、`getProjectPath`、`loadGlobalProjects`）
+- `packages/core/src/config/index.ts` — `resolveProjectRoot()`、`setProjectOverride()`、`APP_NAME`、logger
+- `packages/core/src/store/client.ts` — `resolveDbPath()` 使用 `resolveProjectRoot()` 而非直接的 `getProjectRoot(cwd)`
+- `packages/cli/src/command/vein.ts` — `-p/--project` 全局选项 + `preAction` hook 解析并设置 override
 - 使用 `await vein.parseAsync()` 确保异步 hook 在 action 之前完成
 
 `vein projects` (别名 `pr`) 可查看所有已注册项目，`--remove <name>` 删除注册。
@@ -250,7 +302,7 @@ vein config
 
 ## 批量导入管道
 
-`vein markdown <files...>` 分两阶段处理，核心逻辑在 `src/service/import.service.ts` 的 `importBatch()` 函数中：
+`vein markdown <files...>` 分两阶段处理，核心逻辑在 `packages/core/src/service/import.service.ts` 的 `importBatch()` 函数中：
 
 **Phase 1 — 并行 LLM（`IMPORT_PARALLEL = 4` 文件并发）：**
 ```
@@ -276,16 +328,19 @@ insertTree → insertDoc (含 docs_fts)
 
 ### 架构
 
-- **命令组织**：每个命令独立文件（`src/command/xxx.command.ts`），导出 `register(program: Command)` 函数；入口 `vein.ts` 负责创建 Command、注册子命令、全局 `--project` 选项和 `preAction` hook
-- **CLI/Business 分离**：命令文件只处理 CLI I/O（spinner、prompt、outro），核心业务逻辑放 `src/service/`
-- **项目定位**：始终使用 `resolveProjectRoot()` 而非直接 `getProjectRoot(process.cwd())`，以正确支持 `--project` 全局选项
-- **构建**：单一入口 `bun build ./src/command/vein.ts --target node --external better-sqlite3`，所有子命令通过 import 被卷入一个 `vein.js`。`better-sqlite3` 为原生模块，**必须标记 external**（否则打包后 `__dirname` 指向 `build/` 目录，找不到 `.node` 绑定文件）
+- **Monorepo**：根 `package.json` 设置 `"workspaces": ["packages/*"]`。CLI 通过 `"@vein/core": "workspace:*"` 依赖 core。
+- **命令组织**：每个命令独立文件（`packages/cli/src/command/xxx.command.ts`），导出 `register(program: Command)` 函数；入口 `vein.ts` 负责创建 Command、注册子命令、全局 `--project` 选项和 `preAction` hook
+- **CLI/Business 分离**：命令文件只处理 CLI I/O（spinner、prompt、outro），核心业务逻辑放 `core` 包的 `service/`、`store/`、`ai/` 中
+- **项目定位**：始终使用 `resolveProjectRoot()`（from `@vein/core/config`）而非直接 `getProjectRoot(process.cwd())`，以正确支持 `--project` 全局选项
+- **构建**：入口为 CLI 包的 `src/command/vein.ts`。`bun build src/command/vein.ts --target node --external better-sqlite3 -outdir ./dist`。`better-sqlite3` 为原生模块，**必须标记 external**（否则打包后 `__dirname` 指向 `dist/` 目录，找不到 `.node` 绑定文件）
+- **构建产物**：`packages/cli/dist/vein.js`。CLI 的 `package.json` 中 `bin.vein` 指向 `./dist/vein.js`
+- **全局 link**：`bun run link`（根目录）或 `cd packages/cli && bun link`。link 后 `vein` 命令可在任意目录使用
 - **共享工具**：`command-utils.ts` 中 `setupProjectModel` 和 `createCachedSummarizer` 供所有命令复用
-- **导出**：统一起名导出，避免 default export
+- **导出**：统一起名导出，避免 default export。core 包的公开 API 在 `packages/core/src/index.ts` 统一导出，子路径映射在 `package.json` 的 `exports` 字段
 
 ### 数据库
 
-- 迁移 SQL 内联在 `src/store/migrations/sql.ts`，按数组顺序执行
+- 迁移 SQL 内联在 `packages/core/src/store/migrations/sql.ts`，按数组顺序执行
 - 迁移全部使用 `IF NOT EXISTS`，保证幂等
 - `_migrations` 表追踪已执行的迁移名和时间戳，`runMigrations` 启动时先查表跳过已执行条目
 - `docs_fts` 在迁移中创建，使用 unicode61 tokenizer
@@ -325,9 +380,9 @@ db.pragma('foreign_keys = ON')
 ```
 
 - `better-sqlite3` 为原生 C++ 模块，需要 `node-gyp` 编译。安装时自动预编译，若 Node 版本不匹配需 `npm rebuild better-sqlite3`
-- **构建时**：`bun build` 必须加 `--external better-sqlite3`，否则打包后模块内部的路径解析会指向 `build/` 目录，导致找不到 `better_sqlite3.node` 绑定文件
+- **构建时**：`bun build` 必须加 `--external better-sqlite3`，否则打包后模块内部的路径解析会指向 `dist/` 目录，导致找不到 `better_sqlite3.node` 绑定文件
 - `getRawClient()` 返回兼容包装器（`{ execute(sql | { sql, args }) → { rows } }`）。`getNativeDb()` 返回原始 `Database` 实例
-- Bun 开发模式下可直接 `bun run src/command/vein.ts`（Bun 兼容 better-sqlite3 的 API），无需经过构建步骤
+- Bun 开发模式下可直接 `bun run packages/cli/src/command/vein.ts`（Bun 兼容 better-sqlite3 的 API），无需经过构建步骤
 
 ### 代码风格
 
@@ -336,7 +391,7 @@ db.pragma('foreign_keys = ON')
 - **TypeScript**: ESNext target, strict 模式, `verbatimModuleSyntax`（type 导入需显式 `import type`）
 - **命名**: 文件 kebab-case, 函数 camelCase, 类型 PascalCase
 - **日志**: 使用 `logger.child({ module: 'xxx' })` 创建模块级 logger。子 Agent 使用独立模块 `doc-analyzer`（`subLog`）
-- **日志输出**: 仅写文件 `~/.config/vein/logs/vein-YYYY-MM-DD.log`（JSON 每行一条），不输出到控制台（避免干扰 CLI spinner/交互）。logger 在 `src/config/index.ts` 中通过 pino 创建，`sync: true` 保证崩溃不丢数据。用 `tail -f ~/.config/vein/logs/vein-$(date +%Y-%m-%d).log` 实时追踪。
+- **日志输出**: 仅写文件 `~/.config/vein/logs/vein-YYYY-MM-DD.log`（JSON 每行一条），不输出到控制台（避免干扰 CLI spinner/交互）。logger 在 `packages/core/src/config/index.ts` 中通过 pino 创建，`sync: true` 保证崩溃不丢数据。用 `tail -f ~/.config/vein/logs/vein-$(date +%Y-%m-%d).log` 实时追踪。
 - **日志级别**:
   - `log.info` 仅记录关键流程节点：Agent 工具调用开始/结束、检索会话开始/完成、批量导入开始/完成、迁移、项目注册/注销、错误恢复
   - `log.debug` 记录内部细节：缓存命中/未命中、分词流水线步骤、LLM 消息收发、DB 查询细节
@@ -347,4 +402,11 @@ db.pragma('foreign_keys = ON')
 - **检索追踪字段**: ask 会话使用 `sessionId`（`crypto.randomUUID().slice(0, 8)`）关联同一次查询的所有日志。Librarian 工具调用使用 `detail`（可读上下文摘要）+ `elapsedMs`（执行耗时）辅助追踪。
 - **导出**: 统一起名导出（避免 default export）
 - **禁止**: 不得创建测试用空文件、临时文件（如 `nul`、`test.js`、`temp.md` 等）。测试逻辑写在 `__tests__/` 或使用 `bun test`，临时输出写入系统临时目录
-- **运行时**: 开发用 `bun run src/command/vein.ts`，生产用 `node build/vein.js`；`bun run build` 构建（单入口 vein.ts, `--target node --external better-sqlite3`），`bun run check` 类型检查，`bun run lint` 检查代码，`bun run format` 格式化（含 import 排序）
+- **运行时**: 
+  - 开发：`bun run packages/cli/src/command/vein.ts`
+  - 生产：`node packages/cli/dist/vein.js`
+  - 全局 link：`bun run link`（构建 + link），`bun run unlink`（取消）
+  - 构建：`bun run build`（从根目录，委托到 `packages/cli`）
+  - 类型检查：`bun run check`（根目录 `tsc --noEmit`）
+  - Lint：`bun run lint`
+  - 格式化：`bun run format`

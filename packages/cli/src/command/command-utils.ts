@@ -1,9 +1,13 @@
-import { createSummarizer, setModelProvider } from '../ai/index'
-import { loadProjectConfig, logger, resolveProjectRoot } from '../config'
-import type { ProjectConfig } from '../config/type'
-import * as store from '../store'
+import { createSummarizer, setModelProvider } from '@vein/core/ai'
+import {
+    loadProjectConfig,
+    logger,
+    resolveProjectRoot,
+} from '@vein/core/config'
+import type { ProjectConfig } from '@vein/core/config/type'
+import * as store from '@vein/core/store'
+import { md5 } from '@vein/core/utils/common'
 import { modelKey } from '../utils/cli-helpers'
-import { md5 } from '../utils/common'
 
 const log = logger.child({ module: 'command-utils' })
 

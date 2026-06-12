@@ -1,11 +1,11 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { intro, note, outro, spinner, text } from '@clack/prompts'
+import type { LibrarianResult } from '@vein/core/ai'
+import { librarian } from '@vein/core/ai'
+import { logger, resolveProjectRoot, veinDir } from '@vein/core/config'
+import * as store from '@vein/core/store'
 import type { Command } from 'commander'
-import type { LibrarianResult } from '../ai/index'
-import { librarian } from '../ai/index'
-import { logger, resolveProjectRoot, veinDir } from '../config'
-import * as store from '../store'
 import {
     colorize,
     formatDuration,

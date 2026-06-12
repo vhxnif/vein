@@ -5,8 +5,7 @@ import type { ModelProvider, ProjectConfig } from '../config/type'
 import * as store from '../store'
 import { mdToTree } from '../tree/markdown_split'
 import type { DocNode } from '../tree/type'
-import { getErrorMessage } from '../utils/cli-helpers'
-import { md5 } from '../utils/common'
+import { getErrorMessage, md5 } from '../utils/common'
 import { segmentText } from '../utils/segment'
 
 const log = logger.child({ module: 'import' })

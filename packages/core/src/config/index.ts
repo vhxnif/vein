@@ -2,8 +2,13 @@ import { existsSync } from 'node:fs'
 import { access, constants, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import pino from 'pino'
-import { name } from '../../package.json'
 import { configSchema } from '../store/migrations/config_schema'
+
+// ── app identity ──────────────────────────────────────────────
+
+/** Application name used for config/log directories under ~/.config/. */
+export const APP_NAME = 'vein'
+
 import type { ModelProvider, ProjectConfig } from './type'
 
 // ── project root override (set by --project flag) ──
@@ -27,7 +32,7 @@ export function resolveProjectRoot(): string | undefined {
 
 // ── logger (file-only JSON output to ~/.config/vein/logs/) ──────
 
-const logsDir = `${process.env.HOME}/.config/${name}/logs`
+const logsDir = `${process.env.HOME}/.config/${APP_NAME}/logs`
 await mkdir(logsDir, { recursive: true })
 
 const today = new Date().toISOString().slice(0, 10)

@@ -8,16 +8,16 @@ import {
     text,
 } from '@clack/prompts'
 import { getModels, getProviders } from '@earendil-works/pi-ai'
-import type { Command } from 'commander'
-import { setModelProvider } from '../ai/index'
+import { setModelProvider } from '@vein/core/ai'
 import {
     getProjectRoot,
     initProject,
     loadProjectConfig,
     logger,
-} from '../config'
+} from '@vein/core/config'
+import type { ModelProvider } from '@vein/core/config/type'
+import type { Command } from 'commander'
 import { registerProject } from '../config/global'
-import type { ModelProvider } from '../config/type'
 
 const log = logger.child({ module: 'new' })
 
@@ -34,7 +34,7 @@ export function register(program: Command) {
             if (options?.migrate && root) {
                 const config = await loadProjectConfig(root)
                 const dbPath = path.join(root, config?.db ?? '.vein/data.db')
-                const { runMigrations } = await import('../store/migrate')
+                const { runMigrations } = await import('@vein/core')
                 await runMigrations(dbPath)
                 log.info({ dbPath, content: 'Migrations re-run' })
                 outro('Migrations applied')

@@ -1,9 +1,8 @@
 import { access, constants, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { name } from '../../package.json'
-import { logger } from './index'
+import { APP_NAME, logger } from '@vein/core/config'
 
-const configDir = path.join(process.env.HOME ?? '~', '.config', name)
+const configDir = path.join(process.env.HOME ?? '~', '.config', APP_NAME)
 const projectsFile = path.join(configDir, 'projects.json')
 
 const log = logger.child({ module: 'global-config' })

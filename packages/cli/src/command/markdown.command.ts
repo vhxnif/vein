@@ -1,18 +1,18 @@
 import path from 'node:path'
 import { intro, note, outro, spinner } from '@clack/prompts'
-import { Command } from 'commander'
-import { logger } from '../config'
+import { logger } from '@vein/core/config'
 import {
     collectAllSummaries,
     type FailedResult,
     type ImportedResult,
     importBatch,
     type SkippedResult,
-} from '../service/import.service'
-import * as store from '../store'
-import type { DocNode } from '../tree/type'
-import { md5 } from '../utils/common'
-import { segmentText } from '../utils/segment'
+} from '@vein/core/service/import'
+import * as store from '@vein/core/store'
+import type { DocNode } from '@vein/core/tree'
+import { md5 } from '@vein/core/utils/common'
+import { segmentText } from '@vein/core/utils/segment'
+import { Command } from 'commander'
 import { createCachedSummarizer, setupProjectModel } from './command-utils'
 
 const log = logger.child({ module: 'markdown' })

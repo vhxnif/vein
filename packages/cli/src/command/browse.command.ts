@@ -1,6 +1,6 @@
 import { intro, note, outro, select } from '@clack/prompts'
+import * as store from '@vein/core/store'
 import type { Command } from 'commander'
-import * as store from '../store'
 import { setupProjectModel } from './command-utils'
 
 const PER_PAGE = 20

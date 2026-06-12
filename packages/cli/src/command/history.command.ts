@@ -1,8 +1,8 @@
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { intro, note, outro, select } from '@clack/prompts'
+import { resolveProjectRoot, veinDir } from '@vein/core/config'
 import type { Command } from 'commander'
-import { resolveProjectRoot, veinDir } from '../config'
 import { formatDuration } from '../utils/cli-helpers'
 
 type HistoryEntry = {
