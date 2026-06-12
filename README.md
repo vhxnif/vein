@@ -128,6 +128,7 @@ AI Agent 深入文档节点 ──→ 阅读原文、理解上下文
 | 🗃️ **LLM 缓存** | `model_cache` 表缓存分词和摘要结果，避免重复调用 |
 | 🚀 **批量导入并发** | Phase 1 4 文件并行 LLM 处理 + Phase 2 串行 DB 写入（WAL 优化） |
 | 🖥️ **交互式 CLI** | 基于 `@clack/prompts` 的友好交互界面，支持非交互 JSON 模式 |
+| 🌐 **Web UI** | 浏览器端全功能界面，实时 SSE 检索进度、文档树浏览、项目配置 |
 
 ---
 
@@ -155,6 +156,54 @@ AI Agent 深入文档节点 ──→ 阅读原文、理解上下文
 
 ---
 
+## 🌐 Web UI
+
+除了 CLI，Vein 还提供了一个基于浏览器的 Web 界面，支持所有核心功能。
+
+### 启动
+
+```bash
+# macOS / Linux（Bun 原生支持 better-sqlite3）
+bun run dev:web
+
+# Windows / Node.js（构建后运行）
+bun run dev:web:node
+
+# 生产构建
+bun run build:web
+cd packages/web && bun run start
+```
+
+开发模式下：
+- API 服务器运行在 `http://localhost:3000`
+- 前端开发服务器运行在 `http://localhost:5173`（Vite HMR，自动代理 API 请求）
+
+生产模式下，Hono 服务器在 `:3000` 同时提供 API 和前端静态文件。
+
+### 功能
+
+| 页面 | 功能 |
+|------|------|
+| **Home** | 项目概览、文档/查询统计、快速搜索入口 |
+| **Ask** | AI 检索核心页面：输入查询 → 实时 SSE 进度流 → Markdown 结果 + Review 自检 |
+| **Docs** | 文档列表（分页）、文档详情（大纲树 + 节点原文阅读）、导入/删除 |
+| **History** | 查询历史（按日期分组）、展开查看完整问答 |
+| **Settings** | 项目配置（名称、主模型、摘要模型、分词模型） |
+
+Web UI 采用 [Kami](https://github.com/tw93/Kami) 设计语言：暖色羊皮纸底、墨水蓝单色强调、Serif 排版层级，界面如印刷品般克制优雅。
+
+### 技术栈
+
+| 层 | 技术 |
+|---|------|
+| **API 服务** | Hono（路由、CORS、SSE 流式响应） |
+| **前端框架** | React 19 + Vite |
+| **数据管理** | TanStack Query（服务端状态缓存）+ TanStack Router（类型安全路由） |
+| **样式** | Tailwind CSS v4 + Kami 设计令牌（CSS 变量） |
+| **AI 后端** | 复用 `@vein/core` 全部业务能力 |
+
+---
+
 ## 🏗️ 架构设计
 
 ### 包结构（Monorepo）
@@ -163,7 +212,8 @@ AI Agent 深入文档节点 ──→ 阅读原文、理解上下文
 vein/
 ├── packages/
 │   ├── core/          # @vein/core — 业务层（AI / DB / 文档树 / 配置）
-│   └── cli/           # @vein/cli — thin client（命令解析 + 交互 I/O）
+│   ├── cli/           # @vein/cli — thin client（命令解析 + 交互 I/O）
+│   └── web/           # @vein/web — Web UI（Hono API + React SPA）
 ├── package.json       # workspace 根
 └── biome.json         # 代码规范
 ```
