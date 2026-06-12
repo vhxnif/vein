@@ -135,28 +135,30 @@ function flattenTreeForSelect(tree: DocNode[], depth = 0): FlatSelectNode[] {
 // ── Document detail sub-menu ───────────────────────────────────────
 
 async function showDocDetailMenu(docId: string): Promise<'back' | 'deleted'> {
-    await drainStdin()
     const doc = await getDocumentDetail(docId)
     if (!doc) {
         note(`Doc ${docId.slice(0, 8)} no longer exists.`)
         return 'deleted'
     }
 
-    const detail = await formatDocDetail(docId)
-    note(detail)
+    const sourceLabel = doc.sourcePath
+        ? doc.sourcePath.length > 40
+            ? `...${doc.sourcePath.slice(-37)}`
+            : doc.sourcePath
+        : 'unknown'
 
     const action = await safeSelect({
-        message: `Document: ${doc.title}`,
+        message: `Document: ${doc.title} · ${doc.nodeCount} nodes · ${sourceLabel}`,
         options: [
             {
-                value: 'outline',
-                label: '📋  Outline',
-                hint: 'heading tree',
+                value: 'detail',
+                label: '📋  View Details',
+                hint: 'id, created, FTS preview, extra metadata',
             },
             {
-                value: 'metadata',
-                label: '📄  Metadata',
-                hint: 'raw metadata JSON',
+                value: 'outline',
+                label: '🌳  Outline',
+                hint: 'heading tree',
             },
             {
                 value: 'fts',
@@ -165,7 +167,7 @@ async function showDocDetailMenu(docId: string): Promise<'back' | 'deleted'> {
             },
             {
                 value: 'nodes',
-                label: '🌳  Browse Nodes',
+                label: '📖  Browse Nodes',
                 hint: `select a section to read (${doc.nodeCount} nodes)`,
             },
             {
@@ -186,19 +188,14 @@ async function showDocDetailMenu(docId: string): Promise<'back' | 'deleted'> {
     }
 
     switch (action) {
+        case 'detail': {
+            const detail = await formatDocDetail(docId)
+            note(detail)
+            break
+        }
         case 'outline': {
             const outline = await formatDocOutline(docId)
             note(outline)
-            break
-        }
-        case 'metadata': {
-            try {
-                const meta = JSON.parse(doc.metadata)
-                const formatted = JSON.stringify(meta, null, 2)
-                note(formatted)
-            } catch {
-                note(`(unparseable) ${doc.metadata}`)
-            }
             break
         }
         case 'fts': {
@@ -341,6 +338,13 @@ async function showNodeDetail(
     }
     note(lines.join('\n'))
 
+    // Pause so the user can read the content before the node list
+    // select prompt pushes it up. Single-option select = just press Enter.
+    await safeSelect({
+        message: 'Reading the node content above ↑',
+        options: [{ value: 'ok', label: '←  Back to node list' }],
+    })
+
     await browseDocNodes(docId, nodePage)
 }
 
@@ -422,7 +426,6 @@ async function browseDocsPage(page: number): Promise<void> {
         return
     }
     await browseDocsPage(page)
-    return
 }
 
 // ── Top-level browse command ───────────────────────────────────────
