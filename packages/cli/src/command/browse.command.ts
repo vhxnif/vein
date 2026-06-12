@@ -172,7 +172,7 @@ async function showDocDetailMenu(docId: string): Promise<'back' | 'deleted'> {
             },
             {
                 value: 'delete',
-                label: '🗑   Delete',
+                label: '🗑️  Delete',
                 hint: 'remove this document',
             },
             {
