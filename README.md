@@ -43,24 +43,24 @@
 git clone https://github.com/vhxnif/vein.git
 cd vein
 
-# 安装依赖
+# 安装依赖（Bun workspaces）
 bun install
 
-# 构建生产包
+# 构建 CLI
 bun run build
 
-# 本地使用
-bun link
+# 全局 link（构建 + link 到 PATH）
+bun run link
 ```
 
 ### 初始化项目
 
 ```bash
 # 在当前目录创建 Vein 项目
-node build/vein.js new my-knowledge-base
+vein new my-knowledge-base
 
-# 或使用开发模式直接运行
-bun run src/command/vein.ts new my-knowledge-base
+# 或直接运行构建产物
+node packages/cli/dist/vein.js new my-knowledge-base
 ```
 
 交互式引导会帮你设置项目名称、AI provider 和模型。初始化完成后自动写入 `~/.config/vein/projects.json` 全局注册表。
@@ -156,6 +156,20 @@ AI Agent 深入文档节点 ──→ 阅读原文、理解上下文
 ---
 
 ## 🏗️ 架构设计
+
+### 包结构（Monorepo）
+
+```
+vein/
+├── packages/
+│   ├── core/          # @vein/core — 业务层（AI / DB / 文档树 / 配置）
+│   └── cli/           # @vein/cli — thin client（命令解析 + 交互 I/O）
+├── package.json       # workspace 根
+└── biome.json         # 代码规范
+```
+
+- **Core**：提供完整业务能力（`@vein/core` 单一入口），CLI / 未来 Web 模块只调用高层 API
+- **CLI**：不直接访问 store / pi-ai / 文件系统，所有逻辑委托给 core
 
 ### 数据模型
 
@@ -264,6 +278,7 @@ AI Provider 通过 `@earendil-works/pi-ai` 统一适配，支持 OpenAI / DeepSe
 | 层级 | 技术 |
 |------|------|
 | **运行时** | Node.js（开发用 Bun 运行 TS 源码） |
+| **包管理** | Bun workspaces（monorepo） |
 | **数据库** | SQLite (better-sqlite3, WAL 模式) |
 | **ORM** | Drizzle ORM |
 | **全文搜索** | FTS5 unicode61 + BM25 排序 |
