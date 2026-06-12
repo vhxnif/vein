@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-import { setProjectOverride } from '@vein/core/config'
+import { getProjectPath, setProjectOverride } from '@vein/core'
 import { Command } from 'commander'
-import { getProjectPath } from '../config/global'
 import { register as registerAsk } from './ask.command'
 import { register as registerBrowse } from './browse.command'
 import { register as registerConfig } from './config.command'

@@ -1,6 +1,7 @@
 import type { ModelProvider } from '../config'
 import * as store from '../store'
 import { segmentText } from '../utils/segment'
+import type { LibrarianResult, TraceStep } from './librarian'
 
 /**
  * Shared business logic: segment + FTS search + enrich metadata.
@@ -27,4 +28,63 @@ async function searchDocsByKeyword(
     return JSON.stringify(enriched)
 }
 
-export { searchDocsByKeyword }
+/**
+ * Resolve doc IDs in a trace to human-readable document names.
+ * Returns a map of docId → doc name (or short ID fallback).
+ */
+async function resolveDocNames(
+    trace: TraceStep[]
+): Promise<Map<string, string>> {
+    const docIds = new Set<string>()
+    for (const s of trace) {
+        const docId = (s.args as { docId?: string })?.docId
+        if (docId) docIds.add(docId)
+    }
+    const map = new Map<string, string>()
+    await Promise.all(
+        [...docIds].map(async (id) => {
+            const doc = await store.getDoc(id)
+            if (doc) {
+                try {
+                    const meta = JSON.parse(doc.metadata) as {
+                        title?: string
+                    }
+                    map.set(id, meta.title ?? id.slice(0, 8))
+                } catch {
+                    map.set(id, id.slice(0, 8))
+                }
+            } else {
+                map.set(id, id.slice(0, 8))
+            }
+        })
+    )
+    return map
+}
+
+type SearchOptions = {
+    segmenter?: ModelProvider
+    onStep?: (label: string) => void
+}
+
+type SearchResult = LibrarianResult & {
+    docNames: Map<string, string>
+}
+
+/**
+ * Full search pipeline: librarian query + automatic doc name resolution.
+ * CLI/web modules should use this instead of calling librarian directly.
+ */
+async function searchDocuments(
+    query: string,
+    opts?: SearchOptions
+): Promise<SearchResult> {
+    const { librarian } = await import('./librarian')
+    const result = await librarian(query, opts?.onStep, {
+        segmenter: opts?.segmenter,
+    })
+    const docNames = await resolveDocNames(result.trace)
+    return { ...result, docNames }
+}
+
+export type { SearchOptions, SearchResult }
+export { resolveDocNames, searchDocsByKeyword, searchDocuments }

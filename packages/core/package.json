@@ -4,16 +4,7 @@
     "type": "module",
     "main": "./src/index.ts",
     "exports": {
-        ".": "./src/index.ts",
-        "./ai": "./src/ai/index.ts",
-        "./config": "./src/config/index.ts",
-        "./config/type": "./src/config/type.ts",
-        "./store": "./src/store/index.ts",
-        "./tree": "./src/tree/type.ts",
-        "./tree/markdown_split": "./src/tree/markdown_split.ts",
-        "./service/import": "./src/service/import.service.ts",
-        "./utils/common": "./src/utils/common.ts",
-        "./utils/segment": "./src/utils/segment.ts"
+        ".": "./src/index.ts"
     },
     "dependencies": {
         "@earendil-works/pi-agent-core": "^0.78.0",

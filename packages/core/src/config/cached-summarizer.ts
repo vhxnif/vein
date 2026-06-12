@@ -1,27 +1,20 @@
-import { createSummarizer, setModelProvider } from '@vein/core/ai'
-import {
-    loadProjectConfig,
-    logger,
-    resolveProjectRoot,
-} from '@vein/core/config'
-import type { ProjectConfig } from '@vein/core/config/type'
-import * as store from '@vein/core/store'
-import { md5 } from '@vein/core/utils/common'
-import { modelKey } from '../utils/cli-helpers'
+import { createSummarizer } from '../ai/base'
+import * as store from '../store'
+import { md5 } from '../utils/common'
+import { logger } from './index'
+import type { ModelProvider, ProjectConfig } from './type'
 
-const log = logger.child({ module: 'command-utils' })
+const log = logger.child({ module: 'summarizer' })
 
-async function setupProjectModel(): Promise<ProjectConfig | undefined> {
-    const root = resolveProjectRoot()
-    if (!root) return
-    const config = await loadProjectConfig(root)
-    if (config?.model) {
-        setModelProvider(config.model)
-    }
-    return config
+function modelKey(provider: ModelProvider): string {
+    return `${provider.provider}/${provider.model}`
 }
 
-function createCachedSummarizer(config: ProjectConfig) {
+/**
+ * Create a summarizer with built-in model_cache caching and 60s timeout.
+ * Uses config.summarizer if set, otherwise falls back to config.model.
+ */
+export function createCachedSummarizer(config: ProjectConfig) {
     const summaryProvider = config.summarizer ?? config.model
     const key = modelKey(summaryProvider)
     const raw = createSummarizer(config.summarizer)
@@ -50,5 +43,3 @@ function createCachedSummarizer(config: ProjectConfig) {
         return response
     }
 }
-
-export { createCachedSummarizer, setupProjectModel }

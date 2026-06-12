@@ -1,12 +1,13 @@
 import { autocomplete, intro, note, outro, select } from '@clack/prompts'
-import { getModels, getProviders } from '@earendil-works/pi-ai'
-import { setModelProvider } from '@vein/core/ai'
+import type { ModelProvider, ProjectConfig } from '@vein/core'
 import {
+    listModels,
+    listProviders,
     loadProjectConfig,
     resolveProjectRoot,
     saveProjectConfig,
-} from '@vein/core/config'
-import type { ModelProvider, ProjectConfig } from '@vein/core/config/type'
+    setModelProvider,
+} from '@vein/core'
 import type { Command } from 'commander'
 
 const formatMd = (md?: ModelProvider) =>
@@ -43,14 +44,14 @@ async function pickModel(
 
     const provider = (await select({
         message: 'Provider:',
-        options: getProviders().map((p) => ({
+        options: listProviders().map((p) => ({
             value: p as string,
             label: p,
         })),
     })) as ModelProvider['provider'] | symbol
     if (typeof provider !== 'string') return current
 
-    const models = getModels(provider)
+    const models = listModels(provider)
     const initialValue =
         current?.provider === provider ? current.model : models[0]?.id
     const model = await autocomplete({

@@ -235,4 +235,139 @@ function collectAllSummaries(tree: DocNode): string[] {
     return summaries
 }
 
-export { collectAllSummaries }
+type ResegmentResult = {
+    written: number
+    skipped: number
+    failed: number
+}
+
+/**
+ * Resegment all documents: collect summaries → LLM segment → update FTS index.
+ * Skips documents whose summaryHash hasn't changed (unless force=true).
+ */
+async function resegmentAllDocuments(
+    config: ProjectConfig,
+    force = false
+): Promise<ResegmentResult> {
+    const segmenter = config.segmenter ?? config.model
+
+    const allDocs = await store.getAllDocs()
+    if (allDocs.length === 0) {
+        return { written: 0, skipped: 0, failed: 0 }
+    }
+
+    // Phase 1: identify documents needing resegment
+    const toResegment: Array<{
+        docId: string
+        docName: string
+        combinedSummary: string
+        meta: Record<string, unknown>
+    }> = []
+
+    for (const d of allDocs) {
+        let meta: Record<string, unknown> = {}
+        try {
+            meta = JSON.parse(d.metadata) as Record<string, unknown>
+        } catch {
+            log.warn({
+                docId: d.id,
+                content: 'Invalid metadata JSON, skipping',
+            })
+            continue
+        }
+
+        const tree = await store.getFullTree<{
+            summary?: string
+            prefixSummary?: string
+        }>(d.id)
+        const rootNode = tree[0]
+        const allSummaries = rootNode
+            ? collectAllSummaries(rootNode as DocNode)
+            : []
+        const combinedSummary = allSummaries.filter(Boolean).join('\n')
+
+        if (!combinedSummary) continue
+
+        if (!force) {
+            const newHash = md5(combinedSummary)
+            const oldHash = meta.summaryHash as string | undefined
+            if (oldHash && newHash === oldHash) continue
+        }
+
+        toResegment.push({
+            docId: d.id,
+            docName: (meta.title as string) || d.title || d.id,
+            combinedSummary,
+            meta,
+        })
+    }
+
+    const skipped = allDocs.length - toResegment.length
+
+    if (toResegment.length === 0) {
+        return { written: 0, skipped, failed: 0 }
+    }
+
+    // Phase 2: parallel LLM segmentation
+    let failed = 0
+    const PARALLEL = 4
+    const segmented: Array<{
+        docId: string
+        docName: string
+        combinedSummary: string
+        meta: Record<string, unknown>
+        text: string
+    }> = []
+
+    for (let i = 0; i < toResegment.length; i += PARALLEL) {
+        const chunk = toResegment.slice(i, i + PARALLEL)
+        const chunkResults = await Promise.all(
+            chunk.map(async (item) => {
+                try {
+                    const text = await segmentText(
+                        item.combinedSummary,
+                        segmenter
+                    )
+                    return { ...item, text }
+                } catch (err) {
+                    log.error({
+                        err,
+                        docId: item.docId,
+                        content: 'Re-segment failed',
+                    })
+                    return { ...item, text: '' }
+                }
+            })
+        )
+        for (const r of chunkResults) {
+            if (r.text) {
+                segmented.push(r)
+            } else {
+                failed++
+            }
+        }
+    }
+
+    // Phase 3: serial DB writes
+    let written = 0
+    for (const item of segmented) {
+        await store.updateDocFts(item.docId, item.text)
+        await store.updateDocMetadata(item.docId, {
+            ...item.meta,
+            summaryHash: md5(item.combinedSummary),
+        })
+        written++
+    }
+
+    log.info({
+        written,
+        skipped,
+        failed,
+        content: 'Resegment complete',
+    })
+
+    return { written, skipped, failed }
+}
+
+export type { ResegmentResult }
+export { collectAllSummaries, resegmentAllDocuments }

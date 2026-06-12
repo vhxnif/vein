@@ -1,53 +1,112 @@
 # @vein/core
 
-Core 能力包：AI Agent、数据库、文档树、配置、导入管道、工具函数。不依赖任何 UI/CLI 层。
+Core 能力包：作为"服务端"提供完整业务能力。AI Agent、数据库、文档树、配置、导入管道、历史记录、全局注册表。不依赖任何 UI/CLI 层。
+
+外部（CLI / Web）只需通过 `@vein/core` 单一入口导入高层函数，不接触内部模块。
 
 ## 目录
 
 ```
 src/
 ├── ai/                    # AI Agent
-│   ├── base.ts                # call + ToolDef + createSummarizer + setModelProvider
+│   ├── base.ts                # call + ToolDef + createSummarizer + setModelProvider + listProviders + listModels
 │   ├── librarian.ts           # 主 Agent：search → analyzeDocument → reviewResult
 │   ├── reviewer.ts            # 审查 Agent：getReviewSource → 评判 pass/partial/fail
-│   ├── tools.ts               # searchDocsByKeyword（FTS 搜索 + 分词）
-│   └── index.ts               # 统一导出
-├── config/                # 配置（不含 CLI 专属）
-│   ├── index.ts               # logger、APP_NAME、resolveProjectRoot、project config 读写、initProject
-│   └── type.ts                # ModelProvider、ProjectConfig 类型
+│   ├── tools.ts               # searchDocsByKeyword + resolveDocNames + searchDocuments
+│   └── index.ts
+├── config/                # 配置
+│   ├── index.ts               # logger、APP_NAME、resolveProjectRoot、project config 读写、initProject、setupProjectModel
+│   ├── type.ts                # ModelProvider、ProjectConfig 类型
+│   ├── global.ts              # 全局项目注册表（~/.config/vein/projects.json CRUD）
+│   └── cached-summarizer.ts   # createCachedSummarizer（带缓存 + 超时）
 ├── service/               # 业务逻辑（与 I/O 分离）
-│   └── import.service.ts      # importBatch：并行 LLM 摘要/分词 + 串行 DB 写入
+│   ├── import.service.ts      # importBatch + resegmentAllDocuments
+│   └── history.service.ts     # saveSearchHistory + listSearchHistory + getSearchHistoryEntry
 ├── store/                 # 数据库层
-│   ├── schema.ts              # Drizzle schema（docs, nodes, tree_closure, model_cache, docs_fts）
-│   ├── client.ts              # better-sqlite3 连接 + drizzle wrapper + Singleton
-│   ├── index.ts               # 树 CRUD + doc/FTS5/search/分页/cache 操作
-│   ├── migrate.ts             # runMigrations（幂等，_migrations 表追踪）
-│   └── migrations/            # SQL 迁移文件 + config.schema.json + config_schema.ts
+│   ├── schema.ts              # Drizzle schema
+│   ├── client.ts              # better-sqlite3 连接 + Singleton
+│   ├── index.ts               # 树 CRUD + doc/FTS5/search/分页/cache 操作 + listDocuments + getDocumentDetail
+│   ├── migrate.ts             # runMigrations
+│   └── migrations/            # SQL 迁移文件
 ├── tree/                  # 文档树
 │   ├── type.ts                # TreeNode<T>、BaseDocNode、DocNode
-│   └── markdown_split.ts      # mdToTree：markdown → 扁平节点 → 瘦身 → 树形 → LLM 摘要
+│   └── markdown_split.ts      # mdToTree
 ├── utils/                 # 通用工具
 │   ├── common.ts              # uuid, md5, hash, getErrorMessage
-│   └── segment.ts             # LLM 中文分词（FTS5 unicode61 适配，含 chunk 拆分 + 缓存）
-└── index.ts               # 包统一导出
+│   └── segment.ts             # LLM 中文分词
+└── index.ts               # 统一导出（单一入口 @vein/core）
 ```
 
 ## 公开 API
 
-通过 `package.json` 的 `exports` 提供子路径：
+全部通过 `import { ... } from '@vein/core'` 导出。不提供子路径。
 
-| 导入路径 | 导出内容 |
-|---|---|
-| `@vein/core` | 所有公开 API |
-| `@vein/core/ai` | `call`, `createSummarizer`, `setModelProvider`, `getModelProvider`, `librarian`, `reviewer`, `searchDocsByKeyword`, 相关类型 |
-| `@vein/core/config` | `logger`, `APP_NAME`, `resolveProjectRoot`, `setProjectOverride`, `loadProjectConfig`, `saveProjectConfig`, `initProject`, `veinDir` |
-| `@vein/core/config/type` | `ModelProvider`, `ProjectConfig` |
-| `@vein/core/store` | 全部 DB 操作函数（`getFullTree`, `insertDoc`, `searchDocsByKeyword` 等） |
-| `@vein/core/tree` | `TreeNode`, `BaseDocNode`, `DocNode` |
-| `@vein/core/tree/markdown_split` | `mdToTree`, `renderDocOutline` |
-| `@vein/core/service/import` | `importBatch`, `collectAllSummaries`, 相关类型 |
-| `@vein/core/utils/common` | `uuid`, `md5`, `hash`, `getErrorMessage` |
-| `@vein/core/utils/segment` | `segmentText` |
+### 项目生命周期
+
+```typescript
+initProject(cwd, name, model)          → ProjectConfig
+loadProjectConfig(root)                → ProjectConfig | undefined
+saveProjectConfig(root, config)        → void
+resolveProjectRoot()                   → string | undefined
+setProjectOverride(path | undefined)   → void
+setupProjectModel()                    → ProjectConfig | undefined
+```
+
+### 模型配置
+
+```typescript
+setModelProvider(provider)  → void
+getModelProvider()          → ModelProvider
+listProviders()             → string[]
+listModels(provider)        → {id, name}[]
+createCachedSummarizer(cfg) → (prompt: string) => Promise<string>
+```
+
+### 文档导入
+
+```typescript
+importBatch(files, config, summarizer, force, onProgress?) → ImportResult[]
+resegmentAllDocuments(config, force) → { written, skipped, failed }
+```
+
+### 文档检索
+
+```typescript
+searchDocuments(query, opts?) → SearchResult
+// SearchResult = LibrarianResult & { docNames: Map<string, string> }
+// opts: { segmenter?, onStep? }
+```
+
+### 文档浏览
+
+```typescript
+listDocuments(page, pageSize) → { docs: DocInfo[], total: number }
+getDocumentDetail(docId)      → DocInfo | undefined
+```
+
+### 历史记录
+
+```typescript
+saveSearchHistory(root, query, result, elapsedMs)  → id
+listSearchHistory(root)                             → HistoryEntry[]
+getSearchHistoryEntry(root, id)                     → HistoryEntry | undefined
+```
+
+### 全局注册表
+
+```typescript
+registerProject(name, path)   → void
+unregisterProject(name)       → void
+getProjectPath(name)          → string | undefined
+loadGlobalProjects()          → { projects: Record<string, string> }
+```
+
+### 基础
+
+```typescript
+APP_NAME: 'vein'
+logger: pino.Logger
+```
 
 ## 数据模型
 
@@ -71,23 +130,6 @@ TreeNode<T> {
 | `model_cache` | 响应缓存 | (md5, model) UNIQUE，hit_count 自增 |
 | `docs_fts` | 全文索引 | FTS5 unicode61，写入前经 segmentText 分词 |
 
-### 写路径
-
-```
-insertTree(tree, docId)
-  → BEGIN
-  → FLATTEN → INSERT nodes (逐条)
-  → INSERT tree_closure (self + ancestors)
-  → COMMIT
-
-insertDoc(id, metadata, summary)
-  → BEGIN
-  → INSERT OR IGNORE docs
-  → DELETE docs_fts WHERE doc_id = ?  (FTS5 不支持 upsert)
-  → INSERT docs_fts
-  → COMMIT
-```
-
 ## AI Agent 架构
 
 ### Librarian（主 Agent）
@@ -100,23 +142,14 @@ PROMPT + tools [ searchDocsByKeyword, analyzeDocument, reviewResult ]
 
 - 使用 `@earendil-works/pi-agent-core` 的 `Agent` 类
 - `analyzeDocument` 内并发控制：`Semaphore(MAX_PARALLEL_ANALYZE=5)`
-- Context pruning：老文档结构/分析结果压缩（compactDocText / compactAnalyzeResult）
 
 ### Document Analyzer（子 Agent）
 
-```
-DOC_ANALYZER_PROMPT + tools [ getDocStructure, getDocNodeDetails ]
-  → 独立 Agent 实例，≤10 步预算
-  → beforeToolCall hook 强制约束
-  → 输出 Markdown：## 相关性 / ## 概述 / ## 关键发现 / ## 数据来源 / ## 详细分析
-```
+独立 Agent 实例，≤10 步预算，输出 Markdown 格式分析。
 
 ### Reviewer（审查 Agent）
 
-```
-纯评估，无工具 → call(basePrompt + getReviewSource)
-  → 返回 { verdict: "pass"|"partial"|"fail", score: 1-5, reason, suggestion }
-```
+纯评估 Agent，返回 `{ verdict, score, reason, suggestion }`。
 
 ## 导入管道
 
@@ -124,41 +157,11 @@ DOC_ANALYZER_PROMPT + tools [ getDocStructure, getDocNodeDetails ]
 1. **Phase 1 — 并行 LLM** (`IMPORT_PARALLEL=4`)：`readFile → mdToTree → segmentText`
 2. **Phase 2 — 串行 DB**：`deleteTree → insertTree → insertDoc`
 
-缓存：summarizer 走 `model_cache(md5(prompt), model)`，segmentText 走 `model_cache(md5(systemPrompt+text), model)`。
-
-## 配置
-
-### 项目配置 (`packages/core/src/config/index.ts`)
-
-```typescript
-APP_NAME = 'vein'           // 用于 ~/.config/vein/ 日志/配置目录
-logger                      // pino 实例，仅写文件，sync: true
-veinDir = '.vein'           // 项目标志目录
-
-resolveProjectRoot()        // 优先 _projectOverridePath，其次 cwd 上探
-setProjectOverride(path)    // 由 CLI --project 设置
-loadProjectConfig(root)     // 读取 .vein/config.json
-saveProjectConfig(root, c)  // 写入 .vein/config.json
-initProject(cwd, name, md)  // 创建 .vein/ + config + schema + 迁移
-```
-
-### 类型 (`packages/core/src/config/type.ts`)
-
-```typescript
-type ModelProvider = { provider: KnownProvider; model: string }
-type ProjectConfig = {
-    name: string; db: string; model: ModelProvider;
-    summarizer?: ModelProvider; segmenter?: ModelProvider
-}
-```
-
 ## 日志
 
 - **输出**：仅文件 `~/.config/vein/logs/vein-YYYY-MM-DD.log`，JSON 每行一条
-- **创建**：`import { logger } from '@vein/core/config'`
-- **子模块**：`logger.child({ module: 'xxx' })`
-- **级别**：`debug`（默认），生产可调 `info`
-- **约束**：禁止记录完整 LLM prompt/response/文档树；Agent 结果仅记摘要（resultSummary + resultLen）
+- **创建**：`import { logger } from '@vein/core'` → `logger.child({ module: 'xxx' })`
+- **约束**：禁止记录完整 LLM prompt/response/文档树
 
 ## 开发
 
@@ -166,5 +169,5 @@ type ProjectConfig = {
 # 类型检查（从根目录）
 bun run check
 
-# 仅构建 core 不需要单独构建（被 CLI 打包时卷入）
+# core 不需要单独构建（被 CLI 打包时卷入）
 ```

@@ -1,10 +1,12 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import path from 'node:path'
 import { intro, note, outro, spinner, text } from '@clack/prompts'
-import type { LibrarianResult } from '@vein/core/ai'
-import { librarian } from '@vein/core/ai'
-import { logger, resolveProjectRoot, veinDir } from '@vein/core/config'
-import * as store from '@vein/core/store'
+import type { LibrarianResult, SearchResult } from '@vein/core'
+import {
+    logger,
+    resolveProjectRoot,
+    saveSearchHistory,
+    searchDocuments,
+    setupProjectModel,
+} from '@vein/core'
 import type { Command } from 'commander'
 import {
     colorize,
@@ -13,82 +15,8 @@ import {
     VERDICT_COLOR,
     VERDICT_ICON,
 } from '../utils/cli-helpers'
-import { setupProjectModel } from './command-utils'
 
 const log = logger.child({ module: 'ask' })
-
-type HistoryEntry = {
-    id: string
-    query: string
-    answer: string
-    verdict?: string
-    score?: number
-    elapsedMs: number
-    steps: number
-    trace?: unknown[]
-}
-
-function historyDir(root: string): string {
-    return path.join(root, veinDir, 'ask-history')
-}
-
-async function saveHistory(
-    root: string,
-    query: string,
-    result: LibrarianResult,
-    elapsedMs: number
-): Promise<string> {
-    const now = new Date()
-    const id = `${now.toISOString().slice(0, 10)}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
-    const dir = historyDir(root)
-    await mkdir(dir, { recursive: true })
-
-    const entry: HistoryEntry = {
-        id,
-        query,
-        answer: result.content || '',
-        verdict: result.review?.verdict,
-        score: result.review?.score,
-        elapsedMs,
-        steps: result.trace.length,
-        trace: result.trace,
-    }
-
-    await writeFile(
-        path.join(dir, `${id}.json`),
-        JSON.stringify(entry, null, 2)
-    )
-    return id
-}
-
-async function resolveDocNames(
-    trace: LibrarianResult['trace']
-): Promise<Map<string, string>> {
-    const docIds = new Set<string>()
-    for (const s of trace) {
-        const docId = (s.args as { docId?: string })?.docId
-        if (docId) docIds.add(docId)
-    }
-    const map = new Map<string, string>()
-    await Promise.all(
-        [...docIds].map(async (id) => {
-            const doc = await store.getDoc(id)
-            if (doc) {
-                try {
-                    const meta = JSON.parse(doc.metadata) as {
-                        title?: string
-                    }
-                    map.set(id, meta.title ?? id.slice(0, 8))
-                } catch {
-                    map.set(id, id.slice(0, 8))
-                }
-            } else {
-                map.set(id, id.slice(0, 8))
-            }
-        })
-    )
-    return map
-}
 
 function formatTrace(
     result: LibrarianResult,
@@ -197,15 +125,14 @@ export function register(program: Command) {
                 log.info({ sessionId, query, content: 'Ask session start' })
 
                 const startedAt = performance.now()
-                let result: LibrarianResult
+                let result: SearchResult
                 try {
-                    result = await librarian(
-                        query,
-                        searchSpinner
+                    result = await searchDocuments(query, {
+                        segmenter: config.segmenter,
+                        onStep: searchSpinner
                             ? (label) => searchSpinner.message(label)
                             : undefined,
-                        { segmenter: config.segmenter }
-                    )
+                    })
                 } catch (err) {
                     searchSpinner?.stop('Search failed')
                     if (!interactive) {
@@ -223,12 +150,16 @@ export function register(program: Command) {
 
                 const projectRoot = resolveProjectRoot()
                 if (projectRoot) {
-                    saveHistory(projectRoot, query, result, elapsedMs).catch(
-                        (err) =>
-                            log.warn({
-                                err,
-                                content: 'Failed to save ask history',
-                            })
+                    saveSearchHistory(
+                        projectRoot,
+                        query,
+                        result,
+                        elapsedMs
+                    ).catch((err) =>
+                        log.warn({
+                            err,
+                            content: 'Failed to save ask history',
+                        })
                     )
                 }
 
@@ -268,8 +199,7 @@ export function register(program: Command) {
                 }
 
                 if (showTrace && result.trace.length > 0) {
-                    const docNames = await resolveDocNames(result.trace)
-                    note(formatTrace(result, docNames))
+                    note(formatTrace(result, result.docNames))
                 }
 
                 log.info({

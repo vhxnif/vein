@@ -1,6 +1,6 @@
 import { access, constants, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { APP_NAME, logger } from '@vein/core/config'
+import { APP_NAME, logger } from './index'
 
 const configDir = path.join(process.env.HOME ?? '~', '.config', APP_NAME)
 const projectsFile = path.join(configDir, 'projects.json')

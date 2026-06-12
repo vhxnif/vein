@@ -1,7 +1,7 @@
 import { access, constants } from 'node:fs/promises'
 import { confirm, intro, note, outro } from '@clack/prompts'
+import { loadGlobalProjects, unregisterProject } from '@vein/core'
 import type { Command } from 'commander'
-import { loadGlobalProjects, unregisterProject } from '../config/global'
 
 export function register(program: Command) {
     program

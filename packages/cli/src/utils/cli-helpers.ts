@@ -1,5 +1,5 @@
-import type { ModelProvider } from '@vein/core/config/type'
-import { getErrorMessage } from '@vein/core/utils/common'
+import type { ModelProvider } from '@vein/core'
+import { getErrorMessage } from '@vein/core'
 
 function modelKey(provider: ModelProvider): string {
     return `${provider.provider}/${provider.model}`

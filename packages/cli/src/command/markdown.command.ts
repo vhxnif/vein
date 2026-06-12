@@ -1,21 +1,15 @@
 import path from 'node:path'
 import { intro, note, outro, spinner } from '@clack/prompts'
-import { logger } from '@vein/core/config'
 import {
-    collectAllSummaries,
+    createCachedSummarizer,
     type FailedResult,
     type ImportedResult,
     importBatch,
+    resegmentAllDocuments,
     type SkippedResult,
-} from '@vein/core/service/import'
-import * as store from '@vein/core/store'
-import type { DocNode } from '@vein/core/tree'
-import { md5 } from '@vein/core/utils/common'
-import { segmentText } from '@vein/core/utils/segment'
+    setupProjectModel,
+} from '@vein/core'
 import { Command } from 'commander'
-import { createCachedSummarizer, setupProjectModel } from './command-utils'
-
-const log = logger.child({ module: 'markdown' })
 
 export function register(program: Command) {
     program
@@ -97,7 +91,7 @@ export function register(program: Command) {
                     )
                 }
             } else {
-                // Single-file mode: importBatch handles single file too
+                // Single-file mode
                 const s = spinner()
                 s.start('Preparing...')
                 const results = await importBatch(
@@ -141,147 +135,12 @@ export function register(program: Command) {
                         return
                     }
 
-                    const segmenter = config.segmenter ?? config.model
-
-                    const allDocs = await store.getAllDocs()
-                    if (allDocs.length === 0) {
-                        outro('No documents found.')
-                        return
-                    }
-
-                    intro(`Re-segmenting ${allDocs.length} document(s)`)
-
                     const force = options.force ?? false
-
-                    // Phase 1: identify documents needing resegment
-                    const toResegment: Array<{
-                        docId: string
-                        docName: string
-                        combinedSummary: string
-                        meta: Record<string, unknown>
-                    }> = []
-
-                    for (const d of allDocs) {
-                        let meta: Record<string, unknown> = {}
-                        try {
-                            meta = JSON.parse(d.metadata) as Record<
-                                string,
-                                unknown
-                            >
-                        } catch {
-                            log.warn({
-                                docId: d.id,
-                                content: 'Invalid metadata JSON, skipping',
-                            })
-                            continue
-                        }
-                        const docName =
-                            (meta.title as string) || d.title || d.id
-
-                        const tree = await store.getFullTree<{
-                            summary?: string
-                            prefixSummary?: string
-                        }>(d.id)
-                        const rootNode = tree[0]
-                        const allSummaries = rootNode
-                            ? collectAllSummaries(rootNode as DocNode)
-                            : []
-                        const combinedSummary = allSummaries
-                            .filter(Boolean)
-                            .join('\n')
-
-                        if (!combinedSummary) continue
-
-                        if (!force) {
-                            const newHash = md5(combinedSummary)
-                            const oldHash = meta.summaryHash as
-                                | string
-                                | undefined
-                            if (oldHash && newHash === oldHash) continue
-                        }
-
-                        toResegment.push({
-                            docId: d.id,
-                            docName,
-                            combinedSummary,
-                            meta,
-                        })
-                    }
-
-                    const skipped = allDocs.length - toResegment.length
-
-                    if (toResegment.length === 0) {
-                        outro(
-                            skipped > 0
-                                ? `${skipped} document(s) unchanged, nothing to do`
-                                : 'No summaries to segment'
-                        )
-                        return
-                    }
-
-                    // Phase 2: parallel LLM segmentation
-                    let done = 0
-                    let failed = 0
-                    const PARALLEL = 4
                     const segSpinner = spinner()
-                    segSpinner.start('Segmenting...')
-                    const segmented: Array<{
-                        docId: string
-                        docName: string
-                        combinedSummary: string
-                        meta: Record<string, unknown>
-                        text: string
-                    }> = []
+                    segSpinner.start('Re-segmenting...')
 
-                    for (let i = 0; i < toResegment.length; i += PARALLEL) {
-                        const chunk = toResegment.slice(i, i + PARALLEL)
-                        segSpinner.message(
-                            `Segmenting (${done}/${toResegment.length})...`
-                        )
-                        const chunkResults = await Promise.all(
-                            chunk.map(async (item) => {
-                                try {
-                                    const text = await segmentText(
-                                        item.combinedSummary,
-                                        segmenter
-                                    )
-                                    return { ...item, text }
-                                } catch (err) {
-                                    log.error({
-                                        err,
-                                        docId: item.docId,
-                                        content: 'Re-segment failed',
-                                    })
-                                    return { ...item, text: '' }
-                                }
-                            })
-                        )
-                        for (const r of chunkResults) {
-                            if (r.text) {
-                                segmented.push(r)
-                                done++
-                            } else {
-                                failed++
-                            }
-                        }
-                        segSpinner.message(
-                            `Segmented (${done}/${toResegment.length})${failed > 0 ? `, ${failed} failed` : ''}`
-                        )
-                    }
-
-                    // Phase 3: serial DB writes
-                    let written = 0
-                    for (const item of segmented) {
-                        segSpinner.message(
-                            `Writing (${written + 1}/${segmented.length})...`
-                        )
-                        await store.updateDocFts(item.docId, item.text)
-                        await store.updateDocMetadata(item.docId, {
-                            ...item.meta,
-                            summaryHash: md5(item.combinedSummary),
-                        })
-                        written++
-                    }
+                    const { written, skipped, failed } =
+                        await resegmentAllDocuments(config, force)
 
                     segSpinner.stop('Done.')
                     const parts: string[] = []

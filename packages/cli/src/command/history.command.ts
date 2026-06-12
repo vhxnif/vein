@@ -1,24 +1,12 @@
-import { readdir, readFile } from 'node:fs/promises'
-import path from 'node:path'
 import { intro, note, outro, select } from '@clack/prompts'
-import { resolveProjectRoot, veinDir } from '@vein/core/config'
+import type { HistoryEntry } from '@vein/core'
+import {
+    getSearchHistoryEntry,
+    listSearchHistory,
+    resolveProjectRoot,
+} from '@vein/core'
 import type { Command } from 'commander'
 import { formatDuration } from '../utils/cli-helpers'
-
-type HistoryEntry = {
-    id: string
-    query: string
-    answer: string
-    verdict?: string
-    score?: number
-    elapsedMs: number
-    steps: number
-    trace?: unknown[]
-}
-
-function historyDir(root: string): string {
-    return path.join(root, veinDir, 'ask-history')
-}
 
 function formatHistoryDetail(entry: HistoryEntry): string {
     const lines = [
@@ -57,49 +45,30 @@ export function register(program: Command) {
                     return
                 }
 
-                const dir = historyDir(root)
-                let files: string[]
-                try {
-                    files = (await readdir(dir))
-                        .filter((f) => f.endsWith('.json'))
-                        .sort()
-                        .reverse()
-                } catch {
+                const entries = await listSearchHistory(root)
+
+                if (entries.length === 0) {
                     outro('No ask history found.')
                     return
-                }
-
-                if (files.length === 0) {
-                    outro('No ask history found.')
-                    return
-                }
-
-                const loadEntry = async (filename: string) => {
-                    const raw = await readFile(
-                        path.join(dir, filename),
-                        'utf-8'
-                    )
-                    return JSON.parse(raw) as HistoryEntry
                 }
 
                 if (options?.last) {
-                    const entry = await loadEntry(files[0]!)
+                    const entry = entries[0]!
                     note(formatHistoryDetail(entry))
                     return
                 }
 
                 const PER_PAGE = 20
                 const page = options?.page ?? 1
-                const totalPages = Math.ceil(files.length / PER_PAGE)
-                const paged = files.slice(
+                const totalPages = Math.ceil(entries.length / PER_PAGE)
+                const paged = entries.slice(
                     (page - 1) * PER_PAGE,
                     page * PER_PAGE
                 )
 
                 if (options?.list) {
-                    intro(`Ask History (${files.length} total)`)
-                    for (const f of paged) {
-                        const entry = await loadEntry(f)
+                    intro(`Ask History (${entries.length} total)`)
+                    for (const entry of paged) {
                         const verdictStr = entry.verdict
                             ? `${entry.verdict} ${entry.score ?? '?'}/5`
                             : '—'
@@ -116,30 +85,27 @@ export function register(program: Command) {
                             `Page ${page}/${totalPages} · use -p <n> to navigate`
                         )
                     } else {
-                        outro(`${files.length} session(s)`)
+                        outro(`${entries.length} session(s)`)
                     }
                     return
                 }
 
                 // Interactive picker (loop until user cancels)
-                const buildChoices = async () => {
-                    const items = await Promise.all(
-                        paged.map(async (f) => {
-                            const entry = await loadEntry(f)
-                            const verdictStr = entry.verdict
-                                ? `${entry.verdict} ${entry.score ?? '?'}/5`
-                                : '—'
-                            const queryPreview =
-                                entry.query.length > 50
-                                    ? `${entry.query.slice(0, 50)}...`
-                                    : entry.query
-                            return {
-                                value: f,
-                                label: `${entry.id} │ ${verdictStr.padEnd(12)} │ ${queryPreview}`,
-                                hint: formatDuration(entry.elapsedMs),
-                            }
-                        })
-                    )
+                const buildChoices = () => {
+                    const items = paged.map((entry) => {
+                        const verdictStr = entry.verdict
+                            ? `${entry.verdict} ${entry.score ?? '?'}/5`
+                            : '—'
+                        const queryPreview =
+                            entry.query.length > 50
+                                ? `${entry.query.slice(0, 50)}...`
+                                : entry.query
+                        return {
+                            value: entry.id,
+                            label: `${entry.id} │ ${verdictStr.padEnd(12)} │ ${queryPreview}`,
+                            hint: formatDuration(entry.elapsedMs),
+                        }
+                    })
                     if (totalPages > 1) {
                         items.push({
                             value: '__next__',
@@ -150,10 +116,10 @@ export function register(program: Command) {
                     return items
                 }
 
-                intro(`Ask History (${files.length} total)`)
+                intro(`Ask History (${entries.length} total)`)
 
                 while (true) {
-                    const choices = await buildChoices()
+                    const choices = buildChoices()
                     const selected = await select({
                         message: 'Select a session (Esc to exit)',
                         options: choices,
@@ -169,8 +135,10 @@ export function register(program: Command) {
                         return
                     }
 
-                    const entry = await loadEntry(selected)
-                    note(formatHistoryDetail(entry))
+                    const entry = await getSearchHistoryEntry(root, selected)
+                    if (entry) {
+                        note(formatHistoryDetail(entry))
+                    }
                 }
             }
         )

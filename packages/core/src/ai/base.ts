@@ -2,6 +2,8 @@
 import {
     complete,
     getModel,
+    getModels,
+    getProviders,
     type Message,
     type Tool,
 } from '@earendil-works/pi-ai'
@@ -116,6 +118,19 @@ function createSummarizer(provider?: ModelProvider) {
         })
         return msg.content.findLast((it) => it.type === 'text')?.text ?? ''
     }
+}
+
+/** List available AI providers. */
+export function listProviders(): string[] {
+    return getProviders() as string[]
+}
+
+/** List available models for a given provider. */
+export function listModels(provider: string): { id: string; name: string }[] {
+    return getModels(provider as never).map((m) => ({
+        id: m.id,
+        name: m.name,
+    }))
 }
 
 export { call, createSummarizer }

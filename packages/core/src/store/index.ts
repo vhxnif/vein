@@ -588,6 +588,50 @@ async function getDocCount(): Promise<number> {
     return row?.count ?? 0
 }
 
+// ── high-level document listing ───────────────────────────────────
+
+type DocInfo = BrowseDoc
+
+/** Paginated document listing. Returns documents + total count. */
+async function listDocuments(
+    page: number,
+    pageSize: number
+): Promise<{ docs: DocInfo[]; total: number }> {
+    const [docs, total] = await Promise.all([
+        getDocsPaginated((page - 1) * pageSize, pageSize),
+        getDocCount(),
+    ])
+    return { docs, total }
+}
+
+/** Get a single document's info by ID. */
+async function getDocumentDetail(docId: string): Promise<DocInfo | undefined> {
+    const doc = await getDoc(docId)
+    if (!doc) return undefined
+    let meta: Record<string, unknown> = {}
+    try {
+        meta = JSON.parse(doc.metadata) as Record<string, unknown>
+    } catch {
+        // ignore parse error
+    }
+    // node count requires a separate query
+    const raw = getRawClient()
+    const countResult = await raw.execute({
+        sql: `SELECT COUNT(*) AS node_count FROM nodes WHERE doc_id = ?`,
+        args: [docId],
+    })
+    const nodeCount =
+        (countResult.rows[0] as { node_count: number })?.node_count ?? 0
+    return {
+        id: doc.id,
+        title: (meta.title as string) ?? 'Untitled',
+        sourcePath: (meta.sourcePath as string) ?? '',
+        nodeCount,
+        createdAt: doc.createdAt,
+        metadata: doc.metadata,
+    }
+}
+
 export {
     deleteDoc,
     deleteTree,
@@ -598,12 +642,14 @@ export {
     getDocCount,
     getDocFtsSummary,
     getDocsPaginated,
+    getDocumentDetail,
     getFullTree,
     getNodeDetails,
     getSiblings,
     getSubTree,
     insertDoc,
     insertTree,
+    listDocuments,
     purgeModelCache,
     searchDocsByKeyword,
     setCachedResponse,

@@ -111,25 +111,33 @@ vein/
 ### 包间依赖
 
 ```
-@vein/cli  ──→  @vein/core
-  │                 │
-  │  commander      │  @earendil-works/pi-ai
-  │  @clack/prompts │  @earendil-works/pi-agent-core
-  │                 │  better-sqlite3
-  │                 │  drizzle-orm
-  │                 │  pino
+@vein/cli (thin client)  ──→  @vein/core (业务层)
+  │                               │
+  │  commander                    │  @earendil-works/pi-ai
+  │  @clack/prompts               │  @earendil-works/pi-agent-core
+  │                               │  better-sqlite3
+  │                               │  drizzle-orm
+  │                               │  pino
 ```
 
-CLI 通过 `@vein/core` 的 exports 子路径导入：
-- `@vein/core/ai` — AI agent
-- `@vein/core/config` — logger, resolveProjectRoot, loadProjectConfig 等
-- `@vein/core/config/type` — ModelProvider, ProjectConfig 类型
-- `@vein/core/store` — 数据库操作
-- `@vein/core/tree` — TreeNode / BaseDocNode 类型
-- `@vein/core/tree/markdown_split` — mdToTree
-- `@vein/core/service/import` — importBatch
-- `@vein/core/utils/common` — md5, uuid, getErrorMessage
-- `@vein/core/utils/segment` — segmentText
+采用 **client-server 模式**：
+- **Core** 作为"服务端"提供完整业务能力，通过 `@vein/core` **单一入口**导出高层函数
+- **CLI** 作为 thin client，只做命令解析 + 交互式 I/O + 结果展示，**不直接访问 store / pi-ai / 文件系统**
+- 后续添加 web 模块时可直接复用 core API，无需修改 core
+
+CLI 全部从 `@vein/core` 导入（无子路径）：
+```typescript
+import {
+    setupProjectModel, listProviders, listModels,
+    importBatch, resegmentAllDocuments,
+    searchDocuments,
+    listDocuments, getDocumentDetail,
+    saveSearchHistory, listSearchHistory, getSearchHistoryEntry,
+    loadGlobalProjects, registerProject, unregisterProject, getProjectPath,
+    createCachedSummarizer, resolveProjectRoot, setProjectOverride,
+    logger, APP_NAME,
+} from '@vein/core'
+```
 
 ## 查询路径（Librarian 检索）
 
@@ -242,10 +250,10 @@ Reviewer 是独立的纯评估 Agent，评估维度：相关性、完整性、�
 `resolveProjectRoot()` 封装了上述逻辑，所有需要定位项目的地方（DB 连接、配置加载、历史保存等）统一使用该函数。`setProjectOverride(path)` 由 `vein.ts` 的 `preAction` hook 调用。
 
 **相关文件**：
-- `packages/cli/src/config/global.ts` — 全局注册表 CRUD（`registerProject`、`unregisterProject`、`getProjectPath`、`loadGlobalProjects`）
-- `packages/core/src/config/index.ts` — `resolveProjectRoot()`、`setProjectOverride()`、`APP_NAME`、logger
+- `packages/core/src/config/global.ts` — 全局注册表 CRUD（`registerProject`、`unregisterProject`、`getProjectPath`、`loadGlobalProjects`）
+- `packages/core/src/config/index.ts` — `resolveProjectRoot()`、`setProjectOverride()`、`APP_NAME`、logger、`setupProjectModel()`
 - `packages/core/src/store/client.ts` — `resolveDbPath()` 使用 `resolveProjectRoot()` 而非直接的 `getProjectRoot(cwd)`
-- `packages/cli/src/command/vein.ts` — `-p/--project` 全局选项 + `preAction` hook 解析并设置 override
+- `packages/cli/src/command/vein.ts` — `-p/--project` 全局选项 + `preAction` hook 解析并设置 override（导入 `getProjectPath`、`setProjectOverride` 从 `@vein/core`）
 - 使用 `await vein.parseAsync()` 确保异步 hook 在 action 之前完成
 
 `vein projects` (别名 `pr`) 可查看所有已注册项目，`--remove <name>` 删除注册。
@@ -328,15 +336,14 @@ insertTree → insertDoc (含 docs_fts)
 
 ### 架构
 
-- **Monorepo**：根 `package.json` 设置 `"workspaces": ["packages/*"]`。CLI 通过 `"@vein/core": "workspace:*"` 依赖 core。
+- **Monorepo + Client-Server**：Core 作为"服务端"提供完整业务能力（`@vein/core` 单一入口），CLI 作为 thin client 只做命令解析 + 交互 I/O + 结果展示。后续 web 模块可直接复用 core。
 - **命令组织**：每个命令独立文件（`packages/cli/src/command/xxx.command.ts`），导出 `register(program: Command)` 函数；入口 `vein.ts` 负责创建 Command、注册子命令、全局 `--project` 选项和 `preAction` hook
-- **CLI/Business 分离**：命令文件只处理 CLI I/O（spinner、prompt、outro），核心业务逻辑放 `core` 包的 `service/`、`store/`、`ai/` 中
-- **项目定位**：始终使用 `resolveProjectRoot()`（from `@vein/core/config`）而非直接 `getProjectRoot(process.cwd())`，以正确支持 `--project` 全局选项
-- **构建**：入口为 CLI 包的 `src/command/vein.ts`。`bun build src/command/vein.ts --target node --external better-sqlite3 -outdir ./dist`。`better-sqlite3` 为原生模块，**必须标记 external**（否则打包后 `__dirname` 指向 `dist/` 目录，找不到 `.node` 绑定文件）
-- **构建产物**：`packages/cli/dist/vein.js`。CLI 的 `package.json` 中 `bin.vein` 指向 `./dist/vein.js`
-- **全局 link**：`bun run link`（根目录）或 `cd packages/cli && bun link`。link 后 `vein` 命令可在任意目录使用
-- **共享工具**：`command-utils.ts` 中 `setupProjectModel` 和 `createCachedSummarizer` 供所有命令复用
-- **导出**：统一起名导出，避免 default export。core 包的公开 API 在 `packages/core/src/index.ts` 统一导出，子路径映射在 `package.json` 的 `exports` 字段
+- **CLI/Business 分离**：命令文件只处理 CLI I/O（spinner、prompt、outro），所有业务逻辑通过 `@vein/core` 的高层函数调用。CLI **不直接访问 store、不直调 pi-ai、不自行管理文件**
+- **项目定位**：始终使用 `resolveProjectRoot()`（from `@vein/core`），以正确支持 `--project` 全局选项
+- **构建**：入口为 CLI 包的 `src/command/vein.ts`。`bun build src/command/vein.ts --target node --external better-sqlite3 -outdir ./dist`
+- **构建产物**：`packages/cli/dist/vein.js`
+- **全局 link**：`bun run link`（根目录）或 `cd packages/cli && bun link`
+- **导出**：core 包通过 `packages/core/src/index.ts` 统一导出，`package.json` 的 `"exports"` 仅包含 `"."`
 
 ### 数据库
 

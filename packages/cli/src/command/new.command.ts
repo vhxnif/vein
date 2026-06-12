@@ -7,17 +7,18 @@ import {
     spinner,
     text,
 } from '@clack/prompts'
-import { getModels, getProviders } from '@earendil-works/pi-ai'
-import { setModelProvider } from '@vein/core/ai'
+import type { ModelProvider } from '@vein/core'
 import {
     getProjectRoot,
     initProject,
+    listModels,
+    listProviders,
     loadProjectConfig,
     logger,
-} from '@vein/core/config'
-import type { ModelProvider } from '@vein/core/config/type'
+    registerProject,
+    setModelProvider,
+} from '@vein/core'
 import type { Command } from 'commander'
-import { registerProject } from '../config/global'
 
 const log = logger.child({ module: 'new' })
 
@@ -58,7 +59,7 @@ export function register(program: Command) {
 
             const rawProvider = await select({
                 message: 'Default AI provider:',
-                options: getProviders().map((p) => ({
+                options: listProviders().map((p) => ({
                     value: p as string,
                     label: p,
                 })),
@@ -69,7 +70,7 @@ export function register(program: Command) {
             }
             const provider = rawProvider as ModelProvider['provider']
 
-            const providerModels = getModels(provider)
+            const providerModels = listModels(provider)
             const modelOptions = providerModels.map((m) => ({
                 value: m.id,
                 label: `${m.id} (${m.name})`,

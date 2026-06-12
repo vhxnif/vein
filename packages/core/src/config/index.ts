@@ -125,6 +125,24 @@ async function saveProjectConfig(
     await writeFile(configPath, JSON.stringify(config, null, 2))
 }
 
+// ── model setup ────────────────────────────────────────────────
+
+/**
+ * Resolve the project root, load its config, and set the global model
+ * provider. Returns the config or undefined if not in a project.
+ */
+export async function setupProjectModel(): Promise<ProjectConfig | undefined> {
+    const root = resolveProjectRoot()
+    if (!root) return
+    const config = await loadProjectConfig(root)
+    if (config?.model) {
+        // dynamic import to avoid circular dep with ai/base which imports logger
+        const { setModelProvider } = await import('../ai/base')
+        setModelProvider(config.model)
+    }
+    return config
+}
+
 export type { ModelProvider, ProjectConfig }
 export {
     getProjectRoot,

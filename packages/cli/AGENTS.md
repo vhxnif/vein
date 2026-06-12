@@ -1,6 +1,6 @@
 # @vein/cli
 
-CLI 包：命令注册、交互式 UI、全局项目注册表。依赖 `@vein/core`。
+CLI 包：**thin client**。只做命令行解析 + 交互式 I/O + 结果展示。所有业务逻辑委托给 `@vein/core`。
 
 ## 目录
 
@@ -8,7 +8,6 @@ CLI 包：命令注册、交互式 UI、全局项目注册表。依赖 `@vein/co
 src/
 ├── command/               # CLI 命令（每个文件独立 register(program)）
 │   ├── vein.ts                # 入口：Command 创建 + 子命令注册 + --project 全局选项 + preAction hook
-│   ├── command-utils.ts       # 共享：setupProjectModel、createCachedSummarizer
 │   ├── new.command.ts         # vein new [name] [--migrate]
 │   ├── markdown.command.ts    # vein markdown <files...> [-f] + resegment 子命令
 │   ├── ask.command.ts         # vein ask [query] [-n] [-t]
@@ -16,35 +15,65 @@ src/
 │   ├── config.command.ts      # vein config（交互式）
 │   ├── browse.command.ts      # vein browse / br（分页浏览）
 │   └── projects.command.ts    # vein projects / pr [--remove]
-├── config/
-│   └── global.ts             # 全局项目注册表（~/.config/vein/projects.json 的 CRUD）
 └── utils/
-    └── cli-helpers.ts         # CLI 专用：formatDuration, colorize, VERDICT_ICON 等
+    └── cli-helpers.ts         # CLI 专用：formatDuration, colorize, VERDICT_ICON, modelKey 等
 ```
 
-## 入口文件
+> 注：`command-utils.ts` 已删除（`setupProjectModel`、`createCachedSummarizer` 移入 core）。全局注册表 (`config/global.ts`) 已移入 core。
 
-`src/command/vein.ts` — 唯一的构建入口：
+## 架构模式
+
+CLI 作为 thin client，每个命令只做三件事：
+
+1. **注册参数**：用 `commander` 定义命令选项
+2. **交互 I/O**：用 `@clack/prompts` 收集输入、显示 spinner、输出结果
+3. **调用 core**：从 `@vein/core` 导入高层函数执行业务逻辑
+
+CLI **绝不**：
+- 直接访问数据库（store）
+- 直接调用 `@earendil-works/pi-ai`
+- 直接读写 `~/.config/vein/` 下的文件
+- 内联任何业务管道逻辑
+
+## 从 core 导入
+
+全部通过 `import { ... } from '@vein/core'`：
 
 ```typescript
-#!/usr/bin/env node
-const vein = new Command()
-    .name('vein')
-    .option('-p, --project <name>', '...')
+// 项目 & 模型
+import {
+    setupProjectModel,
+    listProviders,
+    listModels,
+    setModelProvider,
+    createCachedSummarizer,
+    resolveProjectRoot,
+    initProject,
+    loadProjectConfig,
+    saveProjectConfig,
+    registerProject,
+} from '@vein/core'
 
-// 注册所有子命令
-registerNew(vein)
-registerMarkdown(vein)
-registerAsk(vein)
-// ...
+// 文档导入
+import { importBatch, resegmentAllDocuments } from '@vein/core'
 
-// --project 全局选项解析
-vein.hook('preAction', async () => {
-    const name = vein.opts().project
-    if (name) setProjectOverride(await getProjectPath(name))
-})
+// 文档检索
+import { searchDocuments } from '@vein/core'
 
-await vein.parseAsync()
+// 文档浏览
+import { listDocuments, getDocumentDetail } from '@vein/core'
+
+// 历史
+import { saveSearchHistory, listSearchHistory, getSearchHistoryEntry } from '@vein/core'
+
+// 全局注册表
+import { loadGlobalProjects, unregisterProject, getProjectPath } from '@vein/core'
+
+// 类型
+import type { ModelProvider, ProjectConfig, HistoryEntry, SearchResult } from '@vein/core'
+
+// 基础
+import { logger, APP_NAME } from '@vein/core'
 ```
 
 ## 命令速览
@@ -52,53 +81,13 @@ await vein.parseAsync()
 | 命令 | 别名 | 描述 |
 |---|---|---|
 | `vein new [name]` | — | 初始化项目（交互选 provider/model），自动注册到全局 |
-| `vein markdown <files...>` | `md` | 导入 markdown（并行 LLM + 串行 DB） |
-| `vein markdown resegment` | `rs` | 重新分词所有文档 |
-| `vein ask [query]` | — | 文档检索（Librarian Agent），-n JSON 输出，-t 显示 trace |
-| `vein history` | `hs` | 历史回顾，-l 最近，-L 列表，-p 分页 |
-| `vein browse` | `br` | 分页浏览文档库（20/页） |
-| `vein projects` | `pr` | 全局注册表管理，--remove 删除 |
+| `vein markdown <files...>` | `md` | 导入 markdown（调用 `importBatch`） |
+| `vein markdown resegment` | `rs` | 重新分词所有文档（调用 `resegmentAllDocuments`） |
+| `vein ask [query]` | — | 文档检索（调用 `searchDocuments`），-n JSON 输出，-t 显示 trace |
+| `vein history` | `hs` | 历史回顾（调用 `listSearchHistory` / `getSearchHistoryEntry`） |
+| `vein browse` | `br` | 分页浏览文档库（调用 `listDocuments` / `getDocumentDetail`） |
+| `vein projects` | `pr` | 全局注册表管理（调用 `loadGlobalProjects` / `unregisterProject`） |
 | `vein config` | — | 交互式修改 model/summarizer/segmenter |
-
-## 从 core 导入
-
-CLI 通过对 `@vein/core` 的子路径导入获取核心能力：
-
-```typescript
-// AI
-import { librarian, setModelProvider, createSummarizer } from '@vein/core/ai'
-
-// 配置
-import { logger, resolveProjectRoot, veinDir, loadProjectConfig, initProject } from '@vein/core/config'
-import type { ModelProvider, ProjectConfig } from '@vein/core/config/type'
-
-// 数据库
-import * as store from '@vein/core/store'
-// 或具名导入
-import { getDoc, getAllDocs, getFullTree, searchDocsByKeyword } from '@vein/core/store'
-
-// 导入服务
-import { importBatch, collectAllSummaries } from '@vein/core/service/import'
-
-// 工具
-import { md5 } from '@vein/core/utils/common'
-import { segmentText } from '@vein/core/utils/segment'
-
-// 树
-import type { DocNode } from '@vein/core/tree'
-import { mdToTree } from '@vein/core/tree/markdown_split'
-```
-
-## 全局项目注册表
-
-`packages/cli/src/config/global.ts` 管理 `~/.config/vein/projects.json`：
-
-```typescript
-registerProject(name, path)     // 注册（new 时自动调用）
-unregisterProject(name)         // 删除
-getProjectPath(name)            // 查找路径（--project 使用）
-loadGlobalProjects()            // 加载全部
-```
 
 ## 构建
 
@@ -119,22 +108,17 @@ cd packages/cli && bun run build
 # 从根目录（自动 build + link）
 bun run link
 
-# 从 CLI 包
-cd packages/cli && bun run build && bun link
-
 # 取消
 bun run unlink
 ```
 
-link 后在任意目录可直接使用 `vein` 命令。
-
 ## 交互约定
 
 - **Spinner**：所有耗时操作通过 `@clack/prompts` 的 `spinner()` 反馈进度
-- **错误处理**：`getErrorMessage(err)` 统一错误消息提取
+- **错误处理**：`getErrorMessage(err)`（从 `@vein/core` 导入）
 - **输出格式**：交互模式用 `note()` / `outro()`；非交互模式（`-n`）输出 JSON 到 stdout
 - **颜色**：终端颜色通过 `colorize()` + `VERDICT_COLOR` 控制，`process.stdout.isTTY` 检测
 
 ## 日志
 
-CLI 自身日志通过 `logger.child({ module: 'xxx' })` 创建（`logger` 从 `@vein/core/config` 导入）。日志仅写文件，不输出到控制台（避免干扰 spinner 和 prompt）。
+CLI 自身日志通过 `logger.child({ module: 'xxx' })` 创建（`logger` 从 `@vein/core` 导入）。日志仅写文件，不输出到控制台。
