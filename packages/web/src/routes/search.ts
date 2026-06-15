@@ -37,6 +37,8 @@ searchRouter.post('/', async (c) => {
             try {
                 const result = await searchDocuments(query, {
                     segmenter: config.segmenter,
+                    subagentModel: config.subagent,
+                    reviewerModel: config.reviewer,
                     onStep: (label) => {
                         send({ type: 'step', label })
                     },

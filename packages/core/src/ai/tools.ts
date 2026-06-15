@@ -63,6 +63,8 @@ async function resolveDocNames(
 
 type SearchOptions = {
     segmenter?: ModelProvider
+    subagentModel?: ModelProvider
+    reviewerModel?: ModelProvider
     onStep?: (label: string) => void
 }
 
@@ -81,6 +83,8 @@ async function searchDocuments(
     const { librarian } = await import('./librarian')
     const result = await librarian(query, opts?.onStep, {
         segmenter: opts?.segmenter,
+        subagentModel: opts?.subagentModel,
+        reviewerModel: opts?.reviewerModel,
     })
     const docNames = await resolveDocNames(result.trace)
     return { ...result, docNames }

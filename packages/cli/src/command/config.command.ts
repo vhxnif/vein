@@ -19,6 +19,8 @@ function display(c: ProjectConfig): string {
         `Model:    ${formatMd(c.model)}`,
         `Summarizer: ${formatMd(c.summarizer)}`,
         `Segmenter:  ${formatMd(c.segmenter)}`,
+        `Subagent:   ${formatMd(c.subagent)}`,
+        `Reviewer:   ${formatMd(c.reviewer)}`,
     ].join('\n')
 }
 
@@ -105,6 +107,16 @@ export function register(program: Command) {
                             label: 'Segmenter',
                             hint: formatMd(config.segmenter),
                         },
+                        {
+                            value: 'subagent',
+                            label: 'Subagent',
+                            hint: formatMd(config.subagent),
+                        },
+                        {
+                            value: 'reviewer',
+                            label: 'Reviewer',
+                            hint: formatMd(config.reviewer),
+                        },
                         { value: 'done', label: 'Done — save and exit' },
                     ],
                 })
@@ -133,6 +145,24 @@ export function register(program: Command) {
                             'defaults to Model if unset'
                         )
                         config = { ...config, segmenter: md }
+                        break
+                    }
+                    case 'subagent': {
+                        const md = await pickModel(
+                            'Subagent',
+                            config.subagent,
+                            'defaults to Model if unset'
+                        )
+                        config = { ...config, subagent: md }
+                        break
+                    }
+                    case 'reviewer': {
+                        const md = await pickModel(
+                            'Reviewer',
+                            config.reviewer,
+                            'defaults to Model if unset'
+                        )
+                        config = { ...config, reviewer: md }
                         break
                     }
                 }

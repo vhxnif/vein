@@ -399,13 +399,14 @@ insertTree → insertDoc (含 docs_fts)
 
 - Agent 工具遵循 `base.ts` 的 `ToolDef` 模式
 - Agent 职责分离：
-  - **librarian（主 Agent）**：搜索 + 委托子 Agent 分析 + 汇总结果 + 自检，使用 `pi-agent-core` 的 `Agent` 类
+  - **librarian（主 Agent）**：搜索 + 委托子 Agent 分析 + 汇总结果 + 自检，使用 `pi-agent-core` 的 `Agent` 类。Prompt 已优化：结果少时自动换词重搜、一次性批量子 Agent 调用、审查前自查覆盖度
   - **Document Analyzer（子 Agent）**：独立的 `Agent` 实例，逐文档深度分析，通过 `analyzeDocument` tool 被主 Agent 调用。≤10 步预算（`beforeToolCall` hook 强制约束），输出 Markdown 格式
   - **reviewer（审查 Agent）**：独立的评估 Agent，使用 `call` 函数 + `getReviewSource` 工具，逐个验证数据源原文，支持 `onStep` 回调透传审查进度
-- 子 Agent 并发控制：通过 `Semaphore(10)` 限制最多 10 个子 Agent 同时运行，超出排队。`buildMainTools` 创建共享信号量，`makeAnalyzeDocument` 的 `execute` 中 `acquire/release`
+- 子 Agent 并发控制：通过 `Semaphore(10)` 限制最多 10 个子 Agent 同时运行，超出排队。Prompt 已优化为一次性批量调用所有 analyzeDocument，避免分批 LLM 往返
+- 工具调用并行化：`base.ts` 的 `call()` 中 LLM 返回的多个 tool call（如 `getReviewSource`）通过 `Promise.all` 并行执行，消除串行等待
 - 子 Agent 进度同步：子 Agent 内部 tool 调用通过 `onStep` 回调透传到主 Agent 的 spinner 显示（如 `  Loading document structure...`）
 - reviewer 进度同步：reviewer 内部 `getReviewSource` 调用通过 `onStep` 回调透传，如 `Verifying: doc1/0001...`、`Review: pass (5/5)`
-- summarizer 调用自动走 `model_cache` 缓存，60s 超时保护
+- 模型配置灵活定制：主模型、摘要、分词、子 Agent、审查 5 个场景可独立指定模型，未配置时回退到主模型
 - 中文分词：`segmentText()` 通过 LLM 调用实现，写入 FTS 前分词。长文本（>3000 字符）自动按行切分为多个 chunk 独立分词
 - Librarian 检索进度：执行中显示通用提示，完成后自动更新为具体结果。子 Agent 输出结果的 spinner 显示格式为 `Analysis: high · 1.2KB`
 

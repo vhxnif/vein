@@ -33,14 +33,19 @@ const PROMPT = `你是一个文档检索 Librarian。通过关键词搜索定位
 ## 流程
 
 1. 从用户查询提取 2-5 个核心关键词，调用 searchDocsByKeyword
-2. 对搜索结果中排名靠前的文档调用 analyzeDocument 委托子 Agent 深度分析
-   - 每个 analyzeDocument 传入 docId 和原始用户查询，多个调用放在同一条 assistant 消息中即可并行执行（系统限制最多同时 5 个，超出排队）
+2. **搜索广度检查**：如果搜索结果 ≤2 篇，换一组关键词再搜索一轮，确保覆盖足够文档
+3. 对搜索结果中排名靠前的文档调用 analyzeDocument 委托子 Agent 深度分析
+   - **一次性并发调用**：将所有 analyzeDocument 放在同一条 assistant 消息中，系统会并行执行（最多同时 10 个）
+   - 不要分批：等待全部并发结果返回后再继续，避免额外 LLM 往返
+   - 每个 analyzeDocument 传入 docId 和原始用户查询，多个调用放在同一条 assistant 消息中即可并行执行（系统限制最多同时 10 个）
    - 子 Agent 返回 Markdown 格式分析，包含：## 相关性、## 概述、## 关键发现、## 数据来源、## 详细分析
-3. 整理所有文档的分析结果，形成最终答案
+4. 整理所有文档的分析结果，形成最终答案
    - 按文档逐一列出，每篇包含：文档标题、相关性、子 Agent 的「详细分析」原文
    - 不要用自己的话重新概括子 Agent 的分析——直接引用子 Agent 返回的内容
    - 对 relevance 为 low 的可压缩，none 的忽略
-4. 调用 reviewResult 自检
+5. 调用 reviewResult 自检
+   - 调用前先自我审视：当前结果是否全面覆盖了用户问题的各个方面？
+   - 如有明显遗漏，主动补搜/补分析后再审查，避免浪费审查重试次数
 
 ## 输出格式
 
@@ -55,14 +60,15 @@ const PROMPT = `你是一个文档检索 Librarian。通过关键词搜索定位
 
 - 最终答案必须包含原文引用和出处（nodeId）
 - 步骤预算：单次 ≤20，含重试 ≤40
-- 优先纵深：先分析完一篇再考虑下一篇
 - 已获取的信息不要重复获取
+- **批量并发**：同类型工具调用（如多个 analyzeDocument）放在同一条消息中一次发出，不要分批
+- 首次检索结果少于 3 篇时，务必换关键词重新搜索
 
 ## 自检
 
 检索完成后调用 reviewResult(query, result, sources)，sources 为 JSON 字符串如 '[{"docId":"abc","nodeId":"0001"}]'。
 - pass → 返回结果
-- partial / fail → 增量调整（换文档 / 换节点 / 补节点），最多重试 2 次`
+- partial / fail → 增量调整：扩大搜索范围、分析更多文档或更换分析角度，最多重试 2 次`
 
 const DOC_ANALYZER_PROMPT = `你是一个文档深度分析员。分析单个文档中与用户查询相关的内容。
 
@@ -201,7 +207,11 @@ function makeGetDocNodeDetails({ cached, ok, tool }: ToolCtx): any {
     }
 }
 
-function makeReviewResult({ ok, tool, onStep }: ToolCtx): any {
+function makeReviewResult(
+    { ok, tool, onStep }: ToolCtx,
+    modelOverride?: ModelProvider
+): any {
+    let reviewCount = 0
     return {
         name: 'reviewResult',
         description:
@@ -234,7 +244,15 @@ function makeReviewResult({ ok, tool, onStep }: ToolCtx): any {
                     // ignore invalid sources
                 }
             }
-            const review = await reviewer(query, result, parsed, onStep)
+            reviewCount++
+            const review = await reviewer(
+                query,
+                result,
+                parsed,
+                onStep,
+                modelOverride,
+                reviewCount
+            )
             return ok(JSON.stringify(review))
         }),
     }
@@ -270,10 +288,17 @@ function makeSearchDocsByKeyword(ctx: ToolCtx, segmenter?: ModelProvider): any {
 async function analyzeDocument(
     docId: string,
     userQuery: string,
-    onStep?: (label: string) => void
+    onStep?: (label: string) => void,
+    modelOverride?: ModelProvider
 ): Promise<string> {
-    const provider = getModelProvider()
+    const provider = modelOverride ?? getModelProvider()
     const model = getModel(provider.provider as never, provider.model)
+
+    subLog.info({
+        docId: docId.slice(0, 8),
+        model: `${provider.provider}/${provider.model}`,
+        content: 'Subagent start',
+    })
 
     const cache = new Map<string, string>()
     const subCtx: ToolCtx = {
@@ -325,7 +350,8 @@ async function analyzeDocument(
                 (event.args as Record<string, unknown>) ?? {}
             )
             // Surface subagent progress to the user via the main onStep
-            onStep?.(`  ${label}`)
+            const shortDocId = docId.slice(0, 6)
+            onStep?.(`[${shortDocId}] ${label}`)
             subLog.debug({
                 docId: docId.slice(0, 8),
                 toolName: event.toolName,
@@ -441,7 +467,8 @@ class Semaphore {
 
 function makeAnalyzeDocument(
     { ok, tool, onStep }: ToolCtx,
-    sem: Semaphore
+    sem: Semaphore,
+    modelOverride?: ModelProvider
 ): any {
     return {
         name: 'analyzeDocument',
@@ -462,7 +489,12 @@ function makeAnalyzeDocument(
             }
             await sem.acquire()
             try {
-                const result = await analyzeDocument(docId, userQuery, onStep)
+                const result = await analyzeDocument(
+                    docId,
+                    userQuery,
+                    onStep,
+                    modelOverride
+                )
                 return ok(result)
             } finally {
                 sem.release()
@@ -473,7 +505,9 @@ function makeAnalyzeDocument(
 
 function buildMainTools(
     segmenter?: ModelProvider,
-    onStep?: (label: string) => void
+    onStep?: (label: string) => void,
+    subagentModel?: ModelProvider,
+    reviewerModel?: ModelProvider
 ): any[] {
     const sem = new Semaphore(MAX_PARALLEL_ANALYZE)
     const cache = new Map<string, string>()
@@ -496,8 +530,8 @@ function buildMainTools(
 
     return [
         makeSearchDocsByKeyword(ctx, segmenter),
-        makeAnalyzeDocument(ctx, sem),
-        makeReviewResult(ctx),
+        makeAnalyzeDocument(ctx, sem, subagentModel),
+        makeReviewResult(ctx, reviewerModel),
     ]
 }
 
@@ -782,16 +816,30 @@ function buildToolDetail(
 async function librarian(
     msg: string,
     onStep?: (label: string) => void,
-    opts?: { segmenter?: ModelProvider }
+    opts?: {
+        segmenter?: ModelProvider
+        subagentModel?: ModelProvider
+        reviewerModel?: ModelProvider
+    }
 ): Promise<LibrarianResult> {
     const provider = getModelProvider()
     const model = getModel(provider.provider as never, provider.model)
+
+    log.info({
+        model: `${provider.provider}/${provider.model}`,
+        content: 'Librarian session start',
+    })
 
     const agent = new Agent({
         initialState: {
             systemPrompt: PROMPT,
             model,
-            tools: buildMainTools(opts?.segmenter, onStep),
+            tools: buildMainTools(
+                opts?.segmenter,
+                onStep,
+                opts?.subagentModel,
+                opts?.reviewerModel
+            ),
         },
         transformContext: async (messages) => pruneContext(messages),
     })

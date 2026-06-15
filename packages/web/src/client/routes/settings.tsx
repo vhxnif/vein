@@ -40,6 +40,24 @@ function SettingsPage() {
     const [summarizerModel, setSummarizerModel] = useState(
         config?.summarizer?.model ?? ''
     )
+    const [segmenterProvider, setSegmenterProvider] = useState(
+        config?.segmenter?.provider ?? ''
+    )
+    const [segmenterModel, setSegmenterModel] = useState(
+        config?.segmenter?.model ?? ''
+    )
+    const [subagentProvider, setSubagentProvider] = useState(
+        config?.subagent?.provider ?? ''
+    )
+    const [subagentModel, setSubagentModel] = useState(
+        config?.subagent?.model ?? ''
+    )
+    const [reviewerProvider, setReviewerProvider] = useState(
+        config?.reviewer?.provider ?? ''
+    )
+    const [reviewerModel, setReviewerModel] = useState(
+        config?.reviewer?.model ?? ''
+    )
 
     // Sync state when config loads
     if (config && name !== config.name && config.name) {
@@ -48,6 +66,12 @@ function SettingsPage() {
         setMainModel(config.model?.model ?? '')
         setSummarizerProvider(config.summarizer?.provider ?? '')
         setSummarizerModel(config.summarizer?.model ?? '')
+        setSegmenterProvider(config.segmenter?.provider ?? '')
+        setSegmenterModel(config.segmenter?.model ?? '')
+        setSubagentProvider(config.subagent?.provider ?? '')
+        setSubagentModel(config.subagent?.model ?? '')
+        setReviewerProvider(config.reviewer?.provider ?? '')
+        setReviewerModel(config.reviewer?.model ?? '')
     }
 
     const saveMutation = useMutation({
@@ -57,6 +81,15 @@ function SettingsPage() {
                 model: { provider: mainProvider, model: mainModel },
                 summarizer: summarizerProvider
                     ? { provider: summarizerProvider, model: summarizerModel }
+                    : undefined,
+                segmenter: segmenterProvider
+                    ? { provider: segmenterProvider, model: segmenterModel }
+                    : undefined,
+                subagent: subagentProvider
+                    ? { provider: subagentProvider, model: subagentModel }
+                    : undefined,
+                reviewer: reviewerProvider
+                    ? { provider: reviewerProvider, model: reviewerModel }
                     : undefined,
             }),
         onSuccess: () => {
@@ -171,6 +204,39 @@ function SettingsPage() {
                         setSummarizerModel('')
                     }}
                     onModelChange={setSummarizerModel}
+                    optional
+                />
+                <ModelRow
+                    label="分词模型"
+                    provider={segmenterProvider}
+                    model={segmenterModel}
+                    onProviderChange={(p) => {
+                        setSegmenterProvider(p)
+                        setSegmenterModel('')
+                    }}
+                    onModelChange={setSegmenterModel}
+                    optional
+                />
+                <ModelRow
+                    label="子Agent模型"
+                    provider={subagentProvider}
+                    model={subagentModel}
+                    onProviderChange={(p) => {
+                        setSubagentProvider(p)
+                        setSubagentModel('')
+                    }}
+                    onModelChange={setSubagentModel}
+                    optional
+                />
+                <ModelRow
+                    label="审查模型"
+                    provider={reviewerProvider}
+                    model={reviewerModel}
+                    onProviderChange={(p) => {
+                        setReviewerProvider(p)
+                        setReviewerModel('')
+                    }}
+                    onModelChange={setReviewerModel}
                     optional
                 />
             </section>

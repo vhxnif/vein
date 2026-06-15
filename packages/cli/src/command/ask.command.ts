@@ -129,6 +129,8 @@ export function register(program: Command) {
                 try {
                     result = await searchDocuments(query, {
                         segmenter: config.segmenter,
+                        subagentModel: config.subagent,
+                        reviewerModel: config.reviewer,
                         onStep: searchSpinner
                             ? (label) => searchSpinner.message(label)
                             : undefined,

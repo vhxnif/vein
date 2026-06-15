@@ -103,7 +103,7 @@ function HomePage() {
                     {steps.length > 1 && (
                         <div className="mt-2 pl-7 space-y-1">
                             {steps
-                                .slice(Math.max(0, steps.length - 11), -1)
+                                .slice(Math.max(0, steps.length - 6), -1)
                                 .map((s) => (
                                     <div
                                         key={s}

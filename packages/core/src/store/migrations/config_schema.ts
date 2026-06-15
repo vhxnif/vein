@@ -103,5 +103,37 @@ export const configSchema = {
                 },
             },
         },
+        subagent: {
+            type: 'object',
+            description:
+                "Optional model for the Document Analyzer subagent. Falls back to 'model' if not set.",
+            required: ['provider', 'model'],
+            properties: {
+                provider: {
+                    type: 'string',
+                    $ref: '#/properties/model/properties/provider',
+                },
+                model: {
+                    type: 'string',
+                    description: 'Model identifier.',
+                },
+            },
+        },
+        reviewer: {
+            type: 'object',
+            description:
+                "Optional model for the result reviewer. Falls back to 'model' if not set.",
+            required: ['provider', 'model'],
+            properties: {
+                provider: {
+                    type: 'string',
+                    $ref: '#/properties/model/properties/provider',
+                },
+                model: {
+                    type: 'string',
+                    description: 'Model identifier.',
+                },
+            },
+        },
     },
 }

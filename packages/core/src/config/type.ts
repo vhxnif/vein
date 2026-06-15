@@ -11,6 +11,10 @@ export type ProjectConfig = {
     db: string
     model: ModelProvider
     summarizer?: ModelProvider
-    /** Optional faster/cheaper model for Chinese word segmentation. Falls back to 'model' if not set. */
+    /** Optional model for Chinese word segmentation. Falls back to 'model' if not set. */
     segmenter?: ModelProvider
+    /** Optional model for the Document Analyzer subagent. Falls back to 'model' if not set. */
+    subagent?: ModelProvider
+    /** Optional model for the result reviewer. Falls back to 'model' if not set. */
+    reviewer?: ModelProvider
 }

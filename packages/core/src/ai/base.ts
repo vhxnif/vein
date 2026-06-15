@@ -19,6 +19,8 @@ export type ContextDef = {
     tools?: ToolDef[]
     systemPrompt?: string
     onToolCall?: (name: string, args: Record<string, unknown>) => void
+    /** Optional model override. Uses the global model provider if not set. */
+    model?: ReturnType<typeof getModel>
 }
 
 const log = logger.child({ module: 'ai' })
@@ -63,7 +65,7 @@ async function call(context: ContextDef) {
             msgCount: context.messages.length,
             content: 'Sending messages',
         })
-        const msg = await complete(getCurrentModel(), context)
+        const msg = await complete(context.model ?? getCurrentModel(), context)
         log.debug({
             role: msg.role,
             textLen: msg.content
@@ -79,19 +81,25 @@ async function call(context: ContextDef) {
         if (toolCalls.length <= 0) {
             return msg
         }
-        for (const tool of toolCalls) {
-            context.onToolCall?.(
-                tool.name,
-                tool.arguments as Record<string, unknown>
-            )
-            const result = await context.tools
-                ?.find((it) => it.name === tool.name)
-                ?.run(tool.arguments)
-            log.debug({
-                toolName: tool.name,
-                resultLen: result?.length ?? 0,
-                content: 'Tool executed',
+        // Execute tool calls in parallel when multiple are present
+        const results = await Promise.all(
+            toolCalls.map(async (tool) => {
+                context.onToolCall?.(
+                    tool.name,
+                    tool.arguments as Record<string, unknown>
+                )
+                const result = await context.tools
+                    ?.find((it) => it.name === tool.name)
+                    ?.run(tool.arguments)
+                log.debug({
+                    toolName: tool.name,
+                    resultLen: result?.length ?? 0,
+                    content: 'Tool executed',
+                })
+                return { tool, result }
             })
+        )
+        for (const { tool, result } of results) {
             if (result) {
                 context.messages.push({
                     role: 'toolResult',

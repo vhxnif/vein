@@ -237,8 +237,8 @@ User Query
   │
   ▼
 Main Librarian Agent (主 Agent)
-  ├─ searchDocsByKeyword(query)          → [{docId, metadata, rank}]
-  ├─ analyzeDocument(docId, userQuery)   → 并发生成子 Agent（最多 10 个）
+  ├─ searchDocsByKeyword(query)          → 结果少时自动换词重搜
+  ├─ analyzeDocument(docId, userQuery)   → 一次性并发 10 个子 Agent
   │                                                │
   │                                                ▼
   │                                    Document Analyzer (子 Agent)
@@ -247,7 +247,7 @@ Main Librarian Agent (主 Agent)
   │                                                │
   │                                                └───────────┘
   │                                         返回 Markdown 分析报告
-  └─ reviewResult(query, answer, sources) → 自检审查（相关性/完整性/准确性）
+  └─ reviewResult(query, answer, sources) → 审查前自查覆盖度，getReviewSource 并行验证
 ```
 
 ### 批量导入管道
@@ -308,6 +308,14 @@ $ vein ask "项目中有哪些关于性能优化的讨论？"
   "segmenter": {
     "provider": "openai",
     "model": "gpt-4o-mini"
+  },
+  "subagent": {
+    "provider": "openai",
+    "model": "gpt-4o-mini"
+  },
+  "reviewer": {
+    "provider": "openai",
+    "model": "gpt-4o"
   }
 }
 ```
@@ -317,6 +325,8 @@ $ vein ask "项目中有哪些关于性能优化的讨论？"
 | `model` | 主检索 Agent 使用的模型 |
 | `summarizer` | 文档摘要专用模型（可选，回退到 `model`） |
 | `segmenter` | 中文分词专用模型（可选，回退到 `model`） |
+| `subagent` | 子 Agent 分析专用模型（可选，回退到 `model`） |
+| `reviewer` | 结果审查专用模型（可选，回退到 `model`） |
 | `db` | SQLite 数据库文件路径 |
 
 AI Provider 通过 `@earendil-works/pi-ai` 统一适配，支持 OpenAI / DeepSeek 及兼容接口。

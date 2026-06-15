@@ -1,7 +1,9 @@
-import { Type } from '@earendil-works/pi-ai'
+import { getModel, Type } from '@earendil-works/pi-ai'
+import type { ModelProvider } from '../config/type'
+import { logger } from '../config'
 import { getNodeDetails } from '../store'
 import type { BaseDocNode } from '../tree/type'
-import { call, type ToolDef } from './base'
+import { call, getModelProvider, type ToolDef } from './base'
 
 const prompt = `你是一个文档检索结果审查员。你的任务是审查 Librarian 返回的检索结果，判断其是否满足用户的需求。
 
@@ -14,7 +16,7 @@ const prompt = `你是一个文档检索结果审查员。你的任务是审查 
 
 ## 验证流程
 
-1. 首先调用 getReviewSource 工具逐个获取数据源的原文
+1. 一次性调用多次 getReviewSource 工具并行获取所有数据源的原文
 2. 将原文与 Librarian 的检索结果进行核对
 3. 完成所有核对后给出评判
 
@@ -94,7 +96,9 @@ async function reviewer(
     query: string,
     librarianResponse: string,
     sources?: SourceRef[],
-    onStep?: (label: string) => void
+    onStep?: (label: string) => void,
+    modelOverride?: ModelProvider,
+    reviewCount?: number
 ): Promise<ReviewResult> {
     const sourcesText = sources?.length
         ? sources
@@ -102,11 +106,25 @@ async function reviewer(
               .join('\n')
         : '(无数据源)'
 
-    onStep?.('Reviewing results...')
+    onStep?.(
+        reviewCount && reviewCount > 1
+            ? `Reviewing results... (retry ${reviewCount - 1})`
+            : 'Reviewing results...'
+    )
+
+    const model = modelOverride
+        ? getModel(modelOverride.provider as never, modelOverride.model)
+        : undefined
+
+    const usedModel = modelOverride
+        ? `${modelOverride.provider}/${modelOverride.model}`
+        : `${getModelProvider().provider}/${getModelProvider().model}`
+    logger.info({ model: usedModel, content: 'Reviewer start' })
 
     const { content } = await call({
         systemPrompt: prompt,
         tools: buildReviewTools(),
+        model,
         onToolCall: (name, args) => {
             if (name === 'getReviewSource') {
                 const a = args as { docId?: string; nodeId?: string }
