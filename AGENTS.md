@@ -10,8 +10,9 @@ Vein 是一个基于 AI Agent 的文档管理与智能检索系统。核心理�
 |---|---|---|
 | `@vein/core` | `packages/core/` | 核心能力：AI Agent、数据库、文档树、配置、工具函数、导入服务 |
 | `@vein/cli` | `packages/cli/` | CLI 层：命令注册、交互式 UI、全局项目注册表 |
+| `@vein/web` | `packages/web/` | Web 端：基于 Hono + React + TanStack Router 的文档检索 Web 界面 |
 
-CLI 通过 workspace 依赖 `@vein/core`，core 不依赖 CLI。后续计划添加 `packages/web` 包。
+CLI 和 Web 通过 workspace 依赖 `@vein/core`，core 不依赖 CLI 和 Web。
 
 ## 技术栈
 
@@ -23,6 +24,9 @@ CLI 通过 workspace 依赖 `@vein/core`，core 不依赖 CLI。后续计划添�
 - **批量导入**: 两阶段并行：LLM 阶段 4 文件并发（Promise.all），DB 阶段串行（WAL 模式优化写入）
 - **代码风格**: Biome (lint + format)
 - **包管理**: Bun workspaces (`workspaces: ["packages/*"]`)
+- **Web 前端**: Hono (后端) + React + TanStack Router + TanStack Query + Tailwind CSS
+- **Web 流式响应**: ndjson（`fetch` + `ReadableStreamReader`），search 路由实时推送 Agent 执行步骤
+- **Markdown 渲染**: `react-markdown` + `remark-gfm`，风格统一使用 Kami Design Tokens
 
 ## 核心数据模型
 
@@ -60,7 +64,7 @@ vein/
 │   │   │   ├── ai/                    # AI 模型调用与 Agent 工具
 │   │   │   │   ├── base.ts               # 模型调用基础设施（call 函数 + ToolDef 类型 + onToolCall 进度回调）
 │   │   │   │   ├── librarian.ts          # 文档检索 Librarian Agent（主 Agent：搜索 + 委托子 Agent 分析 + 汇总 + 自检审查）
-│   │   │   │   ├── reviewer.ts           # 检索结果审查 Agent（无工具纯评估）
+│   │   │   │   ├── reviewer.ts           # 检索结果审查 Agent（带工具验证 + onStep 进度回调）
 │   │   │   │   ├── tools.ts              # 共享业务逻辑（searchDocsByKeyword）
 │   │   │   │   └── index.ts              # 统一导出
 │   │   │   ├── config/                # 配置（logger、项目配置读写、root override）
@@ -84,24 +88,44 @@ vein/
 │   │   ├── package.json
 │   │   ├── tsconfig.json
 │   │   └── drizzle.config.ts
-│   └── cli/                           # @vein/cli
+│   ├── cli/                           # @vein/cli
+│   │   ├── src/
+│   │   │   ├── command/               # CLI 命令（每个命令独立文件，导出 register(program)）
+│   │   │   │   ├── vein.ts                # 入口：Command 创建 + 各命令注册 + --project 全局选项
+│   │   │   │   ├── command-utils.ts       # 共享工具：setupProjectModel、createCachedSummarizer
+│   │   │   │   ├── new.command.ts         # vein new
+│   │   │   │   ├── markdown.command.ts    # vein markdown
+│   │   │   │   ├── ask.command.ts         # vein ask
+│   │   │   │   ├── history.command.ts     # vein history
+│   │   │   │   ├── config.command.ts      # vein config
+│   │   │   │   ├── browse.command.ts      # vein browse
+│   │   │   │   └── projects.command.ts    # vein projects
+│   │   │   ├── config/
+│   │   │   │   └── global.ts             # 全局项目注册表（~/.config/vein/projects.json）
+│   │   │   └── utils/
+│   │   │       └── cli-helpers.ts         # CLI 专用 helper（formatDuration, colorize, VERDICT_ICON 等）
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   └── web/                           # @vein/web
 │       ├── src/
-│       │   ├── command/               # CLI 命令（每个命令独立文件，导出 register(program)）
-│       │   │   ├── vein.ts                # 入口：Command 创建 + 各命令注册 + --project 全局选项
-│       │   │   ├── command-utils.ts       # 共享工具：setupProjectModel、createCachedSummarizer
-│       │   │   ├── new.command.ts         # vein new
-│       │   │   ├── markdown.command.ts    # vein markdown
-│       │   │   ├── ask.command.ts         # vein ask
-│       │   │   ├── history.command.ts     # vein history
-│       │   │   ├── config.command.ts      # vein config
-│       │   │   ├── browse.command.ts      # vein browse
-│       │   │   └── projects.command.ts    # vein projects
-│       │   ├── config/
-│       │   │   └── global.ts             # 全局项目注册表（~/.config/vein/projects.json）
-│       │   └── utils/
-│       │       └── cli-helpers.ts         # CLI 专用 helper（formatDuration, colorize, VERDICT_ICON 等）
+│       │   ├── client/               # 前端（React + TanStack Router）
+│       │   │   ├── components/          # 共享组件（Layout、Markdown）
+│       │   │   ├── lib/                 # API 客户端 + 项目上下文
+│       │   │   ├── routes/              # 路由页面（ask、docs、history、settings）
+│       │   │   ├── main.tsx             # 入口
+│       │   │   └── styles.css           # Kami Design Tokens
+│       │   ├── routes/               # 后端 Hono API 路由
+│       │   │   ├── search.ts            # 流式 ndjson 搜索路由
+│       │   │   ├── documents.ts         # 文档 CRUD
+│       │   │   ├── history.ts           # 历史记录
+│       │   │   ├── projects.ts          # 项目列表
+│       │   │   └── models.ts            # 模型配置
+│       │   ├── server.ts             # Hono 服务器入口
+│       │   └── middleware/           # 中间件
+│       │       └── project.ts           # 项目上下文注入
 │       ├── package.json
-│       └── tsconfig.json
+│       ├── tsconfig.json
+│       └── vite.config.ts
 ├── package.json                       # workspace 根
 ├── tsconfig.json                      # base tsconfig（各包 extend）
 ├── biome.json                         # 共享 lint/format 配置
@@ -118,14 +142,22 @@ vein/
   │                               │  better-sqlite3
   │                               │  drizzle-orm
   │                               │  pino
+
+@vein/web (thin client)  ──→  @vein/core (业务层)
+  │                               │
+  │  hono + react                 │  @earendil-works/pi-ai
+  │  tanstack router              │  @earendil-works/pi-agent-core
+  │                               │  better-sqlite3
+  │                               │  drizzle-orm
+  │                               │  pino
 ```
 
 采用 **client-server 模式**：
 - **Core** 作为"服务端"提供完整业务能力，通过 `@vein/core` **单一入口**导出高层函数
 - **CLI** 作为 thin client，只做命令解析 + 交互式 I/O + 结果展示，**不直接访问 store / pi-ai / 文件系统**
-- 后续添加 web 模块时可直接复用 core API，无需修改 core
+- **Web** 作为 thin client，提供基于浏览器的文档检索界面，通过流式 API 实时展示 Agent 执行步骤
 
-CLI 全部从 `@vein/core` 导入（无子路径）：
+CLI 和 Web 全部从 `@vein/core` 导入（无子路径）：
 ```typescript
 import {
     setupProjectModel, listProviders, listModels,
@@ -191,7 +223,7 @@ Librarian 返回结构化 `LibrarianResult`：
 { content: string, trace: TraceStep[], review?: ReviewResult }
 ```
 
-Reviewer 是独立的纯评估 Agent，评估维度：相关性、完整性、准确性。
+Reviewer 是独立的评估 Agent，评估维度：相关性、完整性、准确性。通过 `getReviewSource` 工具逐条验证数据源原文，支持 `onStep` 回调透传审查进度。
 
 ## 项目配置
 
@@ -367,9 +399,10 @@ insertTree → insertDoc (含 docs_fts)
 - Agent 职责分离：
   - **librarian（主 Agent）**：搜索 + 委托子 Agent 分析 + 汇总结果 + 自检，使用 `pi-agent-core` 的 `Agent` 类
   - **Document Analyzer（子 Agent）**：独立的 `Agent` 实例，逐文档深度分析，通过 `analyzeDocument` tool 被主 Agent 调用。≤10 步预算（`beforeToolCall` hook 强制约束），输出 Markdown 格式
-  - **reviewer（审查 Agent）**：独立的纯评估 Agent，使用 `base.ts` 的 `call` 函数
+  - **reviewer（审查 Agent）**：独立的评估 Agent，使用 `call` 函数 + `getReviewSource` 工具，逐个验证数据源原文，支持 `onStep` 回调透传审查进度
 - 子 Agent 并发控制：通过 `Semaphore(5)` 限制最多 5 个子 Agent 同时运行，超出排队。`buildMainTools` 创建共享信号量，`makeAnalyzeDocument` 的 `execute` 中 `acquire/release`
 - 子 Agent 进度同步：子 Agent 内部 tool 调用通过 `onStep` 回调透传到主 Agent 的 spinner 显示（如 `  Loading document structure...`）
+- reviewer 进度同步：reviewer 内部 `getReviewSource` 调用通过 `onStep` 回调透传，如 `Verifying: doc1/0001...`、`Review: pass (5/5)`
 - summarizer 调用自动走 `model_cache` 缓存，60s 超时保护
 - 中文分词：`segmentText()` 通过 LLM 调用实现，写入 FTS 前分词。长文本（>3000 字符）自动按行切分为多个 chunk 独立分词
 - Librarian 检索进度：执行中显示通用提示，完成后自动更新为具体结果。子 Agent 输出结果的 spinner 显示格式为 `Analysis: high · 1.2KB`
@@ -410,10 +443,12 @@ db.pragma('foreign_keys = ON')
 - **导出**: 统一起名导出（避免 default export）
 - **禁止**: 不得创建测试用空文件、临时文件（如 `nul`、`test.js`、`temp.md` 等）。测试逻辑写在 `__tests__/` 或使用 `bun test`，临时输出写入系统临时目录
 - **运行时**: 
-  - 开发：`bun run packages/cli/src/command/vein.ts`
-  - 生产：`node packages/cli/dist/vein.js`
+  - CLI 开发：`bun run packages/cli/src/command/vein.ts`
+  - CLI 生产：`node packages/cli/dist/vein.js`
+  - Web 开发：`bun run packages/web/src/server.ts`（`bun run dev` 或 `bun run dev:frontend`）
+  - Web 生产：`bun run build`（`packages/web`，产出 `dist/client` + `dist/server.js`）
   - 全局 link：`bun run link`（构建 + link），`bun run unlink`（取消）
-  - 构建：`bun run build`（从根目录，委托到 `packages/cli`）
+  - 构建：`bun run build`（从根目录，委托到 `packages/cli` 和 `packages/web`）
   - 类型检查：`bun run check`（根目录 `tsc --noEmit`）
   - Lint：`bun run lint`
   - 格式化：`bun run format`

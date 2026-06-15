@@ -94,7 +94,7 @@ async function reviewer(
     query: string,
     librarianResponse: string,
     sources?: SourceRef[],
-    onStep?: (label: string) => void,
+    onStep?: (label: string) => void
 ): Promise<ReviewResult> {
     const sourcesText = sources?.length
         ? sources

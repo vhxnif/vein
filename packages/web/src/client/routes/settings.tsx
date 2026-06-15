@@ -1,13 +1,13 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import type { ModelInfo } from '../lib/api'
 import {
     fetchConfig,
-    saveConfig,
-    fetchProviders,
     fetchModels,
+    fetchProviders,
+    saveConfig,
 } from '../lib/api'
-import type { ModelInfo } from '../lib/api'
 
 export const Route = createFileRoute('/settings')({
     component: SettingsPage,
@@ -63,7 +63,9 @@ function SettingsPage() {
     if (isLoading) {
         return (
             <div className="max-w-[560px] mx-auto px-8 py-16">
-                <p className="font-sans text-[9pt] text-[#504e49]">Loading...</p>
+                <p className="font-sans text-[9pt] text-[#504e49]">
+                    Loading...
+                </p>
             </div>
         )
     }
@@ -90,13 +92,17 @@ function SettingsPage() {
                     项目
                 </h3>
                 <div className="space-y-1">
-                    <label className="block font-sans text-[8.5pt] text-[#6b6a64]">
+                    <label
+                        htmlFor="name"
+                        className="block font-sans text-[8.5pt] text-[#6b6a64]"
+                    >
                         Name
                     </label>
                     <input
+                        id="name"
                         type="text"
                         value={name}
-                        onChange={(e) => setName(e.target.value)}
+                        onChange={(e) => setName(e.currentTarget.value)}
                         className="w-full bg-transparent border-b border-[#d4d0c4] px-0 py-2
                                    font-serif text-[10pt] text-[#141413] outline-none
                                    focus:border-[#1B365D] transition-colors"
@@ -146,6 +152,7 @@ function SettingsPage() {
             {/* Save */}
             <div className="flex items-center gap-4">
                 <button
+                    type="button"
                     className="btn-primary"
                     onClick={() => saveMutation.mutate()}
                     disabled={saveMutation.isPending}
@@ -208,12 +215,14 @@ function ModelRow({
             <div className="flex gap-3">
                 <select
                     value={provider}
-                    onChange={(e) => onProviderChange(e.target.value)}
+                    onChange={(e) => onProviderChange(e.currentTarget.value)}
                     className="flex-1 bg-[#faf9f5] border border-[#d4d0c4] rounded-[6pt]
                                px-3 py-2 font-sans text-[9pt] text-[#141413]
                                outline-none focus:border-[#1B365D] transition-colors"
                 >
-                    <option value="">{optional ? '(use main)' : 'Select...'}</option>
+                    <option value="">
+                        {optional ? '(use main)' : 'Select...'}
+                    </option>
                     {providerList.map((p) => (
                         <option key={p} value={p}>
                             {p}
@@ -222,7 +231,7 @@ function ModelRow({
                 </select>
                 <select
                     value={model}
-                    onChange={(e) => onModelChange(e.target.value)}
+                    onChange={(e) => onModelChange(e.currentTarget.value)}
                     disabled={!provider}
                     className="flex-1 bg-[#faf9f5] border border-[#d4d0c4] rounded-[6pt]
                                px-3 py-2 font-sans text-[9pt] text-[#141413]

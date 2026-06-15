@@ -1,10 +1,10 @@
-import { createMiddleware } from 'hono/factory'
 import {
     getProjectPath,
-    setProjectOverride,
     resolveProjectRoot,
+    setProjectOverride,
     setupProjectModel,
 } from '@vein/core'
+import { createMiddleware } from 'hono/factory'
 
 /**
  * Middleware that resolves the current project from the
@@ -15,14 +15,15 @@ import {
  */
 export const projectMiddleware = createMiddleware(async (c, next) => {
     // Resolve project from header or query param
-    const projectName =
-        c.req.header('X-Vein-Project') || c.req.query('project')
+    const projectName = c.req.header('X-Vein-Project') || c.req.query('project')
 
     if (projectName) {
         const projectPath = await getProjectPath(projectName)
         if (!projectPath) {
             return c.json(
-                { error: `Project "${projectName}" not found in global registry` },
+                {
+                    error: `Project "${projectName}" not found in global registry`,
+                },
                 404
             )
         }

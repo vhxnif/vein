@@ -1,9 +1,9 @@
-import { Hono } from 'hono'
 import {
-    listSearchHistory,
     getSearchHistoryEntry,
+    listSearchHistory,
     resolveProjectRoot,
 } from '@vein/core'
+import { Hono } from 'hono'
 
 const historyRouter = new Hono()
 

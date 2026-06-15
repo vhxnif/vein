@@ -2,13 +2,24 @@
 
 /* ── Keyframes ─────────────────────────────────────────────── */
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes pulse-dot {
-    0%, 100% { opacity: 1; }
-    50%      { opacity: 0.3; }
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
 }
 
 /* ── Kami Design Tokens ───────────────────────────────────── */
@@ -19,12 +30,12 @@
     --warm-sand: #e8e6dc;
 
     /* Brand - Ink Blue */
-    --ink-blue: #1B365D;
-    --ink-light: #2D5A8A;
+    --ink-blue: #1b365d;
+    --ink-light: #2d5a8a;
 
     /* Warm Neutrals */
     --near-black: #141413;
-    --dark-warm: #3D3D3A;
+    --dark-warm: #3d3d3a;
     --olive: #504e49;
     --stone: #6b6a64;
     --border-cream: #d4d0c4;
@@ -33,15 +44,15 @@
     --error: #b53333;
 
     /* Tag Tints (solid hex, never rgba) */
-    --tint-008: #EEF2F7;
-    --tint-014: #E4ECF5;
-    --tint-018: #E4ECF5;
-    --tint-022: #D0DCE9;
-    --tint-030: #D6E1EE;
+    --tint-008: #eef2f7;
+    --tint-014: #e4ecf5;
+    --tint-018: #e4ecf5;
+    --tint-022: #d0dce9;
+    --tint-030: #d6e1ee;
 
     /* Typography */
-    --serif: 'Charter', 'Noto Serif SC', 'Georgia', serif;
-    --mono: 'JetBrains Mono', 'Fira Code', monospace;
+    --serif: "Charter", "Noto Serif SC", "Georgia", serif;
+    --mono: "JetBrains Mono", "Fira Code", monospace;
     --sans: system-ui, -apple-system, sans-serif;
 }
 
@@ -57,11 +68,11 @@ body {
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 767px) {
     .max-w-\[780px\] {
-        max-width: 100% !important;
-        padding-left: 16px !important;
-        padding-right: 16px !important;
-        padding-top: 24px !important;
-        padding-bottom: 80px !important;
+        max-width: 100%;
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 24px;
+        padding-bottom: 80px;
     }
 }
 
@@ -96,7 +107,7 @@ body {
     padding-left: 0;
 }
 .dash-list li::before {
-    content: '— ';
+    content: "— ";
     color: var(--stone);
 }
 

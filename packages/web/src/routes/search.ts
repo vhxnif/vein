@@ -1,10 +1,10 @@
-import { Hono } from 'hono'
 import {
-    searchDocuments,
-    saveSearchHistory,
-    resolveProjectRoot,
     loadProjectConfig,
+    resolveProjectRoot,
+    saveSearchHistory,
+    searchDocuments,
 } from '@vein/core'
+import { Hono } from 'hono'
 
 const searchRouter = new Hono()
 
@@ -30,7 +30,7 @@ searchRouter.post('/', async (c) => {
     const stream = new ReadableStream({
         async start(controller) {
             const send = (obj: unknown) => {
-                const line = JSON.stringify(obj) + '\n'
+                const line = `${JSON.stringify(obj)}\n`
                 controller.enqueue(new TextEncoder().encode(line))
             }
 
@@ -47,7 +47,9 @@ searchRouter.post('/', async (c) => {
                 // Save to history (best-effort)
                 if (root) {
                     saveSearchHistory(root, query, result, elapsedMs).catch(
-                        () => {}
+                        () => {
+                            /* ignore */
+                        }
                     )
                 }
 

@@ -1,19 +1,28 @@
-import { Hono } from 'hono'
-import { streamSSE } from 'hono/streaming'
+declare const Bun: {
+    mkdir: (path: string, opts?: { recursive?: boolean }) => Promise<void>
+    write: (path: string, data: unknown) => Promise<void>
+    file: (path: string) => {
+        text: () => Promise<string>
+        delete: () => Promise<void>
+    }
+}
+
+import type { BaseDocNode } from '@vein/core'
 import {
-    listDocuments,
+    createCachedSummarizer,
+    deleteDoc,
+    getDocFtsSummary,
     getDocumentDetail,
     getFullTree,
     getNodeDetails,
-    getDocFtsSummary,
-    deleteDoc,
     importBatch,
-    resegmentAllDocuments,
-    createCachedSummarizer,
-    resolveProjectRoot,
+    listDocuments,
     loadProjectConfig,
+    resegmentAllDocuments,
+    resolveProjectRoot,
 } from '@vein/core'
-import type { BaseDocNode } from '@vein/core'
+import { Hono } from 'hono'
+import { streamSSE } from 'hono/streaming'
 
 const docsRouter = new Hono()
 
@@ -134,7 +143,9 @@ docsRouter.post('/import', async (c) => {
                     event: 'error',
                     data: JSON.stringify({
                         error:
-                            err instanceof Error ? err.message : 'Import failed',
+                            err instanceof Error
+                                ? err.message
+                                : 'Import failed',
                     }),
                 })
             }

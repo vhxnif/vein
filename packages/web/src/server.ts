@@ -1,11 +1,11 @@
-import { cors } from 'hono/cors'
-import { Hono } from 'hono'
-import { logger } from '@vein/core'
-import { projectMiddleware } from './middleware/project'
 import { existsSync, readFileSync } from 'node:fs'
-import { Readable } from 'node:stream'
 import path from 'node:path'
+import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
+import { logger } from '@vein/core'
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { projectMiddleware } from './middleware/project'
 
 const log = logger.child({ module: 'web' })
 
@@ -29,11 +29,11 @@ app.onError((err, c) => {
 app.use('*', cors())
 app.use('/api/projects/current/*', projectMiddleware)
 
-// ── API routes ─────────────────────────────────────────────────
-import { projectsRouter, modelsRouter } from './routes/projects'
 import { docsRouter } from './routes/documents'
-import { searchRouter } from './routes/search'
 import { historyRouter } from './routes/history'
+// ── API routes ─────────────────────────────────────────────────
+import { modelsRouter, projectsRouter } from './routes/projects'
+import { searchRouter } from './routes/search'
 
 app.route('/api/projects', projectsRouter)
 app.route('/api/models', modelsRouter)
@@ -102,7 +102,10 @@ console.log(`Vein Web server running at http://localhost:${port}`)
 import { createServer } from 'node:http'
 
 const server = createServer(async (req, res) => {
-    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+    const url = new URL(
+        req.url || '/',
+        `http://${req.headers.host || 'localhost'}`
+    )
     let body: ReadableStream | undefined
     if (req.method !== 'GET' && req.method !== 'HEAD') {
         body = Readable.toWeb(req) as any
@@ -132,7 +135,7 @@ const server = createServer(async (req, res) => {
                 res.write(value)
                 // Flush each chunk for SSE streaming
                 if (typeof (res as any).flush === 'function') {
-                    (res as any).flush()
+                    ;(res as any).flush()
                 }
             }
         } finally {

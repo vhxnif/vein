@@ -1,4 +1,11 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import {
+    createContext,
+    type ReactNode,
+    useCallback,
+    useContext,
+    useEffect,
+    useState,
+} from 'react'
 import { fetchProjects } from './api'
 
 interface ProjectContextType {
@@ -10,7 +17,9 @@ interface ProjectContextType {
 
 const ProjectContext = createContext<ProjectContextType>({
     project: null,
-    setProject: () => {},
+    setProject: () => {
+        /* no-op */
+    },
     projects: [],
     loading: false,
 })
@@ -24,7 +33,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         }
         return null
     })
-    const [projects, setProjects] = useState<{ name: string; path: string }[]>([])
+    const [projects, setProjects] = useState<{ name: string; path: string }[]>(
+        []
+    )
     const [loading, setLoading] = useState(true)
 
     // Load project list
@@ -45,7 +56,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }, [])
 
     return (
-        <ProjectContext.Provider value={{ project, setProject, projects, loading }}>
+        <ProjectContext.Provider
+            value={{ project, setProject, projects, loading }}
+        >
             {children}
         </ProjectContext.Provider>
     )

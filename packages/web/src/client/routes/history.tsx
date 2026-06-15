@@ -1,9 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
+import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
-import { fetchHistory, fetchHistoryEntry } from '../lib/api'
-import type { HistoryEntry } from '../lib/api'
 import { Markdown } from '../components/Markdown'
+import type { HistoryEntry } from '../lib/api'
+import { fetchHistory, fetchHistoryEntry } from '../lib/api'
 
 export const Route = createFileRoute('/history')({
     component: HistoryPage,
@@ -39,7 +39,9 @@ function HistoryPage() {
             </h1>
 
             {isLoading ? (
-                <p className="font-sans text-[9pt] text-[#504e49]">Loading...</p>
+                <p className="font-sans text-[9pt] text-[#504e49]">
+                    Loading...
+                </p>
             ) : entries.length === 0 ? (
                 <p className="font-sans text-[9pt] text-[#504e49]">
                     暂无查询历史。使用 Ask 功能开始检索。
@@ -57,6 +59,7 @@ function HistoryPage() {
                                     className="border-b border-[#d4d0c4]/30"
                                 >
                                     <button
+                                        type="button"
                                         className="w-full text-left py-3 flex items-center justify-between
                                                    bg-transparent border-none cursor-pointer
                                                    hover:bg-[#faf9f5]/50 transition-colors"
@@ -77,17 +80,26 @@ function HistoryPage() {
                                                     className={
                                                         entry.verdict === 'pass'
                                                             ? 'text-[#1B365D]'
-                                                            : entry.verdict === 'partial'
+                                                            : entry.verdict ===
+                                                                'partial'
                                                               ? 'text-[#b53333]'
                                                               : 'text-[#6b6a64]'
                                                     }
                                                 >
-                                                    {entry.verdict} {entry.score}/5
+                                                    {entry.verdict}{' '}
+                                                    {entry.score}/5
                                                 </span>
                                             )}
-                                            <span>{(entry.elapsedMs / 1000).toFixed(1)}s</span>
+                                            <span>
+                                                {(
+                                                    entry.elapsedMs / 1000
+                                                ).toFixed(1)}
+                                                s
+                                            </span>
                                             <span className="text-[10pt]">
-                                                {expandedId === entry.id ? '▾' : '▸'}
+                                                {expandedId === entry.id
+                                                    ? '▾'
+                                                    : '▸'}
                                             </span>
                                         </span>
                                     </button>
@@ -104,6 +116,7 @@ function HistoryPage() {
             {totalPages > 1 && (
                 <div className="mt-8 pt-5 border-t border-[#d4d0c4] flex items-center justify-between font-sans text-[9pt] text-[#504e49]">
                     <button
+                        type="button"
                         className="btn-ghost"
                         disabled={page <= 1}
                         onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -114,6 +127,7 @@ function HistoryPage() {
                         {page} / {totalPages}
                     </span>
                     <button
+                        type="button"
                         className="btn-ghost"
                         disabled={page >= totalPages}
                         onClick={() =>
@@ -167,12 +181,19 @@ function ExpandedEntry({ id }: { id: string }) {
                         Trace ({entry.trace.length} steps)
                     </summary>
                     <div className="mt-2 code-block text-[7.5pt]">
-                        {entry.trace.map((step: any, i: number) => (
-                            <div key={i} className="text-[#504e49] leading-relaxed">
+                        {entry.trace.map((step, i) => (
+                            <div
+                                key={String(
+                                    (step as Record<string, string>)
+                                        .resultSummary
+                                )}
+                                className="text-[#504e49] leading-relaxed"
+                            >
                                 <span className="text-[#1B365D]">
-                                    {i + 1}. {step.tool}
+                                    {i + 1}.{' '}
+                                    {(step as Record<string, string>).tool}
                                 </span>{' '}
-                                {step.resultSummary}
+                                {(step as Record<string, string>).resultSummary}
                             </div>
                         ))}
                     </div>

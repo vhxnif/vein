@@ -59,11 +59,7 @@ export function Markdown({ children }: MarkdownProps) {
                     code: ({ children, className, ...rest }) => {
                         const inline = (rest as { inline?: boolean }).inline
                         if (!inline) {
-                            return (
-                                <code className={className}>
-                                    {children}
-                                </code>
-                            )
+                            return <code className={className}>{children}</code>
                         }
                         return (
                             <code className="font-mono text-[9pt] bg-[#faf9f5] px-1 py-0.5 rounded text-[#1B365D]">

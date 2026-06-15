@@ -1,19 +1,16 @@
-import { Hono } from 'hono'
 import {
-    loadGlobalProjects,
-    registerProject,
-    unregisterProject,
-    getProjectPath,
-    listProviders,
-    listModels,
     initProject,
+    listModels,
+    listProviders,
+    loadGlobalProjects,
     loadProjectConfig,
-    saveProjectConfig,
+    registerProject,
     resolveProjectRoot,
+    saveProjectConfig,
     setModelProvider,
-    setProjectOverride,
+    unregisterProject,
 } from '@vein/core'
-import { projectMiddleware } from '../middleware/project'
+import { Hono } from 'hono'
 
 const projectsRouter = new Hono()
 const modelsRouter = new Hono()
@@ -22,10 +19,12 @@ const modelsRouter = new Hono()
 // List all registered projects from the global registry
 projectsRouter.get('/', async (c) => {
     const data = await loadGlobalProjects()
-    const entries = Object.entries(data.projects).map(([name, projectPath]) => ({
-        name,
-        path: projectPath,
-    }))
+    const entries = Object.entries(data.projects).map(
+        ([name, projectPath]) => ({
+            name,
+            path: projectPath,
+        })
+    )
     return c.json({ projects: entries })
 })
 
@@ -33,7 +32,12 @@ projectsRouter.get('/', async (c) => {
 // Create a new vein project
 projectsRouter.post('/', async (c) => {
     const body = await c.req.json()
-    const { name, provider, model, path: targetPath } = body as {
+    const {
+        name,
+        provider,
+        model,
+        path: targetPath,
+    } = body as {
         name?: string
         provider?: string
         model?: string
@@ -56,10 +60,18 @@ projectsRouter.post('/', async (c) => {
         })
         setModelProvider(config.model)
         await registerProject(config.name, cwd)
-        return c.json({ project: { name: config.name, path: cwd, config } }, 201)
+        return c.json(
+            { project: { name: config.name, path: cwd, config } },
+            201
+        )
     } catch (err) {
         return c.json(
-            { error: err instanceof Error ? err.message : 'Failed to create project' },
+            {
+                error:
+                    err instanceof Error
+                        ? err.message
+                        : 'Failed to create project',
+            },
             500
         )
     }
@@ -125,4 +137,4 @@ modelsRouter.get('/:provider', (c) => {
     return c.json({ models })
 })
 
-export { projectsRouter, modelsRouter }
+export { modelsRouter, projectsRouter }

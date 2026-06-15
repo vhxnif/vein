@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useRef, useCallback } from 'react'
-import { searchQuery } from '../lib/api'
-import type { SearchResult } from '../lib/api'
+import { useCallback, useRef, useState } from 'react'
 import { Markdown } from '../components/Markdown'
+import type { SearchResult } from '../lib/api'
+import { searchQuery } from '../lib/api'
 
 export const Route = createFileRoute('/')({
     component: HomePage,
@@ -61,7 +61,7 @@ function HomePage() {
                 <input
                     type="text"
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => setQuery(e.currentTarget.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Ask your knowledge base..."
                     className="w-full bg-[#faf9f5] ring-warm rounded-[8pt] px-6 py-4
@@ -78,7 +78,9 @@ function HomePage() {
                     <div className="flex items-center gap-3">
                         <div className="w-4 h-4 border-2 border-[#1B365D] border-t-transparent rounded-full animate-spin flex-shrink-0" />
                         <span className="font-sans text-[9pt] text-[#504e49]">
-                            {steps.length > 0 ? steps[steps.length - 1] : 'Searching your knowledge base...'}
+                            {steps.length > 0
+                                ? steps[steps.length - 1]
+                                : 'Searching your knowledge base...'}
                         </span>
                         <span className="font-mono text-[8pt] text-[#6b6a64] tabular-nums ml-auto">
                             {elapsed}s
@@ -86,11 +88,16 @@ function HomePage() {
                     </div>
                     {steps.length > 1 && (
                         <div className="mt-2 pl-7 space-y-1">
-                            {steps.slice(Math.max(0, steps.length - 11), -1).map((s, i) => (
-                                <div key={i} className="font-mono text-[7.5pt] text-[#6b6a64]">
-                                    ✓ {s}
-                                </div>
-                            ))}
+                            {steps
+                                .slice(Math.max(0, steps.length - 11), -1)
+                                .map((s, i) => (
+                                    <div
+                                        key={`${i}-${s}`}
+                                        className="font-mono text-[7.5pt] text-[#6b6a64]"
+                                    >
+                                        ✓ {s}
+                                    </div>
+                                ))}
                         </div>
                     )}
                 </div>
@@ -99,13 +106,18 @@ function HomePage() {
             {/* Error */}
             {error && (
                 <div className="mb-8 p-4 bg-[#faf9f5] ring-warm rounded-[8pt]">
-                    <p className="font-sans text-[9pt] text-[#b53333]">{error}</p>
+                    <p className="font-sans text-[9pt] text-[#b53333]">
+                        {error}
+                    </p>
                 </div>
             )}
 
             {/* Result */}
             {result && (
-                <div className="mt-10 mb-16" style={{ animation: 'fadeIn 300ms ease' }}>
+                <div
+                    className="mt-10 mb-16"
+                    style={{ animation: 'fadeIn 300ms ease' }}
+                >
                     <Markdown>{result.content}</Markdown>
 
                     {/* Review */}
@@ -115,11 +127,18 @@ function HomePage() {
                                 <p className="font-sans text-[7.5pt] font-semibold text-[#6b6a64] uppercase tracking-wide mb-1">
                                     Review
                                 </p>
-                                <p className={`font-sans text-[8.5pt] font-medium ${
-                                    result.review.verdict === 'pass' ? 'text-[#1B365D]'
-                                    : result.review.verdict === 'partial' ? 'text-[#b53333]'
-                                    : 'text-[#6b6a64]'}`}>
-                                    {result.review.verdict} ({result.review.score}/5)
+                                <p
+                                    className={`font-sans text-[8.5pt] font-medium ${
+                                        result.review.verdict === 'pass'
+                                            ? 'text-[#1B365D]'
+                                            : result.review.verdict ===
+                                                'partial'
+                                              ? 'text-[#b53333]'
+                                              : 'text-[#6b6a64]'
+                                    }`}
+                                >
+                                    {result.review.verdict} (
+                                    {result.review.score}/5)
                                     {result.reviewElapsedMs !== undefined &&
                                         ` · ${(result.reviewElapsedMs / 1000).toFixed(1)}s`}
                                 </p>
