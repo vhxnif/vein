@@ -93,7 +93,8 @@ function buildReviewTools(): ToolDef[] {
 async function reviewer(
     query: string,
     librarianResponse: string,
-    sources?: SourceRef[]
+    sources?: SourceRef[],
+    onStep?: (label: string) => void,
 ): Promise<ReviewResult> {
     const sourcesText = sources?.length
         ? sources
@@ -101,9 +102,17 @@ async function reviewer(
               .join('\n')
         : '(无数据源)'
 
+    onStep?.('Reviewing results...')
+
     const { content } = await call({
         systemPrompt: prompt,
         tools: buildReviewTools(),
+        onToolCall: (name, args) => {
+            if (name === 'getReviewSource') {
+                const a = args as { docId?: string; nodeId?: string }
+                onStep?.(`Verifying: ${a.docId ?? '?'}/${a.nodeId ?? '?'}...`)
+            }
+        },
         messages: [
             {
                 role: 'user',
@@ -131,22 +140,26 @@ async function reviewer(
         }
     }
 
+    let result: ReviewResult
     try {
-        const result = JSON.parse(json) as ReviewResult
-        return {
+        result = JSON.parse(json) as ReviewResult
+        result = {
             verdict: result.verdict ?? 'fail',
             score: result.score ?? 1,
             reason: result.reason ?? '',
             suggestion: result.suggestion ?? '',
         }
     } catch {
-        return {
+        result = {
             verdict: 'fail',
             score: 1,
             reason: 'Reviewer 返回格式异常，无法解析',
             suggestion: '',
         }
     }
+
+    onStep?.(`Review: ${result.verdict} (${result.score}/5)`)
+    return result
 }
 
 export type { ReviewResult, SourceRef }

@@ -9,8 +9,11 @@ import {
 const searchRouter = new Hono()
 
 // ── POST /api/projects/current/search ───────────────────────────
-// Runs the librarian agent and returns the result as JSON.
-// Uses POST to support longer queries.
+// Streams the librarian agent execution via ndjson.
+// Each line is a JSON object:
+//   { "type": "step", "label": "Searching..." }
+//   { "type": "done", "content": "...", "review": {...}, ... }
+//   { "type": "error", "message": "..." }
 searchRouter.post('/', async (c) => {
     const root = resolveProjectRoot()
     if (!root) return c.json({ error: 'No project selected' }, 400)
@@ -22,41 +25,58 @@ searchRouter.post('/', async (c) => {
     const query = body.q as string
     if (!query) return c.json({ error: 'Missing query' }, 400)
 
-    const showTrace = body.trace === true
-
     const startedAt = performance.now()
 
-    try {
-        const result = await searchDocuments(query, {
-            segmenter: config.segmenter,
-        })
+    const stream = new ReadableStream({
+        async start(controller) {
+            const send = (obj: unknown) => {
+                const line = JSON.stringify(obj) + '\n'
+                controller.enqueue(new TextEncoder().encode(line))
+            }
 
-        const elapsedMs = Math.round(performance.now() - startedAt)
+            try {
+                const result = await searchDocuments(query, {
+                    segmenter: config.segmenter,
+                    onStep: (label) => {
+                        send({ type: 'step', label })
+                    },
+                })
 
-        // Save to history (best-effort)
-        if (root) {
-            saveSearchHistory(root, query, result, elapsedMs).catch(() => {})
-        }
+                const elapsedMs = Math.round(performance.now() - startedAt)
 
-        return c.json({
-            content: result.content,
-            review: result.review,
-            reviewElapsedMs: result.reviewElapsedMs,
-            elapsedMs,
-            trace: showTrace ? result.trace : undefined,
-            docNames: result.docNames
-                ? Object.fromEntries(result.docNames)
-                : undefined,
-        })
-    } catch (err) {
-        return c.json(
-            {
-                error:
-                    err instanceof Error ? err.message : 'Search failed',
-            },
-            500
-        )
-    }
+                // Save to history (best-effort)
+                if (root) {
+                    saveSearchHistory(root, query, result, elapsedMs).catch(
+                        () => {}
+                    )
+                }
+
+                send({
+                    type: 'done',
+                    content: result.content,
+                    review: result.review,
+                    reviewElapsedMs: result.reviewElapsedMs,
+                    elapsedMs,
+                    trace: result.trace,
+                    docNames: result.docNames
+                        ? Object.fromEntries(result.docNames)
+                        : undefined,
+                })
+            } catch (err) {
+                send({
+                    type: 'error',
+                    message:
+                        err instanceof Error ? err.message : 'Search failed',
+                })
+            } finally {
+                controller.close()
+            }
+        },
+    })
+
+    return c.body(stream, 200, {
+        'Content-Type': 'application/x-ndjson',
+    })
 })
 
 export { searchRouter }

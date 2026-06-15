@@ -13,12 +13,14 @@
         "check": "tsc --noEmit"
     },
     "dependencies": {
+        "@tanstack/react-query": "^5.71.10",
+        "@tanstack/react-router": "^1.115.0",
         "@vein/core": "workspace:*",
         "hono": "^4.7.5",
         "react": "^19.1.0",
         "react-dom": "^19.1.0",
-        "@tanstack/react-query": "^5.71.10",
-        "@tanstack/react-router": "^1.115.0"
+        "react-markdown": "^10.1.0",
+        "remark-gfm": "^4.0.1"
     },
     "devDependencies": {
         "@types/react": "^19.1.1",

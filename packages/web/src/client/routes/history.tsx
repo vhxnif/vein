@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { fetchHistory, fetchHistoryEntry } from '../lib/api'
 import type { HistoryEntry } from '../lib/api'
+import { Markdown } from '../components/Markdown'
 
 export const Route = createFileRoute('/history')({
     component: HistoryPage,
@@ -146,8 +147,8 @@ function ExpandedEntry({ id }: { id: string }) {
 
     return (
         <div className="px-3 pb-4">
-            <div className="font-serif text-[9.5pt] leading-relaxed text-[#141413] whitespace-pre-wrap mt-2">
-                {entry.answer || '(no answer)'}
+            <div className="mt-2">
+                <Markdown>{entry.answer || '(no answer)'}</Markdown>
             </div>
 
             {entry.verdict && (

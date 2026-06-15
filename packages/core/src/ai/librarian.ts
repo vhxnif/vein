@@ -48,6 +48,7 @@ const PROMPT = `你是一个文档检索 Librarian。通过关键词搜索定位
 - 步骤预算：单次 ≤20，含重试 ≤40
 - 优先纵深：先分析完一篇再考虑下一篇
 - 已获取的信息不要重复获取
+- 最终答案直接输出内容，不要添加任何前缀（如"自检通过"、"以下是检索结果"等），也不要在末尾添加总结性套话
 
 ## 自检
 
@@ -192,7 +193,7 @@ function makeGetDocNodeDetails({ cached, ok, tool }: ToolCtx): any {
     }
 }
 
-function makeReviewResult({ ok, tool }: ToolCtx): any {
+function makeReviewResult({ ok, tool, onStep }: ToolCtx): any {
     return {
         name: 'reviewResult',
         description:
@@ -225,7 +226,7 @@ function makeReviewResult({ ok, tool }: ToolCtx): any {
                     // ignore invalid sources
                 }
             }
-            const review = await reviewer(query, result, parsed)
+            const review = await reviewer(query, result, parsed, onStep)
             return ok(JSON.stringify(review))
         }),
     }

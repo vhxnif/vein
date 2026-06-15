@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useState, useRef, useCallback } from 'react'
 import { searchQuery } from '../lib/api'
 import type { SearchResult } from '../lib/api'
+import { Markdown } from '../components/Markdown'
 
 export const Route = createFileRoute('/')({
     component: HomePage,
@@ -13,7 +14,7 @@ function HomePage() {
     const [result, setResult] = useState<SearchResult | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [elapsed, setElapsed] = useState(0)
-    const [showTrace, setShowTrace] = useState(false)
+    const [steps, setSteps] = useState<string[]>([])
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     const handleSearch = useCallback(async () => {
@@ -24,6 +25,7 @@ function HomePage() {
         setResult(null)
         setError(null)
         setElapsed(0)
+        setSteps([])
 
         const startTime = Date.now()
         timerRef.current = setInterval(() => {
@@ -31,7 +33,9 @@ function HomePage() {
         }, 100)
 
         try {
-            const res = await searchQuery(query.trim(), showTrace)
+            const res = await searchQuery(query.trim(), (label) => {
+                setSteps((prev) => [...prev, label])
+            })
             setResult(res)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Search failed')
@@ -39,7 +43,7 @@ function HomePage() {
             setSearching(false)
             if (timerRef.current) clearInterval(timerRef.current)
         }
-    }, [query, searching, showTrace])
+    }, [query, searching])
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') handleSearch()
@@ -53,47 +57,42 @@ function HomePage() {
             </h1>
 
             {/* Search bar */}
-            <div className="mt-12 mb-4 flex gap-3">
+            <div className="mt-12 mb-4">
                 <input
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Ask your knowledge base..."
-                    className="flex-1 bg-[#faf9f5] ring-warm rounded-[8pt] px-6 py-4
+                    className="w-full bg-[#faf9f5] ring-warm rounded-[8pt] px-6 py-4
                                font-serif text-[11pt] leading-relaxed text-[#141413]
                                placeholder:text-[#6b6a64] outline-none
                                focus:ring-[#1B365D] transition-shadow"
                     disabled={searching}
                 />
-                <button
-                    className="btn-primary"
-                    onClick={handleSearch}
-                    disabled={searching || !query.trim()}
-                >
-                    {searching ? 'Searching...' : 'Search'}
-                </button>
-                <label className="flex items-center gap-1.5 font-sans text-[8pt] text-[#504e49] cursor-pointer select-none">
-                    <input
-                        type="checkbox"
-                        checked={showTrace}
-                        onChange={(e) => setShowTrace(e.target.checked)}
-                        className="accent-[#1B365D]"
-                    />
-                    Trace
-                </label>
             </div>
 
             {/* Searching indicator */}
             {searching && (
-                <div className="flex items-center gap-3 mb-8">
-                    <span className="w-2 h-2 rounded-full bg-[#1B365D] animate-pulse" />
-                    <span className="font-sans text-[9pt] text-[#504e49]">
-                        Searching your knowledge base...
-                    </span>
-                    <span className="font-mono text-[8pt] text-[#6b6a64] tabular-nums">
-                        {elapsed}s
-                    </span>
+                <div className="mb-8">
+                    <div className="flex items-center gap-3">
+                        <div className="w-4 h-4 border-2 border-[#1B365D] border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        <span className="font-sans text-[9pt] text-[#504e49]">
+                            {steps.length > 0 ? steps[steps.length - 1] : 'Searching your knowledge base...'}
+                        </span>
+                        <span className="font-mono text-[8pt] text-[#6b6a64] tabular-nums ml-auto">
+                            {elapsed}s
+                        </span>
+                    </div>
+                    {steps.length > 1 && (
+                        <div className="mt-2 pl-7 space-y-1">
+                            {steps.slice(Math.max(0, steps.length - 11), -1).map((s, i) => (
+                                <div key={i} className="font-mono text-[7.5pt] text-[#6b6a64]">
+                                    ✓ {s}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -107,9 +106,7 @@ function HomePage() {
             {/* Result */}
             {result && (
                 <div className="mt-10 mb-16" style={{ animation: 'fadeIn 300ms ease' }}>
-                    <div className="font-serif text-[10pt] leading-relaxed text-[#141413] whitespace-pre-wrap">
-                        {result.content}
-                    </div>
+                    <Markdown>{result.content}</Markdown>
 
                     {/* Review */}
                     {result.review && (
@@ -133,30 +130,9 @@ function HomePage() {
                         </div>
                     )}
 
-                    {/* Footer + Trace */}
                     <div className="mt-6 flex items-center gap-4 font-sans text-[8pt] text-[#6b6a64]">
                         <span>{(result.elapsedMs / 1000).toFixed(1)}s</span>
-                        {result.trace && result.trace.length > 0 && (
-                            <button
-                                className="text-[#1B365D] hover:underline bg-transparent border-none cursor-pointer"
-                                onClick={() => setShowTrace(!showTrace)}
-                            >
-                                {showTrace ? 'Hide trace' : 'Trace'}
-                            </button>
-                        )}
                     </div>
-
-                    {showTrace && result.trace && result.trace.length > 0 && (
-                        <div className="mt-3 code-block max-h-[200px] overflow-y-auto">
-                            {result.trace.map((step: any, i: number) => (
-                                <div key={i} className="font-mono text-[7.5pt] leading-relaxed text-[#504e49]">
-                                    <span className="text-[#1B365D]">{i + 1}. {step.tool}</span>{' '}
-                                    {step.resultSummary}
-                                    {step.elapsedMs > 0 && <span className="text-[#6b6a64]"> · {step.elapsedMs}ms</span>}
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
             )}
 

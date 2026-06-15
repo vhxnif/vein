@@ -176,16 +176,47 @@ export async function fetchHistoryEntry(id: string): Promise<HistoryEntry> {
 
 export async function searchQuery(
     q: string,
-    trace: boolean
+    onStep: (label: string) => void
 ): Promise<SearchResult> {
     const res = await fetch(`${BASE}/projects/current/search`, {
         method: 'POST',
         headers: h({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ q, trace }),
+        body: JSON.stringify({ q }),
     })
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Search failed' }))
         throw new Error(err.error || 'Search failed')
     }
-    return res.json()
+    if (!res.body) throw new Error('No response body')
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+            if (!line.trim()) continue
+            const data = JSON.parse(line) as Record<string, unknown>
+            if (data.type === 'step') {
+                onStep(String(data.label))
+            } else if (data.type === 'done') {
+                return data as unknown as SearchResult
+            } else if (data.type === 'error') {
+                throw new Error(String(data.message))
+            }
+        }
+    }
+
+    if (buffer.trim()) {
+        const data = JSON.parse(buffer) as Record<string, unknown>
+        if (data.type === 'done') return data as unknown as SearchResult
+        if (data.type === 'error') throw new Error(String(data.message))
+    }
+
+    throw new Error('Search stream ended without result')
 }
