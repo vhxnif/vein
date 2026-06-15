@@ -49,6 +49,15 @@ export interface HistoryEntry {
     trace?: unknown[]
 }
 
+export interface NodeInfo {
+    nodeId: string
+    title: string
+    lineNum: number
+    text: string
+    summary?: string
+    prefixSummary?: string
+}
+
 export interface SearchResult {
     content: string
     review?: { verdict: string; score: number; reason: string }
@@ -147,6 +156,16 @@ export async function deleteDocument(id: string) {
         headers: h(),
     })
     if (!res.ok) throw new Error('Failed to delete document')
+    return res.json()
+}
+
+export async function fetchNode(docId: string, nodeId: string): Promise<NodeInfo> {
+    const shortNodeId = nodeId.split('_')[0]
+    const res = await fetch(
+        `${BASE}/projects/current/documents/${docId}/nodes/${shortNodeId}`,
+        { headers: h() }
+    )
+    if (!res.ok) throw new Error('Node not found')
     return res.json()
 }
 

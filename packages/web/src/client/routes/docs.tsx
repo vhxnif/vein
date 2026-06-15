@@ -1,13 +1,27 @@
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, Outlet, useLocation } from '@tanstack/react-router'
 import { useState } from 'react'
 import { fetchDocuments } from '../lib/api'
 
 export const Route = createFileRoute('/docs')({
-    component: DocsPage,
+    component: DocsLayout,
 })
 
-function DocsPage() {
+function DocsLayout() {
+    const location = useLocation()
+    const isDetail = location.pathname !== '/docs'
+
+    return (
+        <div
+            className="max-w-[780px] mx-auto px-8 py-16"
+            style={{ animation: isDetail ? 'fadeIn 250ms ease' : 'none' }}
+        >
+            {isDetail ? <Outlet /> : <DocsList />}
+        </div>
+    )
+}
+
+function DocsList() {
     const [page, setPage] = useState(1)
     const pageSize = 20
 
@@ -22,7 +36,7 @@ function DocsPage() {
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
     return (
-        <div className="max-w-[780px] mx-auto px-8 py-16">
+        <>
             <div className="flex items-center justify-between mb-8">
                 <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413]">
                     文档
@@ -61,7 +75,7 @@ function DocsPage() {
                                 <span className="font-serif text-[10pt] font-medium text-[#141413] leading-relaxed">
                                     {doc.title}
                                 </span>
-                                <span className="font-sans text-[8pt] text-[#504e49] opacity-0 group-hover:opacity-100 transition-opacity">
+                                <span className="font-sans text-[8pt] text-[#504e49] opacity-40 group-hover:opacity-100 transition-opacity">
                                     →
                                 </span>
                             </div>
@@ -100,6 +114,6 @@ function DocsPage() {
                     </button>
                 </div>
             )}
-        </div>
+        </>
     )
 }
