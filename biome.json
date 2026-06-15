@@ -8,6 +8,28 @@
     "files": {
         "ignoreUnknown": false
     },
+    "overrides": [
+        {
+            "includes": ["**/routeTree.gen.ts"],
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "noExplicitAny": "off"
+                    }
+                }
+            }
+        },
+        {
+            "includes": ["packages/web/src/server.ts"],
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "noExplicitAny": "off"
+                    }
+                }
+            }
+        }
+    ],
     "formatter": {
         "enabled": true,
         "formatWithErrors": false,

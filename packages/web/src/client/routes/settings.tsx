@@ -8,17 +8,23 @@ import {
     fetchProviders,
     saveConfig,
 } from '../lib/api'
+import { useProject } from '../lib/project'
 
 export const Route = createFileRoute('/settings')({
     component: SettingsPage,
 })
 
 function SettingsPage() {
+    const { project, projects } = useProject()
     const queryClient = useQueryClient()
     const [saved, setSaved] = useState(false)
 
-    const { data: configData, isLoading } = useQuery({
-        queryKey: ['config'],
+    const {
+        data: configData,
+        isLoading,
+        error,
+    } = useQuery({
+        queryKey: ['config', project],
         queryFn: () => fetchConfig(),
     })
 
@@ -60,6 +66,19 @@ function SettingsPage() {
         },
     })
 
+    if (!project) {
+        return (
+            <div className="max-w-[560px] mx-auto px-8 py-16">
+                <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413] mb-10">
+                    设置
+                </h1>
+                <p className="font-sans text-[9pt] text-[#6b6a64]">
+                    No project selected — select one from the sidebar
+                </p>
+            </div>
+        )
+    }
+
     if (isLoading) {
         return (
             <div className="max-w-[560px] mx-auto px-8 py-16">
@@ -70,11 +89,28 @@ function SettingsPage() {
         )
     }
 
+    if (error) {
+        return (
+            <div className="max-w-[560px] mx-auto px-8 py-16">
+                <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413] mb-10">
+                    设置
+                </h1>
+                <p className="font-sans text-[9pt] text-[#b53333]">
+                    Failed to load config:{' '}
+                    {error instanceof Error ? error.message : String(error)}
+                </p>
+            </div>
+        )
+    }
+
     if (!config) {
         return (
             <div className="max-w-[560px] mx-auto px-8 py-16">
+                <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413] mb-10">
+                    设置
+                </h1>
                 <p className="font-sans text-[9pt] text-[#504e49]">
-                    No project selected. Select a project first.
+                    No config found for this project.
                 </p>
             </div>
         )
@@ -145,7 +181,17 @@ function SettingsPage() {
                     数据库
                 </h3>
                 <p className="font-sans text-[9pt] text-[#504e49]">
-                    {config.db || '.vein/data.db'}
+                    {(() => {
+                        const dbRel = (config.db || '.vein/data.db').replace(
+                            /^\.\//,
+                            ''
+                        )
+                        const root = projects.find(
+                            (p) => p.name === project
+                        )?.path
+                        const raw = root ? `${root}/${dbRel}` : dbRel
+                        return raw.replaceAll('\\', '/')
+                    })()}
                 </p>
             </section>
 

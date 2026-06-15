@@ -4,21 +4,36 @@ import { useState } from 'react'
 import { Markdown } from '../components/Markdown'
 import type { HistoryEntry } from '../lib/api'
 import { fetchHistory, fetchHistoryEntry } from '../lib/api'
+import { useProject } from '../lib/project'
 
 export const Route = createFileRoute('/history')({
     component: HistoryPage,
 })
 
 function HistoryPage() {
+    const { project } = useProject()
     const [page, setPage] = useState(1)
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const pageSize = 20
 
-    const { data, isLoading } = useQuery({
-        queryKey: ['history', page],
+    const { data, isLoading, error } = useQuery({
+        queryKey: ['history', project, page],
         queryFn: () => fetchHistory(page, pageSize),
         staleTime: 30_000,
     })
+
+    if (!project) {
+        return (
+            <div className="max-w-[780px] mx-auto px-8 py-16">
+                <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413] mb-8">
+                    历史
+                </h1>
+                <p className="font-sans text-[9pt] text-[#6b6a64]">
+                    No project selected — select one from the sidebar
+                </p>
+            </div>
+        )
+    }
 
     const entries = data?.entries ?? []
     const total = data?.total ?? 0
@@ -27,7 +42,7 @@ function HistoryPage() {
     // Group entries by date
     const groups: Record<string, HistoryEntry[]> = {}
     for (const entry of entries) {
-        const date = entry.id.slice(0, 10) // YYYY-MM-DD
+        const date = entry.id.slice(0, 10)
         if (!groups[date]) groups[date] = []
         groups[date].push(entry)
     }
@@ -41,6 +56,11 @@ function HistoryPage() {
             {isLoading ? (
                 <p className="font-sans text-[9pt] text-[#504e49]">
                     Loading...
+                </p>
+            ) : error ? (
+                <p className="font-sans text-[9pt] text-[#b53333]">
+                    Failed to load history:{' '}
+                    {error instanceof Error ? error.message : String(error)}
                 </p>
             ) : entries.length === 0 ? (
                 <p className="font-sans text-[9pt] text-[#504e49]">

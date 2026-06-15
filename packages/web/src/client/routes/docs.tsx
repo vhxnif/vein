@@ -1,7 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute, Link, Outlet, useLocation } from '@tanstack/react-router'
+import {
+    createFileRoute,
+    Link,
+    Outlet,
+    useLocation,
+} from '@tanstack/react-router'
 import { useState } from 'react'
 import { fetchDocuments } from '../lib/api'
+import { useProject } from '../lib/project'
 
 export const Route = createFileRoute('/docs')({
     component: DocsLayout,
@@ -22,14 +28,28 @@ function DocsLayout() {
 }
 
 function DocsList() {
+    const { project } = useProject()
     const [page, setPage] = useState(1)
     const pageSize = 20
 
-    const { data, isLoading } = useQuery({
-        queryKey: ['documents', page],
+    const { data, isLoading, error } = useQuery({
+        queryKey: ['documents', project, page],
         queryFn: () => fetchDocuments(page, pageSize),
         staleTime: 30_000,
     })
+
+    if (!project) {
+        return (
+            <>
+                <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413] mb-8">
+                    文档
+                </h1>
+                <p className="font-sans text-[9pt] text-[#6b6a64]">
+                    No project selected — select one from the sidebar
+                </p>
+            </>
+        )
+    }
 
     const docs = data?.docs ?? []
     const total = data?.total ?? 0
@@ -56,6 +76,11 @@ function DocsList() {
             {isLoading ? (
                 <p className="font-sans text-[9pt] text-[#504e49]">
                     Loading...
+                </p>
+            ) : error ? (
+                <p className="font-sans text-[9pt] text-[#b53333]">
+                    Failed to load documents:{' '}
+                    {error instanceof Error ? error.message : String(error)}
                 </p>
             ) : docs.length === 0 ? (
                 <p className="font-sans text-[9pt] text-[#504e49]">

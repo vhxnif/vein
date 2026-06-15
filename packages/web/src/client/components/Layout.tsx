@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { useProject } from '../lib/project'
 
@@ -217,8 +218,8 @@ function SidebarIcon({
     children: ReactNode
 }) {
     return (
-        <a
-            href={href}
+        <Link
+            to={href}
             className="flex items-center justify-center w-8 h-8 rounded-[6pt]
                        text-[#6b6a64] hover:text-[#1B365D] hover:bg-[#EEF2F7]
                        transition-colors"
@@ -226,7 +227,7 @@ function SidebarIcon({
             aria-label={label}
         >
             {children}
-        </a>
+        </Link>
     )
 }
 
@@ -242,14 +243,14 @@ function MobileTab({
     children: ReactNode
 }) {
     return (
-        <a
-            href={href}
+        <Link
+            to={href}
             className="flex flex-col items-center gap-0.5 text-[#6b6a64] hover:text-[#1B365D]
                        transition-colors no-underline"
             aria-label={label}
         >
             {children}
             <span className="font-sans text-[9px] leading-none">{label}</span>
-        </a>
+        </Link>
     )
 }

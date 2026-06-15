@@ -1,10 +1,19 @@
 // Typed API client for Vein backend.
 // Uses native fetch; TanStack Query wraps these in useQuery/useMutation.
-// All project-scoped requests auto-inject X-Vein-Project from localStorage.
+// All project-scoped requests auto-inject X-Vein-Project from localStorage
+// as both an HTTP header AND a query parameter (for visibility in DevTools).
 
 const BASE = '/api'
 
 // ── Helpers ────────────────────────────────────────────────────
+
+function projectParam(): string {
+    if (typeof window !== 'undefined') {
+        const p = localStorage.getItem('vein-project')
+        if (p) return `project=${encodeURIComponent(p)}`
+    }
+    return ''
+}
 
 function h(extra?: Record<string, string>): Record<string, string> {
     const headers: Record<string, string> = { ...extra }
@@ -13,6 +22,14 @@ function h(extra?: Record<string, string>): Record<string, string> {
         if (p) headers['X-Vein-Project'] = p
     }
     return headers
+}
+
+/** Append project query param to a URL path. */
+function u(path: string): string {
+    const p = projectParam()
+    if (!p) return `${BASE}${path}`
+    const sep = path.includes('?') ? '&' : '?'
+    return `${BASE}${path}${sep}${p}`
 }
 
 // ── Types ──────────────────────────────────────────────────────
@@ -97,13 +114,13 @@ export async function createProject(input: {
 // ── Config ─────────────────────────────────────────────────────
 
 export async function fetchConfig() {
-    const res = await fetch(`${BASE}/projects/current/config`, { headers: h() })
+    const res = await fetch(u('/projects/current/config'), { headers: h() })
     if (!res.ok) throw new Error('Failed to fetch config')
     return res.json()
 }
 
 export async function saveConfig(updates: Record<string, unknown>) {
-    const res = await fetch(`${BASE}/projects/current/config`, {
+    const res = await fetch(u('/projects/current/config'), {
         method: 'PUT',
         headers: h({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(updates),
@@ -135,7 +152,7 @@ export async function fetchDocuments(
     pageSize: number
 ): Promise<{ docs: DocInfo[]; total: number }> {
     const res = await fetch(
-        `${BASE}/projects/current/documents?page=${page}&pageSize=${pageSize}`,
+        u(`/projects/current/documents?page=${page}&pageSize=${pageSize}`),
         { headers: h() }
     )
     if (!res.ok) throw new Error('Failed to fetch documents')
@@ -143,7 +160,7 @@ export async function fetchDocuments(
 }
 
 export async function fetchDocument(id: string): Promise<DocInfo> {
-    const res = await fetch(`${BASE}/projects/current/documents/${id}`, {
+    const res = await fetch(u(`/projects/current/documents/${id}`), {
         headers: h(),
     })
     if (!res.ok) throw new Error('Document not found')
@@ -151,7 +168,7 @@ export async function fetchDocument(id: string): Promise<DocInfo> {
 }
 
 export async function deleteDocument(id: string) {
-    const res = await fetch(`${BASE}/projects/current/documents/${id}`, {
+    const res = await fetch(u(`/projects/current/documents/${id}`), {
         method: 'DELETE',
         headers: h(),
     })
@@ -159,10 +176,13 @@ export async function deleteDocument(id: string) {
     return res.json()
 }
 
-export async function fetchNode(docId: string, nodeId: string): Promise<NodeInfo> {
+export async function fetchNode(
+    docId: string,
+    nodeId: string
+): Promise<NodeInfo> {
     const shortNodeId = nodeId.split('_')[0]
     const res = await fetch(
-        `${BASE}/projects/current/documents/${docId}/nodes/${shortNodeId}`,
+        u(`/projects/current/documents/${docId}/nodes/${shortNodeId}`),
         { headers: h() }
     )
     if (!res.ok) throw new Error('Node not found')
@@ -176,7 +196,7 @@ export async function fetchHistory(
     pageSize: number
 ): Promise<{ entries: HistoryEntry[]; total: number }> {
     const res = await fetch(
-        `${BASE}/projects/current/history?page=${page}&pageSize=${pageSize}`,
+        u(`/projects/current/history?page=${page}&pageSize=${pageSize}`),
         { headers: h() }
     )
     if (!res.ok) throw new Error('Failed to fetch history')
@@ -184,7 +204,7 @@ export async function fetchHistory(
 }
 
 export async function fetchHistoryEntry(id: string): Promise<HistoryEntry> {
-    const res = await fetch(`${BASE}/projects/current/history/${id}`, {
+    const res = await fetch(u(`/projects/current/history/${id}`), {
         headers: h(),
     })
     if (!res.ok) throw new Error('History entry not found')
@@ -197,7 +217,7 @@ export async function searchQuery(
     q: string,
     onStep: (label: string) => void
 ): Promise<SearchResult> {
-    const res = await fetch(`${BASE}/projects/current/search`, {
+    const res = await fetch(u('/projects/current/search'), {
         method: 'POST',
         headers: h({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ q }),

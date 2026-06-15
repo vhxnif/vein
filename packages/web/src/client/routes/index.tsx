@@ -1,14 +1,17 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useRef, useState } from 'react'
 import { Markdown } from '../components/Markdown'
+import { RunCat } from '../components/RunCat'
 import type { SearchResult } from '../lib/api'
 import { searchQuery } from '../lib/api'
+import { useProject } from '../lib/project'
 
 export const Route = createFileRoute('/')({
     component: HomePage,
 })
 
 function HomePage() {
+    const { project } = useProject()
     const [query, setQuery] = useState('')
     const [searching, setSearching] = useState(false)
     const [result, setResult] = useState<SearchResult | null>(null)
@@ -51,19 +54,30 @@ function HomePage() {
 
     return (
         <div className="max-w-[780px] mx-auto px-8 py-16">
-            {/* Hero title */}
-            <h1 className="font-serif text-[42pt] font-medium leading-tight text-center text-[#141413]">
-                my-docs
-            </h1>
+            {/* Project indicator */}
+            {project ? (
+                <div className="text-center mb-12">
+                    <h1 className="font-serif text-[22pt] font-medium leading-tight text-[#141413]">
+                        {project}
+                    </h1>
+                    <p className="mt-1.5 font-sans text-[9pt] text-[#6b6a64]">
+                        Search across documents in this project
+                    </p>
+                </div>
+            ) : (
+                <p className="font-sans text-[8.5pt] text-[#6b6a64] text-center mb-12">
+                    No project selected — select one from the sidebar
+                </p>
+            )}
 
             {/* Search bar */}
-            <div className="mt-12 mb-4">
+            <div className="mb-4">
                 <input
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.currentTarget.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Ask your knowledge base..."
+                    placeholder="Type your question..."
                     className="w-full bg-[#faf9f5] ring-warm rounded-[8pt] px-6 py-4
                                font-serif text-[11pt] leading-relaxed text-[#141413]
                                placeholder:text-[#6b6a64] outline-none
@@ -76,11 +90,11 @@ function HomePage() {
             {searching && (
                 <div className="mb-8">
                     <div className="flex items-center gap-3">
-                        <div className="w-4 h-4 border-2 border-[#1B365D] border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        <RunCat size={24} />
                         <span className="font-sans text-[9pt] text-[#504e49]">
                             {steps.length > 0
                                 ? steps[steps.length - 1]
-                                : 'Searching your knowledge base...'}
+                                : 'Searching...'}
                         </span>
                         <span className="font-mono text-[8pt] text-[#6b6a64] tabular-nums ml-auto">
                             {elapsed}s
@@ -90,9 +104,9 @@ function HomePage() {
                         <div className="mt-2 pl-7 space-y-1">
                             {steps
                                 .slice(Math.max(0, steps.length - 11), -1)
-                                .map((s, i) => (
+                                .map((s) => (
                                     <div
-                                        key={`${i}-${s}`}
+                                        key={s}
                                         className="font-mono text-[7.5pt] text-[#6b6a64]"
                                     >
                                         ✓ {s}
@@ -157,8 +171,8 @@ function HomePage() {
 
             {/* Empty state */}
             {!searching && !result && !error && (
-                <p className="mt-16 font-serif text-[10pt] text-[#6b6a64] italic text-center">
-                    Enter a query and press Enter to search your knowledge base.
+                <p className="mt-12 font-sans text-[9pt] text-[#6b6a64] text-center">
+                    Press Enter to search
                 </p>
             )}
         </div>

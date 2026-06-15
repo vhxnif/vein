@@ -53,13 +53,16 @@ function resolveDbPath(): string {
     return `${root}/.vein/data.db`
 }
 
-let _instance: ReturnType<typeof createDb> | null = null
+const _instances = new Map<string, ReturnType<typeof createDb>>()
 
 function getInstance() {
-    if (!_instance) {
-        _instance = createDb(resolveDbPath())
+    const dbPath = resolveDbPath()
+    let instance = _instances.get(dbPath)
+    if (!instance) {
+        instance = createDb(dbPath)
+        _instances.set(dbPath, instance)
     }
-    return _instance
+    return instance
 }
 
 const db = new Proxy({} as ReturnType<typeof createDb>['db'], {

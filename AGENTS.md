@@ -26,6 +26,7 @@ CLI 和 Web 通过 workspace 依赖 `@vein/core`，core 不依赖 CLI 和 Web。
 - **包管理**: Bun workspaces (`workspaces: ["packages/*"]`)
 - **Web 前端**: Hono (后端) + React + TanStack Router + TanStack Query + Tailwind CSS
 - **Web 流式响应**: ndjson（`fetch` + `ReadableStreamReader`），search 路由实时推送 Agent 执行步骤
+- **Web 项目切换**: TanStack Query 查询键包含项目名（`['documents', project, page]`），切换项目自动刷新数据；API 通过 `X-Vein-Project` 头 + `?project=` 查询参数双通道传递项目标识
 - **Markdown 渲染**: `react-markdown` + `remark-gfm`，风格统一使用 Kami Design Tokens
 
 ## 核心数据模型
@@ -109,11 +110,12 @@ vein/
 │   └── web/                           # @vein/web
 │       ├── src/
 │       │   ├── client/               # 前端（React + TanStack Router）
-│       │   │   ├── components/          # 共享组件（Layout、Markdown）
+│       │   │   ├── components/          # 共享组件（Layout、Markdown、RunCat）
 │       │   │   ├── lib/                 # API 客户端 + 项目上下文
 │       │   │   ├── routes/              # 路由页面（ask、docs、history、settings）
 │       │   │   ├── main.tsx             # 入口
-│       │   │   └── styles.css           # Kami Design Tokens
+│       │   │   ├── styles.css           # Kami Design Tokens
+│       │   │   └── assets.d.ts          # 图片资源类型声明
 │       │   ├── routes/               # 后端 Hono API 路由
 │       │   │   ├── search.ts            # 流式 ndjson 搜索路由
 │       │   │   ├── documents.ts         # 文档 CRUD
@@ -183,7 +185,7 @@ import {
 | 2 | `analyzeDocument(docId, userQuery)` | 委托子 Agent 深度分析单篇文档，返回 Markdown 格式分析结果 |
 | 3 | `reviewResult` | 自检：审查检索结果是否满足用户需求 |
 
-- 步骤 2 并发控制：对搜索结果中的文档调用 `analyzeDocument`（数量不限），系统通过 `Semaphore` 限制最多同时运行 5 个子 Agent，超出排队等待
+- 步骤 2 并发控制：对搜索结果中的文档调用 `analyzeDocument`（数量不限），系统通过 `Semaphore` 限制最多同时运行 10 个子 Agent，超出排队等待
 - 步骤 3 输出要求：按文档逐一列出，直接引用子 Agent 的「详细分析」内容，不重新概括
 - 自检后若 verdict 为 partial/fail，会根据 suggestion 回溯重试（最多 2 次）
 
@@ -206,7 +208,7 @@ User Query
   ▼
 Main Librarian Agent
   ├─ searchDocsByKeyword(query)         → [{docId, metadata, rank}]
-  ├─ analyzeDocument(docId, userQuery)  → spawns Subagent (max 5 concurrent) ─┐
+  ├─ analyzeDocument(docId, userQuery)  → spawns Subagent (max 10 concurrent) ─┐
   │                                                │                      │
   │                                                ▼                      │
   │                                    Document Analyzer Subagent
@@ -400,7 +402,7 @@ insertTree → insertDoc (含 docs_fts)
   - **librarian（主 Agent）**：搜索 + 委托子 Agent 分析 + 汇总结果 + 自检，使用 `pi-agent-core` 的 `Agent` 类
   - **Document Analyzer（子 Agent）**：独立的 `Agent` 实例，逐文档深度分析，通过 `analyzeDocument` tool 被主 Agent 调用。≤10 步预算（`beforeToolCall` hook 强制约束），输出 Markdown 格式
   - **reviewer（审查 Agent）**：独立的评估 Agent，使用 `call` 函数 + `getReviewSource` 工具，逐个验证数据源原文，支持 `onStep` 回调透传审查进度
-- 子 Agent 并发控制：通过 `Semaphore(5)` 限制最多 5 个子 Agent 同时运行，超出排队。`buildMainTools` 创建共享信号量，`makeAnalyzeDocument` 的 `execute` 中 `acquire/release`
+- 子 Agent 并发控制：通过 `Semaphore(10)` 限制最多 10 个子 Agent 同时运行，超出排队。`buildMainTools` 创建共享信号量，`makeAnalyzeDocument` 的 `execute` 中 `acquire/release`
 - 子 Agent 进度同步：子 Agent 内部 tool 调用通过 `onStep` 回调透传到主 Agent 的 spinner 显示（如 `  Loading document structure...`）
 - reviewer 进度同步：reviewer 内部 `getReviewSource` 调用通过 `onStep` 回调透传，如 `Verifying: doc1/0001...`、`Review: pass (5/5)`
 - summarizer 调用自动走 `model_cache` 缓存，60s 超时保护
@@ -409,7 +411,7 @@ insertTree → insertDoc (含 docs_fts)
 
 ### 数据库连接
 
-使用 `better-sqlite3` 原生模块：
+使用 `better-sqlite3` 原生模块，按项目路径缓存连接（`Map<dbPath, connection>`）：
 
 ```typescript
 import Database from 'better-sqlite3'
@@ -422,12 +424,13 @@ db.pragma('foreign_keys = ON')
 - `better-sqlite3` 为原生 C++ 模块，需要 `node-gyp` 编译。安装时自动预编译，若 Node 版本不匹配需 `npm rebuild better-sqlite3`
 - **构建时**：`bun build` 必须加 `--external better-sqlite3`，否则打包后模块内部的路径解析会指向 `dist/` 目录，导致找不到 `better_sqlite3.node` 绑定文件
 - `getRawClient()` 返回兼容包装器（`{ execute(sql | { sql, args }) → { rows } }`）。`getNativeDb()` 返回原始 `Database` 实例
+- **多项目支持**：DB 连接按 `dbPath` 缓存（`_instances` Map），每个项目独立持有连接。Web 端切换项目时自动获取对应项目的 DB 连接，互不干扰
 - Bun 开发模式下可直接 `bun run packages/cli/src/command/vein.ts`（Bun 兼容 better-sqlite3 的 API），无需经过构建步骤
 
 ### 代码风格
 
 - **格式化**: Biome, 4 空格缩进, 80 字符行宽, 单引号, 无分号, 尾逗号(ES5), 箭头函数参数必加括号
-- **Lint**: Biome, 推荐规则 + 严格 correctness/suspicious 规则, 启用 organizeImports
+- **Lint**: Biome, 推荐规则 + 严格 correctness/suspicious 规则, 启用 organizeImports。`routeTree.gen.ts` 和 `server.ts` 通过 `overrides` 关闭 `noExplicitAny` 规则
 - **TypeScript**: ESNext target, strict 模式, `verbatimModuleSyntax`（type 导入需显式 `import type`）
 - **命名**: 文件 kebab-case, 函数 camelCase, 类型 PascalCase
 - **日志**: 使用 `logger.child({ module: 'xxx' })` 创建模块级 logger。子 Agent 使用独立模块 `doc-analyzer`（`subLog`）
@@ -447,6 +450,7 @@ db.pragma('foreign_keys = ON')
   - CLI 生产：`node packages/cli/dist/vein.js`
   - Web 开发：`bun run packages/web/src/server.ts`（`bun run dev` 或 `bun run dev:frontend`）
   - Web 生产：`bun run build`（`packages/web`，产出 `dist/client` + `dist/server.js`）
+  - Web 导航：侧边栏使用 TanStack Router `<Link>` 组件（非 `<a>`），切换页面为客户端局部刷新，不触发整页重载
   - 全局 link：`bun run link`（构建 + link），`bun run unlink`（取消）
   - 构建：`bun run build`（从根目录，委托到 `packages/cli` 和 `packages/web`）
   - 类型检查：`bun run check`（根目录 `tsc --noEmit`）

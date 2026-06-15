@@ -410,7 +410,7 @@ function parseAnalyzeResult(raw: string): {
 
 // ── Concurrency limiter ────────────────────────────────────────
 
-const MAX_PARALLEL_ANALYZE = 5
+const MAX_PARALLEL_ANALYZE = 10
 
 class Semaphore {
     private waiters: (() => void)[] = []

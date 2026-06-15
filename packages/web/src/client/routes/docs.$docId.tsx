@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { deleteDocument, fetchDocument, fetchNode } from '../lib/api'
+import { useProject } from '../lib/project'
 
 interface TreeNode {
     nodeId: string
@@ -24,9 +25,9 @@ function DocSkeleton() {
             <div className="flex gap-8">
                 <div className="w-64 flex-shrink-0 space-y-2.5">
                     <div className="h-3 bg-[#e8e6dc] rounded w-10 mb-3" />
-                    {[80, 60, 75, 50, 70, 55].map((w, i) => (
+                    {[80, 60, 75, 50, 70, 55].map((w) => (
                         <div
-                            key={i}
+                            key={w}
                             className="h-3 bg-[#e8e6dc] rounded"
                             style={{ width: `${w}%` }}
                         />
@@ -51,12 +52,17 @@ export const Route = createFileRoute('/docs/$docId')({
 
 function DocDetailPage() {
     const { docId } = Route.useParams()
+    const { project } = useProject()
     const queryClient = useQueryClient()
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
     const [showDetail, setShowDetail] = useState(false)
 
-    const { data: doc, isLoading } = useQuery({
-        queryKey: ['document', docId],
+    const {
+        data: doc,
+        isLoading,
+        error,
+    } = useQuery({
+        queryKey: ['document', project, docId],
         queryFn: () => fetchDocument(docId),
     })
 
@@ -68,7 +74,24 @@ function DocDetailPage() {
         },
     })
 
+    if (!project) {
+        return (
+            <p className="font-sans text-[9pt] text-[#6b6a64]">
+                No project selected — select one from the sidebar
+            </p>
+        )
+    }
+
     if (isLoading) return <DocSkeleton />
+
+    if (error) {
+        return (
+            <p className="font-sans text-[9pt] text-[#b53333]">
+                Failed to load document:{' '}
+                {error instanceof Error ? error.message : String(error)}
+            </p>
+        )
+    }
 
     if (!doc) {
         return (
@@ -131,20 +154,28 @@ function DocDetailPage() {
                         {doc.id}
                     </p>
                     <p className="font-sans text-[8.5pt] text-[#504e49]">
-                        <span className="font-medium text-[#141413]">ShortID:</span>{' '}
+                        <span className="font-medium text-[#141413]">
+                            ShortID:
+                        </span>{' '}
                         {doc.id.slice(0, 8)}...
                     </p>
                     <p className="font-sans text-[8.5pt] text-[#504e49]">
-                        <span className="font-medium text-[#141413]">Created:</span>{' '}
+                        <span className="font-medium text-[#141413]">
+                            Created:
+                        </span>{' '}
                         {doc.createdAt}
                     </p>
                     <p className="font-sans text-[8.5pt] text-[#504e49]">
-                        <span className="font-medium text-[#141413]">Nodes:</span>{' '}
+                        <span className="font-medium text-[#141413]">
+                            Nodes:
+                        </span>{' '}
                         {doc.nodeCount}
                     </p>
                     {doc.ftsSummary && (
                         <p className="font-sans text-[8.5pt] text-[#504e49]">
-                            <span className="font-medium text-[#141413]">FTS:</span>{' '}
+                            <span className="font-medium text-[#141413]">
+                                FTS:
+                            </span>{' '}
                             {doc.ftsSummary.length > 200
                                 ? `${doc.ftsSummary.slice(0, 200)}...`
                                 : doc.ftsSummary}
@@ -275,13 +306,27 @@ function TreeView({
 // ── Node Content ────────────────────────────────────────────────
 
 function NodeContent({ docId, nodeId }: { docId: string; nodeId: string }) {
-    const { data: node, isLoading } = useQuery({
-        queryKey: ['node', docId, nodeId],
+    const { project } = useProject()
+    const {
+        data: node,
+        isLoading,
+        error,
+    } = useQuery({
+        queryKey: ['node', project, docId, nodeId],
         queryFn: () => fetchNode(docId, nodeId),
     })
 
     if (isLoading) {
         return <p className="font-sans text-[9pt] text-[#504e49]">Loading...</p>
+    }
+
+    if (error) {
+        return (
+            <p className="font-sans text-[9pt] text-[#b53333]">
+                Failed to load node:{' '}
+                {error instanceof Error ? error.message : String(error)}
+            </p>
+        )
     }
 
     if (!node) {
