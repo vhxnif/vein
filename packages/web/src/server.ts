@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { Readable } from 'node:stream'
@@ -57,18 +58,26 @@ const MIME: Record<string, string> = {
 }
 
 // ── Static files & SPA fallback ────────────────────────────────
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const __dirname: string = path.dirname(fileURLToPath(import.meta.url))
 
-// In dev (tsx/bun): server is at src/server.ts, static at dist/client
-// In production (built): server is at dist/server.js, static at dist/client
-const staticRoot = existsSync(path.resolve(__dirname, 'dist/client'))
-    ? path.resolve(__dirname, 'dist/client')
-    : path.resolve(__dirname, '../dist/client')
+// Resolve static client build relative to server location
+// Dev (bun run src/server.ts):  static at ../../dist/client
+// Prod (node dist/server.js): static at ../client
+const staticRoot: string = (() => {
+    const candidates = [
+        path.resolve(__dirname, 'client'),
+        path.resolve(__dirname, '../../dist/client'),
+    ]
+    for (const c of candidates) {
+        if (existsSync(c)) return c
+    }
+    return candidates[0]!
+})()
 
 if (existsSync(staticRoot)) {
     // Serve built static assets
     app.get('/assets/*', (c) => {
-        const filePath = path.join(staticRoot, c.req.path)
+        const filePath = path.join(staticRoot, c.req.path ?? '')
         if (!existsSync(filePath)) return c.notFound()
         const ext = path.extname(filePath)
         const mime = MIME[ext] || 'application/octet-stream'

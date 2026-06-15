@@ -2,14 +2,18 @@
     "name": "@vein/web",
     "version": "0.1.0",
     "type": "module",
+    "bin": {
+        "vein-web": "./dist/server.js"
+    },
     "scripts": {
         "dev": "bun run --watch src/server.ts",
-        "dev:node": "tsx watch src/server.ts",
         "dev:frontend": "vite",
         "build:frontend": "vite build",
         "build:backend": "bun build src/server.ts --target node --outdir ./dist --sourcemap --minify --external better-sqlite3",
         "build": "bun run build:frontend && bun run build:backend",
         "start": "node dist/server.js",
+        "link": "bun link",
+        "unlink": "bun unlink",
         "check": "tsc --noEmit"
     },
     "dependencies": {
