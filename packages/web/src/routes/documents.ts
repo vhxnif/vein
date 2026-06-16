@@ -1,11 +1,4 @@
-declare const Bun: {
-    mkdir: (path: string, opts?: { recursive?: boolean }) => Promise<void>
-    write: (path: string, data: unknown) => Promise<void>
-    file: (path: string) => {
-        text: () => Promise<string>
-        delete: () => Promise<void>
-    }
-}
+import { mkdir, unlink, writeFile } from 'node:fs/promises'
 
 import type { BaseDocNode } from '@vein/core'
 import {
@@ -94,12 +87,13 @@ docsRouter.post('/import', async (c) => {
 
     // Save uploaded files to temp directory
     const tmpDir = `${root}/.vein/tmp-uploads`
-    await Bun.mkdir(tmpDir, { recursive: true })
+    await mkdir(tmpDir, { recursive: true })
 
     const filePaths: string[] = []
     for (const file of files) {
         const filePath = `${tmpDir}/${file.name}`
-        await Bun.write(filePath, file)
+        const buffer = Buffer.from(await file.arrayBuffer())
+        await writeFile(filePath, buffer)
         filePaths.push(filePath)
     }
 
@@ -153,7 +147,7 @@ docsRouter.post('/import', async (c) => {
             // Cleanup temp files
             for (const fp of filePaths) {
                 try {
-                    await Bun.file(fp).delete()
+                    await unlink(fp)
                 } catch {
                     // ignore cleanup errors
                 }

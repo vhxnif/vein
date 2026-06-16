@@ -211,6 +211,153 @@ export async function fetchHistoryEntry(id: string): Promise<HistoryEntry> {
     return res.json()
 }
 
+// ── Import ─────────────────────────────────────────────────────
+
+export type ImportProgress = {
+    type: 'progress'
+    phase: 'parse' | 'write'
+    message: string
+    completed?: number
+    total?: number
+}
+
+export type ImportResultEvent = {
+    type: 'result'
+    imported: number
+    skipped: number
+    failed: number
+    details: Array<{
+        status: 'imported' | 'skipped' | 'failed'
+        docName?: string
+        docId?: string
+        nodeCount?: number
+        filePath?: string
+        error?: string
+    }>
+}
+
+export type ImportErrorEvent = {
+    type: 'error'
+    error: string
+}
+
+export type ImportDoneEvent = {
+    type: 'done'
+}
+
+export type ImportSSEEvent =
+    | ImportProgress
+    | ImportResultEvent
+    | ImportErrorEvent
+    | ImportDoneEvent
+
+/**
+ * Import markdown files via SSE streaming upload.
+ * Yields typed events as they arrive from the server.
+ */
+export async function* importDocuments(
+    files: File[],
+    signal?: AbortSignal
+): AsyncGenerator<ImportSSEEvent> {
+    const formData = new FormData()
+    for (const file of files) {
+        formData.append('files', file)
+    }
+
+    const res = await fetch(u('/projects/current/documents/import'), {
+        method: 'POST',
+        headers: h(),
+        body: formData,
+        signal,
+    })
+
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Import failed' }))
+        throw new Error(err.error || 'Import failed')
+    }
+
+    if (!res.body) {
+        throw new Error('No response body')
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+
+            // SSE events are separated by double newlines
+            const parts = buffer.split('\n\n')
+            buffer = parts.pop() ?? ''
+
+            for (const part of parts) {
+                if (!part.trim()) continue
+                const event = parseSSEEvent(part)
+                if (event) yield event
+            }
+        }
+
+        // Process any remaining data in the buffer
+        if (buffer.trim()) {
+            const event = parseSSEEvent(buffer)
+            if (event) yield event
+        }
+    } finally {
+        reader.releaseLock()
+    }
+}
+
+/** Parse a single SSE event block (event: ...\ndata: ...) */
+function parseSSEEvent(raw: string): ImportSSEEvent | null {
+    const lines = raw.split('\n')
+    let eventType = ''
+    let data = ''
+
+    for (const line of lines) {
+        if (line.startsWith('event:')) {
+            eventType = line.slice(6).trim()
+        } else if (line.startsWith('data:')) {
+            data = line.slice(5).trim()
+        }
+    }
+
+    if (!eventType || !data) return null
+
+    const parsed = JSON.parse(data) as Record<string, unknown>
+
+    switch (eventType) {
+        case 'progress':
+            return {
+                type: 'progress',
+                phase: parsed.phase as 'parse' | 'write',
+                message: parsed.message as string,
+                completed: parsed.completed as number | undefined,
+                total: parsed.total as number | undefined,
+            }
+        case 'result':
+            return {
+                type: 'result',
+                imported: parsed.imported as number,
+                skipped: parsed.skipped as number,
+                failed: parsed.failed as number,
+                details: parsed.details as ImportResultEvent['details'],
+            }
+        case 'error':
+            return {
+                type: 'error',
+                error: (parsed.error as string) || 'Unknown error',
+            }
+        case 'done':
+            return { type: 'done' }
+        default:
+            return null
+    }
+}
+
 // ── Search ─────────────────────────────────────────────────────
 
 export async function searchQuery(

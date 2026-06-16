@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router'
 import { useState } from 'react'
 import { fetchDocuments } from '../lib/api'
+import { useImport } from '../lib/import-context'
 import { useProject } from '../lib/project'
 
 export const Route = createFileRoute('/docs')({
@@ -27,8 +28,11 @@ function DocsLayout() {
     )
 }
 
+// ── Document List ──────────────────────────────────────────────
+
 function DocsList() {
     const { project } = useProject()
+    const { open: openImport } = useImport()
     const [page, setPage] = useState(1)
     const pageSize = 20
 
@@ -68,11 +72,8 @@ function DocsList() {
                 </div>
                 <button
                     type="button"
-                    className="btn-secondary"
-                    onClick={() => {
-                        // Import will be implemented with file upload
-                        alert('Import: Click to select .md files (coming soon)')
-                    }}
+                    className="btn-primary"
+                    onClick={openImport}
                 >
                     Import
                 </button>
