@@ -136,13 +136,14 @@ function DocDetailPage() {
                     </button>
                     <button
                         type="button"
-                        className="btn-ghost text-error"
+                        className="btn-danger"
                         onClick={() => {
                             if (confirm(`Delete "${doc.title}"?`))
                                 deleteMutation.mutate()
                         }}
+                        disabled={deleteMutation.isPending}
                     >
-                        Delete
+                        {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
                     </button>
                 </div>
             </div>

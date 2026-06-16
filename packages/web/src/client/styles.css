@@ -246,6 +246,22 @@ body::before {
     color: var(--near-black);
 }
 
+.btn-danger {
+    background: transparent;
+    color: var(--error);
+    border-radius: 8pt;
+    padding: 6pt 16pt;
+    font-family: var(--sans);
+    font-size: 9pt;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+.btn-danger:hover {
+    background: var(--error);
+    color: #fff;
+}
+
 /* Tags */
 .tag-calm {
     background: var(--tint-008);
