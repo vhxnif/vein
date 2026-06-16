@@ -1,12 +1,16 @@
-import { useQuery } from '@tanstack/react-query'
+import {
+    useInfiniteQuery,
+    useMutation,
+    useQueryClient,
+} from '@tanstack/react-query'
 import {
     createFileRoute,
     Link,
     Outlet,
     useLocation,
 } from '@tanstack/react-router'
-import { useState } from 'react'
-import { fetchDocuments } from '../lib/api'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { deleteDocument, fetchDocuments } from '../lib/api'
 import { useImport } from '../lib/import-context'
 import { useProject } from '../lib/project'
 
@@ -33,13 +37,85 @@ function DocsLayout() {
 function DocsList() {
     const { project } = useProject()
     const { open: openImport } = useImport()
-    const [page, setPage] = useState(1)
-    const pageSize = 20
+    const queryClient = useQueryClient()
+    const sentinelRef = useRef<HTMLDivElement>(null)
+    const [isMobile, setIsMobile] = useState(false)
+    const [desktopPage, setDesktopPage] = useState(1)
 
-    const { data, isLoading, error } = useQuery({
-        queryKey: ['documents', project, page],
-        queryFn: () => fetchDocuments(page, pageSize),
+    // Dynamic page size: fill ~1.5 viewports so pagination is visible without scrolling
+    const [pageSize] = useState(() => {
+        if (typeof window === 'undefined') return 20
+        if (window.innerWidth < 768) return 20
+        // Header ~200px, pagination bar ~60px; doc row ≈ 62px
+        const availH = window.innerHeight - 200 - 60
+        const rowH = 62
+        return Math.min(50, Math.max(8, Math.floor(availH / rowH)))
+    })
+
+    useEffect(() => {
+        const check = () => setIsMobile(window.innerWidth < 768)
+        check()
+        window.addEventListener('resize', check)
+        return () => window.removeEventListener('resize', check)
+    }, [])
+
+    const {
+        data,
+        isLoading,
+        error,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+    } = useInfiniteQuery({
+        queryKey: ['documents', project, pageSize],
+        queryFn: ({ pageParam }) => fetchDocuments(pageParam, pageSize),
+        initialPageParam: 1,
+        getNextPageParam: (lastPage, allPages) => {
+            const totalPages = Math.ceil(lastPage.total / pageSize)
+            const nextPage = allPages.length + 1
+            return nextPage <= totalPages ? nextPage : undefined
+        },
         staleTime: 30_000,
+    })
+
+    // Ensure requested desktop page is loaded
+    useEffect(() => {
+        if (
+            !isMobile &&
+            data &&
+            desktopPage > data.pages.length &&
+            hasNextPage
+        ) {
+            fetchNextPage()
+        }
+    }, [isMobile, desktopPage, data, hasNextPage, fetchNextPage])
+
+    const loadMore = useCallback(() => {
+        if (hasNextPage && !isFetchingNextPage) {
+            fetchNextPage()
+        }
+    }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+
+    // Intersection Observer for mobile infinite scroll
+    useEffect(() => {
+        if (!isMobile) return
+        const sentinel = sentinelRef.current
+        if (!sentinel) return
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) loadMore()
+            },
+            { rootMargin: '200px' }
+        )
+        observer.observe(sentinel)
+        return () => observer.disconnect()
+    }, [isMobile, loadMore])
+
+    const deleteMutation = useMutation({
+        mutationFn: (id: string) => deleteDocument(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['documents'] })
+        },
     })
 
     if (!project) {
@@ -55,9 +131,13 @@ function DocsList() {
         )
     }
 
-    const docs = data?.docs ?? []
-    const total = data?.total ?? 0
+    const allDocs = data?.pages.flatMap((p) => p.docs) ?? []
+    const total = data?.pages[0]?.total ?? 0
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+    // Desktop: show one page at a time; Mobile: show all loaded
+    const desktopPageData = data?.pages[desktopPage - 1]
+    const docs = isMobile ? allDocs : (desktopPageData?.docs ?? [])
 
     return (
         <>
@@ -93,53 +173,112 @@ function DocsList() {
             ) : (
                 <div>
                     {docs.map((doc) => (
-                        <Link
+                        <div
                             key={doc.id}
-                            to="/docs/$docId"
-                            params={{ docId: doc.id }}
-                            className="block no-underline px-3 py-3 -mx-3 rounded-[6pt]
-                                       hover:bg-sand/60 transition-colors"
+                            className="flex items-center gap-2 px-3 py-3 -mx-3 rounded-[6pt]
+                                       hover:bg-sand/60 transition-colors group"
                         >
-                            <span className="font-serif text-[10pt] font-medium text-near-black leading-relaxed">
-                                {doc.title}
-                            </span>
-                            <div className="flex items-center gap-4 mt-1 font-sans text-[8pt] text-stone">
-                                <span>
-                                    {doc.nodeCount} section
-                                    {doc.nodeCount !== 1 ? 's' : ''}
+                            <Link
+                                to="/docs/$docId"
+                                params={{ docId: doc.id }}
+                                className="flex-1 min-w-0 no-underline"
+                            >
+                                <span className="font-serif text-[10pt] font-medium text-near-black leading-relaxed">
+                                    {doc.title}
                                 </span>
-                                {doc.sourcePath &&
-                                    doc.sourcePath !== 'unknown' && (
-                                        <span className="font-mono text-[7.5pt] truncate max-w-[240px]">
-                                            {doc.sourcePath}
-                                        </span>
-                                    )}
-                                <span>{doc.createdAt?.slice(0, 10) ?? ''}</span>
-                            </div>
-                        </Link>
+                                <div className="flex items-center gap-4 mt-1 font-sans text-[8pt] text-stone">
+                                    <span>
+                                        {doc.nodeCount} section
+                                        {doc.nodeCount !== 1 ? 's' : ''}
+                                    </span>
+                                    {doc.sourcePath &&
+                                        doc.sourcePath !== 'unknown' && (
+                                            <span className="font-mono text-[7.5pt] truncate max-w-[240px]">
+                                                {doc.sourcePath}
+                                            </span>
+                                        )}
+                                    <span>
+                                        {doc.createdAt?.slice(0, 10) ?? ''}
+                                    </span>
+                                </div>
+                            </Link>
+                            <button
+                                type="button"
+                                className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-[4pt]
+                                           text-stone/40 hover:text-error hover:bg-error/10
+                                           opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all
+                                           focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ink"
+                                aria-label={`Delete ${doc.title}`}
+                                title="Delete"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    e.preventDefault()
+                                    if (confirm(`Delete "${doc.title}"?`))
+                                        deleteMutation.mutate(doc.id)
+                                }}
+                                disabled={deleteMutation.isPending}
+                            >
+                                <svg
+                                    width="12"
+                                    height="12"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.5"
+                                >
+                                    <line x1="18" y1="6" x2="6" y2="18" />
+                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                            </button>
+                        </div>
                     ))}
                 </div>
             )}
 
-            {totalPages > 1 && (
+            {/* Mobile: infinite scroll sentinel + indicator */}
+            {isMobile && (
+                <div
+                    ref={sentinelRef}
+                    className="mt-8 pt-5 border-t border-cream"
+                >
+                    {isFetchingNextPage ? (
+                        <p className="font-sans text-[9pt] text-olive text-center">
+                            Loading more...
+                        </p>
+                    ) : hasNextPage ? (
+                        <p className="font-sans text-[9pt] text-stone text-center">
+                            Scroll for more
+                        </p>
+                    ) : docs.length > 0 ? (
+                        <p className="font-sans text-[9pt] text-stone text-center">
+                            All {total} documents loaded
+                        </p>
+                    ) : null}
+                </div>
+            )}
+
+            {/* Desktop: pagination controls */}
+            {!isMobile && totalPages > 1 && (
                 <div className="mt-8 pt-5 border-t border-cream flex items-center justify-between font-sans text-[9pt] text-olive">
                     <button
                         type="button"
                         className="btn-ghost"
-                        disabled={page <= 1}
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={desktopPage <= 1}
+                        onClick={() =>
+                            setDesktopPage((p) => Math.max(1, p - 1))
+                        }
                     >
                         ← Prev
                     </button>
                     <span>
-                        {page} / {totalPages}
+                        {desktopPage} / {totalPages}
                     </span>
                     <button
                         type="button"
                         className="btn-ghost"
-                        disabled={page >= totalPages}
+                        disabled={desktopPage >= totalPages}
                         onClick={() =>
-                            setPage((p) => Math.min(totalPages, p + 1))
+                            setDesktopPage((p) => Math.min(totalPages, p + 1))
                         }
                     >
                         Next →

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useProject } from '../lib/project'
 
 export const Route = createFileRoute('/projects')({
@@ -124,26 +124,6 @@ function ProjectsPage() {
                     ))}
                 </div>
             )}
-
-            {/* Back link */}
-            <div className="mt-8 pt-5 border-t border-cream/50">
-                <Link
-                    to="/"
-                    className="inline-flex items-center gap-1.5 font-sans text-[8.5pt] text-stone hover:text-ink transition-colors"
-                >
-                    <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                    >
-                        <path d="M19 12H5M12 19l-7-7 7-7" />
-                    </svg>
-                    Back to Ask
-                </Link>
-            </div>
         </div>
     )
 }

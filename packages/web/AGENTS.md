@@ -154,6 +154,53 @@ bun run start              # node dist/server.js
 | **History** | `/history` | 按日期分组、展开完整问答 |
 | **Settings** | `/settings` | provider/model 下拉联动、保存 |
 
+## 移动端适配
+
+### 设备检测
+
+使用 `useState(false)` + `resize` 事件监听检测移动端（`<768px`），而不是纯 CSS `md:` 断点。某些行为差异（无限滚动 vs 分页、条件渲染）必须在 JS 层判断：
+
+```tsx
+const [isMobile, setIsMobile] = useState(false)
+useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+}, [])
+```
+
+### 无限滚动（移动端）
+
+移动端文档列表和历史记录使用 `useInfiniteQuery` + `IntersectionObserver` 实现滑动加载：
+
+- `useInfiniteQuery` 替代 `useQuery`，`getNextPageParam` 计算总页数决定是否还有下一页
+- 哨兵 `<div ref={sentinelRef}>` 放在列表底部
+- `IntersectionObserver` 监听哨兵，`rootMargin: '200px'` 提前触发加载
+- 桌面端仍用传统分页：`desktopPage` state 索引 `data.pages[desktopPage - 1]`，Prev/Next 按钮翻页
+- 加载态：`isFetchingNextPage` → "Loading more..."；未加载完 → "Scroll for more"；全部加载 → "All N items loaded"
+
+### 分页大小动态计算
+
+桌面端每页条数根据视口高度计算，确保一页填满屏幕、翻页按钮可见无需滚动：
+
+```ts
+const [pageSize] = useState(() => {
+    if (window.innerWidth < 768) return 20  // 移动端固定
+    const availH = window.innerHeight - headerH - paginationBarH
+    return Math.min(50, Math.max(8, Math.floor(availH / rowH)))
+})
+```
+
+各页面参数不同：文档列表 `headerH=200, rowH=62, paginationBarH=60`；历史记录 `headerH=160, rowH=52`。`setPageSize` 故意不用（仅计算一次），`useState` 仅用于惰性初始化。
+
+### 文档详情页移动端
+
+- **固定顶部导航栏**：`sticky top-0 z-10` 包含返回按钮 + 文档标题（截断）+ 大纲切换（☰ 图标）
+- **大纲与内容切换**：移动端展开大纲时隐藏内容（`isMobile && outlineOpen ? 'hidden' : ''`），选择节点后自动折叠大纲显示内容
+- **进入时默认打开大纲**：`useState(true)` 初始值，避免空白占位
+- **桌面端**：大纲侧边栏 `md:sticky md:top-8` 始终可见，内容区并排显示
+
 ## 交互约定
 
 - **加载状态**：TanStack Query `isLoading` → "Loading..."；搜索 → pulsing dot + 计时器
@@ -163,6 +210,16 @@ bun run start              # node dist/server.js
 - **键盘导航**：首页搜索框 Enter 触发检索
 - **响应式**：≥768px 侧边栏 + 780px 居中内容区，<768px 底部 Tab Bar + 全宽
 - **暗色模式**：`prefers-color-scheme`，warm dark tokens（`#141413` / `#30302E`）
+
+## 导入弹窗
+
+文档导入功能通过 `ImportProvider` 上下文（`lib/import-context.tsx`）提供，在根路由（`__root.tsx`）中包裹整个应用：
+
+- `useImport()` hook 暴露 `open()` 方法，返回 `boolean` 表示是否成功打开（正在导入时返回 `false`）
+- 弹窗状态机：`ready` → `uploading` → `done` / `error`，支持 `minimized` 最小化到右下角浮动条
+- 上传通过 `FormData` + `fetch` + SSE 流解析（`api.ts` 中的 `importDocuments()` 异步生成器）
+- 拖放通过 HTML5 原生拖放事件（`onDragEnter/Leave/Over/Drop`），过滤 `.md/.mdx/.markdown` 扩展名
+- 导入完成后自动调用 `queryClient.invalidateQueries({ queryKey: ['documents'] })`
 
 ## 陷阱与约定
 
@@ -211,6 +268,17 @@ JS 模板字符串中的动态类（`` `${cond ? 'bg-[#hex]' : '...'}` ``）不�
 ### 键盘无障碍
 
 `focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2`：**仅键盘导航（Tab 键）时显示聚焦环**，鼠标点击时不显示。优于 `focus:`（后者鼠标点击也会触发）。需覆盖：侧边栏图标、大纲树按钮、设置页 `<select>`。
+
+### 列表删除按钮
+
+文档列表每行有 × 删除按钮，使用 `group` + `group-hover` 模式：
+- 桌面端：`md:opacity-0 md:group-hover:opacity-100`（悬停才显示）
+- 移动端：`opacity-100`（始终可见，无 hover）
+- 按钮在 `<Link>` 内部，需 `e.stopPropagation()` + `e.preventDefault()` 阻止导航
+
+### TanStack Router 返回导航
+
+`useRouter().history.back()` 可编程返回上一页。`window.history.back()` 同样有效（Router 监听 popstate 事件）。通常用前者保持与 Router 状态同步。
 
 ## 日志
 

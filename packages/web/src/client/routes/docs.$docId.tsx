@@ -1,7 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { useState } from 'react'
-import { deleteDocument, fetchDocument, fetchNode } from '../lib/api'
+import { useQuery } from '@tanstack/react-query'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { useCallback, useEffect, useState } from 'react'
+import { Markdown } from '../components/Markdown'
+import { fetchDocument, fetchNode } from '../lib/api'
 import { useProject } from '../lib/project'
 
 interface TreeNode {
@@ -15,16 +16,32 @@ interface TreeNode {
     nodes: TreeNode[]
 }
 
+// ── Helpers ────────────────────────────────────────────────────
+
+/** Recursively find a node's title in the tree by nodeId */
+function findNodeTitle(nodes: TreeNode[], targetId: string): string | null {
+    for (const node of nodes) {
+        if (node.nodeId === targetId) return node.value.title
+        if (node.nodes && node.nodes.length > 0) {
+            const found = findNodeTitle(node.nodes, targetId)
+            if (found) return found
+        }
+    }
+    return null
+}
+
 // ── Skeleton for loading / pending states ──────────────────────
 
 function DocSkeleton() {
     return (
         <div className="animate-pulse">
+            <div className="h-4 bg-sand rounded w-16 mb-5" />
             <div className="h-8 bg-sand rounded w-2/5 mb-3" />
-            <div className="h-4 bg-sand rounded w-1/4 mb-10" />
-            <div className="flex gap-8">
-                <div className="w-64 flex-shrink-0 space-y-2.5">
-                    <div className="h-3 bg-sand rounded w-10 mb-3" />
+            <div className="h-4 bg-sand rounded w-1/4 mb-8" />
+            {/* Responsive skeleton: side-by-side on md+, stacked on mobile */}
+            <div className="md:flex md:gap-8">
+                <div className="md:w-64 md:flex-shrink-0 space-y-2.5 mb-6 md:mb-0">
+                    <div className="h-3 bg-sand rounded w-12 mb-2" />
                     {[80, 60, 75, 50, 70, 55].map((w) => (
                         <div
                             key={w}
@@ -53,9 +70,34 @@ export const Route = createFileRoute('/docs/$docId')({
 function DocDetailPage() {
     const { docId } = Route.useParams()
     const { project } = useProject()
-    const queryClient = useQueryClient()
+    const router = useRouter()
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
     const [showDetail, setShowDetail] = useState(false)
+    const [outlineOpen, setOutlineOpen] = useState(true)
+    const [isMobile, setIsMobile] = useState(false)
+    useEffect(() => {
+        const check = () => setIsMobile(window.innerWidth < 768)
+        check()
+        window.addEventListener('resize', check)
+        return () => window.removeEventListener('resize', check)
+    }, [])
+
+    const handleBack = useCallback(() => {
+        if (window.history.length > 1) {
+            router.history.back()
+        } else {
+            router.navigate({ to: '/docs' })
+        }
+    }, [router])
+
+    // Close outline when a node is selected on mobile
+    const handleNodeSelect = useCallback(
+        (nodeId: string) => {
+            setSelectedNodeId(nodeId)
+            if (isMobile) setOutlineOpen(false)
+        },
+        [isMobile]
+    )
 
     const {
         data: doc,
@@ -64,14 +106,6 @@ function DocDetailPage() {
     } = useQuery({
         queryKey: ['document', project, docId],
         queryFn: () => fetchDocument(docId),
-    })
-
-    const deleteMutation = useMutation({
-        mutationFn: () => deleteDocument(docId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['documents'] })
-            window.history.back()
-        },
     })
 
     if (!project) {
@@ -115,42 +149,122 @@ function DocDetailPage() {
 
     return (
         <>
-            <div className="flex items-start justify-between mb-8">
-                <div>
-                    <h1 className="font-serif text-[20pt] font-medium leading-tight text-near-black">
-                        {doc.title}
-                    </h1>
-                    <p className="font-sans text-[8.5pt] text-olive mt-2 leading-relaxed">
-                        {doc.nodeCount} section{doc.nodeCount !== 1 ? 's' : ''}{' '}
-                        · {doc.sourcePath || 'unknown'} ·{' '}
-                        {doc.createdAt?.slice(0, 10) ?? 'unknown'}
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
+            {/* ── Mobile sticky nav bar ── */}
+            <div className="md:hidden sticky top-0 z-10 -mx-4 px-4 py-2.5 bg-parchment/95 backdrop-blur-sm border-b border-cream/50 flex items-center gap-2">
+                <button
+                    type="button"
+                    className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 -ml-1 text-olive hover:text-ink transition-colors bg-transparent border-none cursor-pointer"
+                    onClick={handleBack}
+                    aria-label="Back"
+                >
+                    <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                    >
+                        <path d="M19 12H5" />
+                        <polyline points="12,19 5,12 12,5" />
+                    </svg>
+                </button>
+                <span className="flex-1 font-sans text-[10pt] font-medium text-near-black truncate min-w-0">
+                    {doc.title}
+                </span>
+                <button
+                    type="button"
+                    className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 -mr-1 text-olive hover:text-ink transition-colors bg-transparent border-none cursor-pointer"
+                    onClick={() => setOutlineOpen((o) => !o)}
+                    aria-label={outlineOpen ? 'Close outline' : 'Open outline'}
+                    aria-expanded={outlineOpen}
+                >
+                    <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                    >
+                        <line x1="3" y1="6" x2="21" y2="6" />
+                        <line x1="3" y1="12" x2="21" y2="12" />
+                        <line x1="3" y1="18" x2="21" y2="18" />
+                    </svg>
+                </button>
+            </div>
+
+            {/* ── Desktop back link ── */}
+            <div className="hidden md:block mb-8">
+                <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 font-sans text-[9pt] text-olive hover:text-ink transition-colors bg-transparent border-none cursor-pointer p-0"
+                    onClick={handleBack}
+                >
+                    <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        className="flex-shrink-0"
+                    >
+                        <path d="M19 12H5" />
+                        <polyline points="12,19 5,12 12,5" />
+                    </svg>
+                    Back to documents
+                </button>
+            </div>
+
+            {/* ── Title + metadata ── */}
+            <div className="mb-6 md:mb-8">
+                <h1 className="font-serif text-[18pt] md:text-[20pt] font-medium leading-tight text-near-black">
+                    {doc.title}
+                </h1>
+                <p className="font-sans text-[8.5pt] text-olive mt-2 leading-relaxed flex items-center gap-1.5 flex-wrap">
+                    <span>
+                        {doc.nodeCount} section{doc.nodeCount !== 1 ? 's' : ''}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>{doc.sourcePath || 'unknown'}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{doc.createdAt?.slice(0, 10) ?? 'unknown'}</span>
                     <button
                         type="button"
-                        className="btn-secondary"
+                        className={`inline-flex items-center gap-1 font-sans text-[8.5pt] bg-transparent border-none cursor-pointer transition-colors rounded-[3pt] focus-visible:outline-2 focus-visible:outline-ink ${
+                            showDetail
+                                ? 'text-ink font-medium'
+                                : 'text-stone/50 hover:text-olive'
+                        }`}
                         onClick={() => setShowDetail((s) => !s)}
+                        aria-label={
+                            showDetail ? 'Hide details' : 'Show details'
+                        }
+                        title={showDetail ? 'Hide details' : 'Show details'}
                     >
-                        {showDetail ? 'Hide Detail' : 'Detail'}
+                        <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                        >
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="16" x2="12" y2="12" />
+                            <line x1="12" y1="8" x2="12.01" y2="8" />
+                        </svg>
+                        <span className="hidden md:inline">
+                            {showDetail ? 'Hide detail' : 'Detail'}
+                        </span>
                     </button>
-                    <button
-                        type="button"
-                        className="btn-danger"
-                        onClick={() => {
-                            if (confirm(`Delete "${doc.title}"?`))
-                                deleteMutation.mutate()
-                        }}
-                        disabled={deleteMutation.isPending}
-                    >
-                        {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
-                    </button>
-                </div>
+                </p>
             </div>
 
             {/* Document metadata detail — mirrors CLI formatDocDetail */}
             {showDetail && (
-                <div className="mb-8 p-4 bg-ivory ring-warm rounded-[8pt] space-y-1">
+                <div className="mb-6 md:mb-8 p-4 bg-ivory ring-warm rounded-[8pt] space-y-1">
                     <p className="font-sans text-[8.5pt] text-olive">
                         <span className="font-medium text-near-black">ID:</span>{' '}
                         {doc.id}
@@ -212,28 +326,45 @@ function DocDetailPage() {
                 </div>
             )}
 
-            <div className="flex gap-8">
+            {/* Responsive layout: side-by-side on desktop, stacked on mobile */}
+            <div className="md:flex md:gap-8">
                 {/* Tree outline */}
-                <div className="w-64 flex-shrink-0">
-                    <h3 className="font-serif text-[12pt] font-medium text-near-black mb-4">
+                <div className="md:w-64 md:flex-shrink-0 mb-6 md:mb-0 md:sticky md:top-8 md:self-start">
+                    {/* Desktop: static outline heading */}
+                    <h3 className="hidden md:block font-serif text-[12pt] font-medium text-near-black mb-4">
                         Outline
                     </h3>
-                    {tree && tree.length > 0 ? (
-                        <TreeView
-                            nodes={tree}
-                            selectedNodeId={selectedNodeId}
-                            onSelect={setSelectedNodeId}
-                            docId={docId}
-                        />
-                    ) : (
-                        <p className="font-sans text-[8.5pt] text-olive">
-                            (flat document — no headings)
+                    {/* Outline content: always visible on desktop, toggle on mobile */}
+                    <div
+                        className={`${isMobile && !outlineOpen ? 'hidden' : ''}`}
+                    >
+                        {tree && tree.length > 0 ? (
+                            <TreeView
+                                nodes={tree}
+                                selectedNodeId={selectedNodeId}
+                                onSelect={handleNodeSelect}
+                                docId={docId}
+                            />
+                        ) : (
+                            <p className="font-sans text-[8.5pt] text-olive">
+                                (flat document — no headings)
+                            </p>
+                        )}
+                    </div>
+                    {/* Selected indicator on mobile when outline collapsed */}
+                    {isMobile && !outlineOpen && selectedNodeId && tree && (
+                        <p className="font-sans text-[8.5pt] text-olive mt-1 truncate">
+                            §{' '}
+                            {findNodeTitle(tree, selectedNodeId) ||
+                                selectedNodeId.split('_')[0]}
                         </p>
                     )}
                 </div>
 
-                {/* Node content */}
-                <div className="flex-1 min-w-0">
+                {/* Node content — hidden on mobile when outline is open */}
+                <div
+                    className={`flex-1 min-w-0 ${isMobile && outlineOpen ? 'hidden' : ''}`}
+                >
                     {selectedNodeId ? (
                         <NodeContent docId={docId} nodeId={selectedNodeId} />
                     ) : (
@@ -242,15 +373,6 @@ function DocDetailPage() {
                         </p>
                     )}
                 </div>
-            </div>
-
-            <div className="mt-12 pt-4 border-t border-cream">
-                <Link
-                    to="/docs"
-                    className="font-sans text-[9pt] text-olive hover:text-ink transition-colors no-underline"
-                >
-                    ← Back to documents
-                </Link>
             </div>
         </>
     )
@@ -363,9 +485,7 @@ function NodeContent({ docId, nodeId }: { docId: string; nodeId: string }) {
                     <h4 className="font-sans text-[8pt] font-semibold text-olive uppercase tracking-wide mb-2">
                         Content
                     </h4>
-                    <div className="font-serif text-[9.5pt] text-near-black leading-relaxed whitespace-pre-wrap">
-                        {node.text}
-                    </div>
+                    <Markdown>{node.text}</Markdown>
                 </div>
             )}
         </div>

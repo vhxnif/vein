@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Markdown } from '../components/Markdown'
 import type { HistoryEntry } from '../lib/api'
 import { fetchHistory, fetchHistoryEntry } from '../lib/api'
@@ -12,15 +12,76 @@ export const Route = createFileRoute('/history')({
 
 function HistoryPage() {
     const { project } = useProject()
-    const [page, setPage] = useState(1)
     const [expandedId, setExpandedId] = useState<string | null>(null)
-    const pageSize = 20
+    const sentinelRef = useRef<HTMLDivElement>(null)
+    const [isMobile, setIsMobile] = useState(false)
+    const [desktopPage, setDesktopPage] = useState(1)
 
-    const { data, isLoading, error } = useQuery({
-        queryKey: ['history', project, page],
-        queryFn: () => fetchHistory(page, pageSize),
+    const [pageSize] = useState(() => {
+        if (typeof window === 'undefined') return 20
+        if (window.innerWidth < 768) return 20
+        // Header ~160px, pagination bar ~60px; row ≈ 52px
+        const availH = window.innerHeight - 160 - 60
+        const rowH = 52
+        return Math.min(50, Math.max(8, Math.floor(availH / rowH)))
+    })
+
+    useEffect(() => {
+        const check = () => setIsMobile(window.innerWidth < 768)
+        check()
+        window.addEventListener('resize', check)
+        return () => window.removeEventListener('resize', check)
+    }, [])
+
+    const {
+        data,
+        isLoading,
+        error,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+    } = useInfiniteQuery({
+        queryKey: ['history', project, pageSize],
+        queryFn: ({ pageParam }) => fetchHistory(pageParam, pageSize),
+        initialPageParam: 1,
+        getNextPageParam: (lastPage, allPages) => {
+            const totalPages = Math.ceil(lastPage.total / pageSize)
+            const nextPage = allPages.length + 1
+            return nextPage <= totalPages ? nextPage : undefined
+        },
         staleTime: 30_000,
     })
+
+    useEffect(() => {
+        if (
+            !isMobile &&
+            data &&
+            desktopPage > data.pages.length &&
+            hasNextPage
+        ) {
+            fetchNextPage()
+        }
+    }, [isMobile, desktopPage, data, hasNextPage, fetchNextPage])
+
+    const loadMore = useCallback(() => {
+        if (hasNextPage && !isFetchingNextPage) {
+            fetchNextPage()
+        }
+    }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+
+    useEffect(() => {
+        if (!isMobile) return
+        const sentinel = sentinelRef.current
+        if (!sentinel) return
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) loadMore()
+            },
+            { rootMargin: '200px' }
+        )
+        observer.observe(sentinel)
+        return () => observer.disconnect()
+    }, [isMobile, loadMore])
 
     if (!project) {
         return (
@@ -35,9 +96,11 @@ function HistoryPage() {
         )
     }
 
-    const entries = data?.entries ?? []
-    const total = data?.total ?? 0
+    const allEntries = data?.pages.flatMap((p) => p.entries) ?? []
+    const total = data?.pages[0]?.total ?? 0
     const totalPages = Math.max(1, Math.ceil(total / pageSize))
+    const desktopPageData = data?.pages[desktopPage - 1]
+    const entries = isMobile ? allEntries : (desktopPageData?.entries ?? [])
 
     // Group entries by date
     const groups: Record<string, HistoryEntry[]> = {}
@@ -64,7 +127,8 @@ function HistoryPage() {
                 <p className="font-sans text-[9pt] text-olive">
                     No search history yet. Use Ask to start searching.
                 </p>
-            ) : (
+            ) : isMobile ? (
+                /* Mobile: date-grouped */
                 <div>
                     {Object.entries(groups).map(([date, items]) => (
                         <div key={date} className="mb-8">
@@ -72,90 +136,140 @@ function HistoryPage() {
                                 {date}
                             </h3>
                             {items.map((entry) => (
-                                <div
+                                <HistoryRow
                                     key={entry.id}
-                                    className="border-b border-cream/30"
-                                >
-                                    <button
-                                        type="button"
-                                        className="w-full text-left px-3 py-3 -mx-3 rounded-[6pt] flex items-center justify-between
-                                                   bg-transparent border-none cursor-pointer
-                                                   hover:bg-sand/60 transition-colors"
-                                        onClick={() =>
-                                            setExpandedId(
-                                                expandedId === entry.id
-                                                    ? null
-                                                    : entry.id
-                                            )
-                                        }
-                                    >
-                                        <span className="font-serif text-[10pt] text-near-black leading-relaxed">
-                                            {entry.query}
-                                        </span>
-                                        <span className="font-sans text-[8pt] text-olive flex items-center gap-3">
-                                            {entry.verdict && (
-                                                <span
-                                                    className={
-                                                        entry.verdict === 'pass'
-                                                            ? 'text-ink'
-                                                            : entry.verdict ===
-                                                                'partial'
-                                                              ? 'text-error'
-                                                              : 'text-stone'
-                                                    }
-                                                >
-                                                    {entry.verdict}{' '}
-                                                    {entry.score}/5
-                                                </span>
-                                            )}
-                                            <span>
-                                                {(
-                                                    entry.elapsedMs / 1000
-                                                ).toFixed(1)}
-                                                s
-                                            </span>
-                                            <span className="text-[10pt]">
-                                                {expandedId === entry.id
-                                                    ? '▾'
-                                                    : '▸'}
-                                            </span>
-                                        </span>
-                                    </button>
-                                    {expandedId === entry.id && (
-                                        <ExpandedEntry id={entry.id} />
-                                    )}
-                                </div>
+                                    entry={entry}
+                                    expandedId={expandedId}
+                                    setExpandedId={setExpandedId}
+                                    showDate={false}
+                                />
                             ))}
                         </div>
                     ))}
                 </div>
+            ) : (
+                /* Desktop: flat list with date in row */
+                <div>
+                    {entries.map((entry) => (
+                        <HistoryRow
+                            key={entry.id}
+                            entry={entry}
+                            expandedId={expandedId}
+                            setExpandedId={setExpandedId}
+                            showDate
+                        />
+                    ))}
+                </div>
             )}
 
-            {totalPages > 1 && (
+            {/* Mobile: infinite scroll sentinel + indicator */}
+            {isMobile && (
+                <div
+                    ref={sentinelRef}
+                    className="mt-8 pt-5 border-t border-cream"
+                >
+                    {isFetchingNextPage ? (
+                        <p className="font-sans text-[9pt] text-olive text-center">
+                            Loading more...
+                        </p>
+                    ) : hasNextPage ? (
+                        <p className="font-sans text-[9pt] text-stone text-center">
+                            Scroll for more
+                        </p>
+                    ) : entries.length > 0 ? (
+                        <p className="font-sans text-[9pt] text-stone text-center">
+                            All {total} entries loaded
+                        </p>
+                    ) : null}
+                </div>
+            )}
+
+            {/* Desktop: pagination controls */}
+            {!isMobile && totalPages > 1 && (
                 <div className="mt-8 pt-5 border-t border-cream flex items-center justify-between font-sans text-[9pt] text-olive">
                     <button
                         type="button"
                         className="btn-ghost"
-                        disabled={page <= 1}
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={desktopPage <= 1}
+                        onClick={() =>
+                            setDesktopPage((p) => Math.max(1, p - 1))
+                        }
                     >
                         ← Prev
                     </button>
                     <span>
-                        {page} / {totalPages}
+                        {desktopPage} / {totalPages}
                     </span>
                     <button
                         type="button"
                         className="btn-ghost"
-                        disabled={page >= totalPages}
+                        disabled={desktopPage >= totalPages}
                         onClick={() =>
-                            setPage((p) => Math.min(totalPages, p + 1))
+                            setDesktopPage((p) => Math.min(totalPages, p + 1))
                         }
                     >
                         Next →
                     </button>
                 </div>
             )}
+        </div>
+    )
+}
+
+function HistoryRow({
+    entry,
+    expandedId,
+    setExpandedId,
+    showDate,
+}: {
+    entry: HistoryEntry
+    expandedId: string | null
+    setExpandedId: (id: string | null) => void
+    showDate: boolean
+}) {
+    const date = entry.id.slice(0, 10)
+    const time = entry.id.slice(11, 19) ?? ''
+
+    return (
+        <div className="border-b border-cream/30">
+            <button
+                type="button"
+                className="w-full text-left px-3 py-3 -mx-3 rounded-[6pt] flex items-center justify-between
+                           bg-transparent border-none cursor-pointer
+                           hover:bg-sand/60 transition-colors"
+                onClick={() =>
+                    setExpandedId(expandedId === entry.id ? null : entry.id)
+                }
+            >
+                <span className="font-serif text-[10pt] text-near-black leading-relaxed truncate mr-2">
+                    {entry.query}
+                </span>
+                <span className="font-sans text-[8pt] text-olive flex items-center gap-3 flex-shrink-0">
+                    {showDate && (
+                        <span className="text-stone">
+                            {date} {time}
+                        </span>
+                    )}
+                    {entry.verdict && (
+                        <span
+                            className={
+                                entry.verdict === 'pass'
+                                    ? 'text-ink'
+                                    : entry.verdict === 'partial'
+                                      ? 'text-error'
+                                      : 'text-stone'
+                            }
+                        >
+                            {entry.verdict} {entry.score}/5
+                        </span>
+                    )}
+                    <span>{(entry.elapsedMs / 1000).toFixed(1)}s</span>
+                    <span className="text-[10pt]">
+                        {expandedId === entry.id ? '▾' : '▸'}
+                    </span>
+                </span>
+            </button>
+            {expandedId === entry.id && <ExpandedEntry id={entry.id} />}
         </div>
     )
 }

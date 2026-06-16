@@ -3,8 +3,6 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useProject } from '../lib/project'
 
 export function Layout({ children }: { children: ReactNode }) {
-    const { project } = useProject()
-
     return (
         <div className="flex min-h-screen bg-parchment">
             {/* Desktop sidebar */}
@@ -73,44 +71,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </aside>
 
             {/* Main content */}
-            <main className="flex-1 min-w-0 pb-16 md:pb-0">
-                {/* Mobile project indicator bar */}
-                <div className="md:hidden">
-                    <Link
-                        to="/projects"
-                        className="flex items-center gap-2 px-4 py-2.5 border-b border-cream/50
-                                   bg-ivory text-stone hover:text-ink
-                                   transition-colors no-underline"
-                    >
-                        <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            className="flex-shrink-0"
-                        >
-                            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                        </svg>
-                        <span className="font-sans text-[9pt] truncate flex-1">
-                            {project || 'Select a project'}
-                        </span>
-                        <svg
-                            width="10"
-                            height="10"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            className="flex-shrink-0"
-                        >
-                            <path d="M9 18l6-6-6-6" />
-                        </svg>
-                    </Link>
-                </div>
-                {children}
-            </main>
+            <main className="flex-1 min-w-0 pb-16 md:pb-0">{children}</main>
 
             {/* Mobile bottom tab bar */}
             <nav
@@ -333,12 +294,11 @@ function MobileTab({
     return (
         <Link
             to={href}
-            className="flex flex-col items-center gap-0.5 text-stone hover:text-ink
-                       transition-colors no-underline"
+            className="flex items-center justify-center w-10 h-10 text-stone hover:text-ink
+                       transition-colors no-underline rounded-[8pt]"
             aria-label={label}
         >
             {children}
-            <span className="font-sans text-[9px] leading-none">{label}</span>
         </Link>
     )
 }
