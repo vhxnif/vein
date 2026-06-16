@@ -1,8 +1,10 @@
 import { Link } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
+import { type ReactNode, useState, useRef, useEffect } from 'react'
 import { useProject } from '../lib/project'
 
 export function Layout({ children }: { children: ReactNode }) {
+    const { project } = useProject()
+
     return (
         <div className="flex min-h-screen bg-[#f5f4ed]">
             {/* Desktop sidebar */}
@@ -71,7 +73,44 @@ export function Layout({ children }: { children: ReactNode }) {
             </aside>
 
             {/* Main content */}
-            <main className="flex-1 min-w-0 pb-16 md:pb-0">{children}</main>
+            <main className="flex-1 min-w-0 pb-16 md:pb-0">
+                {/* Mobile project indicator bar */}
+                <div className="md:hidden">
+                    <Link
+                        to="/projects"
+                        className="flex items-center gap-2 px-4 py-2.5 border-b border-[#d4d0c4]/50
+                                   bg-[#faf9f5] text-[#6b6a64] hover:text-[#1B365D]
+                                   transition-colors no-underline"
+                    >
+                        <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            className="flex-shrink-0"
+                        >
+                            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                        </svg>
+                        <span className="font-sans text-[9pt] truncate flex-1">
+                            {project || 'Select a project'}
+                        </span>
+                        <svg
+                            width="10"
+                            height="10"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            className="flex-shrink-0"
+                        >
+                            <path d="M9 18l6-6-6-6" />
+                        </svg>
+                    </Link>
+                </div>
+                {children}
+            </main>
 
             {/* Mobile bottom tab bar */}
             <nav
@@ -138,55 +177,100 @@ export function Layout({ children }: { children: ReactNode }) {
 
 function ProjectSelector() {
     const { project, setProject, projects, loading } = useProject()
+    const [open, setOpen] = useState(false)
+    const ref = useRef<HTMLDivElement>(null)
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        if (!open) return
+        const handler = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) {
+                setOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handler)
+        return () => document.removeEventListener('mousedown', handler)
+    }, [open])
+
+    // Close on Escape
+    useEffect(() => {
+        if (!open) return
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setOpen(false)
+        }
+        document.addEventListener('keydown', handler)
+        return () => document.removeEventListener('keydown', handler)
+    }, [open])
 
     return (
-        <div className="relative group">
+        <div className="relative" ref={ref}>
             <button
                 type="button"
                 className="flex items-center justify-center w-8 h-8 rounded-[6pt]
                            text-[#6b6a64] hover:text-[#1B365D] hover:bg-[#EEF2F7]
                            transition-colors"
                 title={project || 'Select project'}
+                onClick={() => setOpen((v) => !v)}
+                aria-expanded={open}
+                aria-haspopup="true"
             >
                 <ProjectIcon />
             </button>
 
-            {/* Dropdown on hover */}
-            <div
-                className="absolute top-full left-0 mt-1 w-48 bg-[#faf9f5]
-                           ring-warm rounded-[8pt] py-1 opacity-0 invisible
-                           group-hover:opacity-100 group-hover:visible
-                           transition-all z-50 shadow-sm"
-            >
-                <div className="px-3 py-1.5 font-sans text-[7.5pt] font-semibold text-[#6b6a64] uppercase tracking-wide">
-                    Projects
+            {/* Dropdown on click */}
+            {open && (
+                <div
+                    className="absolute top-full left-0 mt-1 w-52 bg-[#faf9f5]
+                               ring-warm rounded-[8pt] py-1 z-50 shadow-sm
+                               animate-[fadeIn_150ms_ease]"
+                >
+                    <div className="px-3 py-1.5 font-sans text-[7.5pt] font-semibold text-[#6b6a64] uppercase tracking-wide">
+                        Projects
+                    </div>
+                    {loading ? (
+                        <div className="px-3 py-2 font-sans text-[8pt] text-[#6b6a64]">
+                            Loading...
+                        </div>
+                    ) : projects.length === 0 ? (
+                        <div className="px-3 py-2 font-sans text-[8pt] text-[#6b6a64]">
+                            No projects found
+                        </div>
+                    ) : (
+                        <>
+                            {/* None option */}
+                            <button
+                                type="button"
+                                className={`w-full text-left px-3 py-1.5 font-sans text-[8.5pt]
+                                    transition-colors hover:bg-[#EEF2F7]
+                                    ${!project ? 'text-[#1B365D] font-medium' : 'text-[#504e49]'}`}
+                                onClick={() => {
+                                    setProject(null)
+                                    setOpen(false)
+                                }}
+                            >
+                                {!project && '● '}
+                                None
+                            </button>
+                            {projects.map((p) => (
+                                <button
+                                    type="button"
+                                    key={p.name}
+                                    className={`w-full text-left px-3 py-1.5 font-sans text-[8.5pt]
+                                        transition-colors hover:bg-[#EEF2F7] truncate
+                                        ${project === p.name ? 'text-[#1B365D] font-medium' : 'text-[#504e49]'}`}
+                                    onClick={() => {
+                                        setProject(project === p.name ? null : p.name)
+                                        setOpen(false)
+                                    }}
+                                >
+                                    {project === p.name && '● '}
+                                    {p.name}
+                                </button>
+                            ))}
+                        </>
+                    )}
                 </div>
-                {loading ? (
-                    <div className="px-3 py-2 font-sans text-[8pt] text-[#6b6a64]">
-                        Loading...
-                    </div>
-                ) : projects.length === 0 ? (
-                    <div className="px-3 py-2 font-sans text-[8pt] text-[#6b6a64]">
-                        No projects found
-                    </div>
-                ) : (
-                    projects.map((p) => (
-                        <button
-                            type="button"
-                            key={p.name}
-                            className={`w-full text-left px-3 py-1.5 font-sans text-[8.5pt]
-                                transition-colors hover:bg-[#EEF2F7]
-                                ${project === p.name ? 'text-[#1B365D] font-medium' : 'text-[#504e49]'}`}
-                            onClick={() =>
-                                setProject(project === p.name ? null : p.name)
-                            }
-                        >
-                            {project === p.name && '● '}
-                            {p.name}
-                        </button>
-                    ))
-                )}
-            </div>
+            )}
         </div>
     )
 }
