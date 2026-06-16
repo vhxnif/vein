@@ -57,15 +57,15 @@ function HomePage() {
             {/* Project indicator */}
             {project ? (
                 <div className="text-center mb-12">
-                    <h1 className="font-serif text-[22pt] font-medium leading-tight text-[#141413]">
+                    <h1 className="font-serif text-[22pt] font-medium leading-tight text-near-black">
                         {project}
                     </h1>
-                    <p className="mt-1.5 font-sans text-[9pt] text-[#6b6a64]">
+                    <p className="mt-1.5 font-sans text-[9pt] text-stone">
                         Search across documents in this project
                     </p>
                 </div>
             ) : (
-                <p className="font-sans text-[8.5pt] text-[#6b6a64] text-center mb-12">
+                <p className="font-sans text-[8.5pt] text-stone text-center mb-12">
                     No project selected — select one from the sidebar
                 </p>
             )}
@@ -78,10 +78,10 @@ function HomePage() {
                     onChange={(e) => setQuery(e.currentTarget.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Type your question..."
-                    className="w-full bg-[#faf9f5] ring-warm rounded-[8pt] px-6 py-4
-                               font-serif text-[11pt] leading-relaxed text-[#141413]
-                               placeholder:text-[#6b6a64] outline-none
-                               focus:ring-[#1B365D] transition-shadow"
+                    className="w-full bg-ivory ring-warm rounded-[8pt] px-6 py-4
+                               font-serif text-[11pt] leading-relaxed text-near-black
+                               placeholder:text-stone outline-none
+                               focus:ring-ink transition-shadow"
                     disabled={searching}
                 />
             </div>
@@ -91,12 +91,12 @@ function HomePage() {
                 <div className="mb-8">
                     <div className="flex items-center gap-3">
                         <RunCat size={24} />
-                        <span className="font-sans text-[9pt] text-[#504e49]">
+                        <span className="font-sans text-[9pt] text-olive">
                             {steps.length > 0
                                 ? steps[steps.length - 1]
                                 : 'Searching...'}
                         </span>
-                        <span className="font-mono text-[8pt] text-[#6b6a64] tabular-nums ml-auto">
+                        <span className="font-mono text-[8pt] text-stone tabular-nums ml-auto">
                             {elapsed}s
                         </span>
                     </div>
@@ -107,7 +107,7 @@ function HomePage() {
                                 .map((s) => (
                                     <div
                                         key={s}
-                                        className="font-mono text-[7.5pt] text-[#6b6a64]"
+                                        className="font-mono text-[7.5pt] text-stone"
                                     >
                                         ✓ {s}
                                     </div>
@@ -119,10 +119,8 @@ function HomePage() {
 
             {/* Error */}
             {error && (
-                <div className="mb-8 p-4 bg-[#faf9f5] ring-warm rounded-[8pt]">
-                    <p className="font-sans text-[9pt] text-[#b53333]">
-                        {error}
-                    </p>
+                <div className="mb-8 p-4 bg-ivory ring-warm rounded-[8pt]">
+                    <p className="font-sans text-[9pt] text-error">{error}</p>
                 </div>
             )}
 
@@ -136,19 +134,19 @@ function HomePage() {
 
                     {/* Review */}
                     {result.review && (
-                        <div className="mt-10 pt-5 border-t border-[#d4d0c4] flex items-start gap-8">
+                        <div className="mt-10 pt-5 border-t border-cream flex items-start gap-8">
                             <div>
-                                <p className="font-sans text-[7.5pt] font-semibold text-[#6b6a64] uppercase tracking-wide mb-1">
+                                <p className="font-sans text-[7.5pt] font-semibold text-stone uppercase tracking-wide mb-1">
                                     Review
                                 </p>
                                 <p
                                     className={`font-sans text-[8.5pt] font-medium ${
                                         result.review.verdict === 'pass'
-                                            ? 'text-[#1B365D]'
+                                            ? 'text-ink'
                                             : result.review.verdict ===
                                                 'partial'
-                                              ? 'text-[#b53333]'
-                                              : 'text-[#6b6a64]'
+                                              ? 'text-error'
+                                              : 'text-stone'
                                     }`}
                                 >
                                     {result.review.verdict} (
@@ -157,13 +155,13 @@ function HomePage() {
                                         ` · ${(result.reviewElapsedMs / 1000).toFixed(1)}s`}
                                 </p>
                             </div>
-                            <p className="font-sans text-[8.5pt] text-[#6b6a64] leading-relaxed flex-1">
+                            <p className="font-sans text-[8.5pt] text-stone leading-relaxed flex-1">
                                 {result.review.reason}
                             </p>
                         </div>
                     )}
 
-                    <div className="mt-6 flex items-center gap-4 font-sans text-[8pt] text-[#6b6a64]">
+                    <div className="mt-6 flex items-center gap-4 font-sans text-[8pt] text-stone">
                         <span>{(result.elapsedMs / 1000).toFixed(1)}s</span>
                     </div>
                 </div>
@@ -171,7 +169,7 @@ function HomePage() {
 
             {/* Empty state */}
             {!searching && !result && !error && (
-                <p className="mt-12 font-sans text-[9pt] text-[#6b6a64] text-center">
+                <p className="mt-12 font-sans text-[9pt] text-stone text-center">
                     Press Enter to search
                 </p>
             )}

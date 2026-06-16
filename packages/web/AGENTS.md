@@ -164,6 +164,54 @@ bun run start              # node dist/server.js
 - **响应式**：≥768px 侧边栏 + 780px 居中内容区，<768px 底部 Tab Bar + 全宽
 - **暗色模式**：`prefers-color-scheme`，warm dark tokens（`#141413` / `#30302E`）
 
+## 陷阱与约定
+
+### Tailwind v4 @theme 桥接
+
+CSS 变量定义在 `:root`（如 `--ink-blue: #1b365d`），但 Tailwind 不自动识别它们。需在 `styles.css` 中用 `@theme` 块桥接：
+
+```css
+@theme {
+    --color-ink: #1b365d;
+    --color-ivory: #faf9f5;
+}
+```
+
+之后组件可用 `text-ink`、`bg-ivory` 替代 `text-[#1B365D]`、`bg-[#faf9f5]`。**不要混用**硬编码 hex 和主题令牌——统一用令牌。
+
+### 批量替换色值的顺序陷阱
+
+用 sed 将 `bg-[#hex]` 替换为主题类时，**必须先处理带透明度后缀的变体**（`bg-[#faf9f5]/50`），再处理不带后缀的（`bg-[#faf9f5]`）。否则 `/50` 会被遗留为孤立文本。
+
+JS 模板字符串中的动态类（`` `${cond ? 'bg-[#hex]' : '...'}` ``）不会被 sed 匹配到，需手动编辑。
+
+### Kami 冷暖色冲突
+
+`--tint`（`#eef2f7`）是冷调蓝灰，原始用途是标签/徽章底色。**禁止**在暖色羊皮纸（`#f5f4ed`）上用它作 hover 高亮——冷暖冲突破坏 Kami 美学。行 hover 统一用暖沙色：
+
+- 羊皮纸底色上的行：`hover:bg-sand/60`
+- 象牙白（`#faf9f5`）表面上的元素：`hover:bg-sand`
+
+### hover 风格一致性
+
+同一底色上的所有可点击行必须使用相同的 hover 样式。当前约定：
+| 底色 | hover | 场景 |
+|------|-------|------|
+| parchment `#f5f4ed` | `hover:bg-sand/60` | 文档列表行、历史记录行 |
+| ivory `#faf9f5` | `hover:bg-sand` | 项目卡片、下拉菜单项、侧边栏图标 |
+
+### 中文 UI 文本全面审计
+
+中英文本地化不仅涉及页面标题（`历史`→`History`），还需检查：区块标题（`大纲`→`Outline`、`数据库`→`Database`）、元数据标签（`章节`→`sections`）、模型标签（`主模型`→`Main Model`）、空状态文案（`暂无文档`→`No documents yet`）、占位提示（`点击左侧章节查看原文`→`Select a section from the outline to view content`）。
+
+### 标签防换行
+
+不要用固定宽度（如 `w-16`）限制标签——长标签（如 "Sub-Agent Model"）会被折断。用 `whitespace-nowrap` 让标签按自然宽度渲染。
+
+### 键盘无障碍
+
+`focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2`：**仅键盘导航（Tab 键）时显示聚焦环**，鼠标点击时不显示。优于 `focus:`（后者鼠标点击也会触发）。需覆盖：侧边栏图标、大纲树按钮、设置页 `<select>`。
+
 ## 日志
 
 Web 层日志通过 `logger.child({ module: 'web' })` 创建。仅写文件 `~/.config/vein/logs/vein-YYYY-MM-DD.log`，JSON 每行一条，不输出控制台。

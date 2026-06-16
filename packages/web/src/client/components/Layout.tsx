@@ -1,16 +1,16 @@
 import { Link } from '@tanstack/react-router'
-import { type ReactNode, useState, useRef, useEffect } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useProject } from '../lib/project'
 
 export function Layout({ children }: { children: ReactNode }) {
     const { project } = useProject()
 
     return (
-        <div className="flex min-h-screen bg-[#f5f4ed]">
+        <div className="flex min-h-screen bg-parchment">
             {/* Desktop sidebar */}
             <aside
                 className="hidden md:flex w-[48px] flex-shrink-0 flex-col items-center py-4 gap-3
-                               border-r border-[#d4d0c4]/50"
+                               border-r border-cream/50"
             >
                 {/* Project selector */}
                 <ProjectSelector />
@@ -78,8 +78,8 @@ export function Layout({ children }: { children: ReactNode }) {
                 <div className="md:hidden">
                     <Link
                         to="/projects"
-                        className="flex items-center gap-2 px-4 py-2.5 border-b border-[#d4d0c4]/50
-                                   bg-[#faf9f5] text-[#6b6a64] hover:text-[#1B365D]
+                        className="flex items-center gap-2 px-4 py-2.5 border-b border-cream/50
+                                   bg-ivory text-stone hover:text-ink
                                    transition-colors no-underline"
                     >
                         <svg
@@ -114,7 +114,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
             {/* Mobile bottom tab bar */}
             <nav
-                className="md:hidden fixed bottom-0 left-0 right-0 bg-[#faf9f5] border-t border-[#d4d0c4]/50
+                className="md:hidden fixed bottom-0 left-0 right-0 bg-ivory border-t border-cream/50
                             flex items-center justify-around py-2 safe-area-bottom z-50"
             >
                 <MobileTab href="/" label="Ask">
@@ -207,7 +207,8 @@ function ProjectSelector() {
             <button
                 type="button"
                 className="flex items-center justify-center w-8 h-8 rounded-[6pt]
-                           text-[#6b6a64] hover:text-[#1B365D] hover:bg-[#EEF2F7]
+                           text-stone hover:text-ink hover:bg-sand
+                           focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2
                            transition-colors"
                 title={project || 'Select project'}
                 onClick={() => setOpen((v) => !v)}
@@ -220,19 +221,19 @@ function ProjectSelector() {
             {/* Dropdown on click */}
             {open && (
                 <div
-                    className="absolute top-full left-0 mt-1 w-52 bg-[#faf9f5]
+                    className="absolute top-full left-0 mt-1 w-52 bg-ivory
                                ring-warm rounded-[8pt] py-1 z-50 shadow-sm
                                animate-[fadeIn_150ms_ease]"
                 >
-                    <div className="px-3 py-1.5 font-sans text-[7.5pt] font-semibold text-[#6b6a64] uppercase tracking-wide">
+                    <div className="px-3 py-1.5 font-sans text-[7.5pt] font-semibold text-stone uppercase tracking-wide">
                         Projects
                     </div>
                     {loading ? (
-                        <div className="px-3 py-2 font-sans text-[8pt] text-[#6b6a64]">
+                        <div className="px-3 py-2 font-sans text-[8pt] text-stone">
                             Loading...
                         </div>
                     ) : projects.length === 0 ? (
-                        <div className="px-3 py-2 font-sans text-[8pt] text-[#6b6a64]">
+                        <div className="px-3 py-2 font-sans text-[8pt] text-stone">
                             No projects found
                         </div>
                     ) : (
@@ -241,8 +242,8 @@ function ProjectSelector() {
                             <button
                                 type="button"
                                 className={`w-full text-left px-3 py-1.5 font-sans text-[8.5pt]
-                                    transition-colors hover:bg-[#EEF2F7]
-                                    ${!project ? 'text-[#1B365D] font-medium' : 'text-[#504e49]'}`}
+                                    transition-colors hover:bg-sand
+                                    ${!project ? 'text-ink font-medium' : 'text-olive'}`}
                                 onClick={() => {
                                     setProject(null)
                                     setOpen(false)
@@ -256,10 +257,12 @@ function ProjectSelector() {
                                     type="button"
                                     key={p.name}
                                     className={`w-full text-left px-3 py-1.5 font-sans text-[8.5pt]
-                                        transition-colors hover:bg-[#EEF2F7] truncate
-                                        ${project === p.name ? 'text-[#1B365D] font-medium' : 'text-[#504e49]'}`}
+                                        transition-colors hover:bg-sand truncate
+                                        ${project === p.name ? 'text-ink font-medium' : 'text-olive'}`}
                                     onClick={() => {
-                                        setProject(project === p.name ? null : p.name)
+                                        setProject(
+                                            project === p.name ? null : p.name
+                                        )
                                         setOpen(false)
                                     }}
                                 >
@@ -305,7 +308,8 @@ function SidebarIcon({
         <Link
             to={href}
             className="flex items-center justify-center w-8 h-8 rounded-[6pt]
-                       text-[#6b6a64] hover:text-[#1B365D] hover:bg-[#EEF2F7]
+                       text-stone hover:text-ink hover:bg-sand
+                       focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2
                        transition-colors"
             title={label}
             aria-label={label}
@@ -329,7 +333,7 @@ function MobileTab({
     return (
         <Link
             to={href}
-            className="flex flex-col items-center gap-0.5 text-[#6b6a64] hover:text-[#1B365D]
+            className="flex flex-col items-center gap-0.5 text-stone hover:text-ink
                        transition-colors no-underline"
             aria-label={label}
         >

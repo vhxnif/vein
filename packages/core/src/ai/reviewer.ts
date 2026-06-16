@@ -1,6 +1,6 @@
 import { getModel, Type } from '@earendil-works/pi-ai'
-import type { ModelProvider } from '../config/type'
 import { logger } from '../config'
+import type { ModelProvider } from '../config/type'
 import { getNodeDetails } from '../store'
 import type { BaseDocNode } from '../tree/type'
 import { call, getModelProvider, type ToolDef } from './base'

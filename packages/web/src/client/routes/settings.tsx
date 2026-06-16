@@ -102,10 +102,10 @@ function SettingsPage() {
     if (!project) {
         return (
             <div className="max-w-[560px] mx-auto px-8 py-16">
-                <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413] mb-10">
-                    设置
+                <h1 className="font-serif text-[20pt] font-medium leading-tight text-near-black mb-10">
+                    Settings
                 </h1>
-                <p className="font-sans text-[9pt] text-[#6b6a64]">
+                <p className="font-sans text-[9pt] text-stone">
                     No project selected — select one from the sidebar
                 </p>
             </div>
@@ -115,9 +115,7 @@ function SettingsPage() {
     if (isLoading) {
         return (
             <div className="max-w-[560px] mx-auto px-8 py-16">
-                <p className="font-sans text-[9pt] text-[#504e49]">
-                    Loading...
-                </p>
+                <p className="font-sans text-[9pt] text-olive">Loading...</p>
             </div>
         )
     }
@@ -125,10 +123,10 @@ function SettingsPage() {
     if (error) {
         return (
             <div className="max-w-[560px] mx-auto px-8 py-16">
-                <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413] mb-10">
-                    设置
+                <h1 className="font-serif text-[20pt] font-medium leading-tight text-near-black mb-10">
+                    Settings
                 </h1>
-                <p className="font-sans text-[9pt] text-[#b53333]">
+                <p className="font-sans text-[9pt] text-error">
                     Failed to load config:{' '}
                     {error instanceof Error ? error.message : String(error)}
                 </p>
@@ -139,10 +137,10 @@ function SettingsPage() {
     if (!config) {
         return (
             <div className="max-w-[560px] mx-auto px-8 py-16">
-                <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413] mb-10">
-                    设置
+                <h1 className="font-serif text-[20pt] font-medium leading-tight text-near-black mb-10">
+                    Settings
                 </h1>
-                <p className="font-sans text-[9pt] text-[#504e49]">
+                <p className="font-sans text-[9pt] text-olive">
                     No config found for this project.
                 </p>
             </div>
@@ -151,19 +149,19 @@ function SettingsPage() {
 
     return (
         <div className="max-w-[560px] mx-auto px-8 py-16">
-            <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413] mb-10">
-                设置
+            <h1 className="font-serif text-[20pt] font-medium leading-tight text-near-black mb-10">
+                Settings
             </h1>
 
             {/* Project */}
             <section className="mb-10">
-                <h3 className="font-serif text-[12pt] font-medium text-[#504e49] mb-4">
-                    项目
+                <h3 className="font-serif text-[12pt] font-medium text-olive mb-4">
+                    Project
                 </h3>
                 <div className="space-y-1">
                     <label
                         htmlFor="name"
-                        className="block font-sans text-[8.5pt] text-[#6b6a64]"
+                        className="block font-sans text-[8.5pt] text-stone"
                     >
                         Name
                     </label>
@@ -172,21 +170,21 @@ function SettingsPage() {
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.currentTarget.value)}
-                        className="w-full bg-transparent border-b border-[#d4d0c4] px-0 py-2
-                                   font-serif text-[10pt] text-[#141413] outline-none
-                                   focus:border-[#1B365D] transition-colors"
+                        className="w-full bg-transparent border-b border-cream px-0 py-2
+                                   font-serif text-[10pt] text-near-black outline-none
+                                   focus:border-ink transition-colors"
                     />
                 </div>
             </section>
 
             {/* Models */}
             <section className="mb-10">
-                <h3 className="font-serif text-[12pt] font-medium text-[#504e49] mb-4">
-                    模型
+                <h3 className="font-serif text-[12pt] font-medium text-olive mb-4">
+                    Models
                 </h3>
 
                 <ModelRow
-                    label="主模型"
+                    label="Main Model"
                     provider={mainProvider}
                     model={mainModel}
                     onProviderChange={(p) => {
@@ -196,7 +194,7 @@ function SettingsPage() {
                     onModelChange={setMainModel}
                 />
                 <ModelRow
-                    label="摘要模型"
+                    label="Summary Model"
                     provider={summarizerProvider}
                     model={summarizerModel}
                     onProviderChange={(p) => {
@@ -207,7 +205,7 @@ function SettingsPage() {
                     optional
                 />
                 <ModelRow
-                    label="分词模型"
+                    label="Segmentation Model"
                     provider={segmenterProvider}
                     model={segmenterModel}
                     onProviderChange={(p) => {
@@ -218,7 +216,7 @@ function SettingsPage() {
                     optional
                 />
                 <ModelRow
-                    label="子Agent模型"
+                    label="Sub-Agent Model"
                     provider={subagentProvider}
                     model={subagentModel}
                     onProviderChange={(p) => {
@@ -229,7 +227,7 @@ function SettingsPage() {
                     optional
                 />
                 <ModelRow
-                    label="审查模型"
+                    label="Review Model"
                     provider={reviewerProvider}
                     model={reviewerModel}
                     onProviderChange={(p) => {
@@ -243,10 +241,10 @@ function SettingsPage() {
 
             {/* Database */}
             <section className="mb-10">
-                <h3 className="font-serif text-[12pt] font-medium text-[#504e49] mb-4">
-                    数据库
+                <h3 className="font-serif text-[12pt] font-medium text-olive mb-4">
+                    Database
                 </h3>
-                <p className="font-sans text-[9pt] text-[#504e49]">
+                <p className="font-sans text-[9pt] text-olive">
                     {(() => {
                         const dbRel = (config.db || '.vein/data.db').replace(
                             /^\.\//,
@@ -272,7 +270,7 @@ function SettingsPage() {
                     {saveMutation.isPending ? 'Saving...' : 'Save'}
                 </button>
                 {saved && (
-                    <span className="font-sans text-[8.5pt] text-[#1B365D]">
+                    <span className="font-sans text-[8.5pt] text-ink">
                         ✓ Saved
                     </span>
                 )}
@@ -315,11 +313,11 @@ function ModelRow({
     return (
         <div className="mb-5">
             <div className="flex items-center gap-3 mb-1">
-                <span className="font-sans text-[8.5pt] text-[#6b6a64] w-16">
+                <span className="font-sans text-[8.5pt] text-stone whitespace-nowrap">
                     {label}
                 </span>
                 {optional && !provider && (
-                    <span className="font-sans text-[7.5pt] text-[#6b6a64] italic">
+                    <span className="font-sans text-[7.5pt] text-stone italic">
                         (use main)
                     </span>
                 )}
@@ -328,9 +326,9 @@ function ModelRow({
                 <select
                     value={provider}
                     onChange={(e) => onProviderChange(e.currentTarget.value)}
-                    className="flex-1 bg-[#faf9f5] border border-[#d4d0c4] rounded-[6pt]
-                               px-3 py-2 font-sans text-[9pt] text-[#141413]
-                               outline-none focus:border-[#1B365D] transition-colors"
+                    className="flex-1 bg-ivory border border-cream rounded-[6pt]
+                               px-3 py-2 font-sans text-[9pt] text-near-black
+                               outline-none focus:border-ink focus-visible:ring-2 focus-visible:ring-ink transition-colors"
                 >
                     <option value="">
                         {optional ? '(use main)' : 'Select...'}
@@ -345,9 +343,9 @@ function ModelRow({
                     value={model}
                     onChange={(e) => onModelChange(e.currentTarget.value)}
                     disabled={!provider}
-                    className="flex-1 bg-[#faf9f5] border border-[#d4d0c4] rounded-[6pt]
-                               px-3 py-2 font-sans text-[9pt] text-[#141413]
-                               outline-none focus:border-[#1B365D] transition-colors
+                    className="flex-1 bg-ivory border border-cream rounded-[6pt]
+                               px-3 py-2 font-sans text-[9pt] text-near-black
+                               outline-none focus:border-ink focus-visible:ring-2 focus-visible:ring-ink transition-colors
                                disabled:opacity-50"
                 >
                     <option value="">Select...</option>

@@ -163,6 +163,10 @@ PROMPT + tools [ searchDocsByKeyword, analyzeDocument, reviewResult ]
 - **创建**：`import { logger } from '@vein/core'` → `logger.child({ module: 'xxx' })`
 - **约束**：禁止记录完整 LLM prompt/response/文档树
 
+## 陷阱
+
+- **Prompt 模板字符串中的反引号**：`librarian.ts` 的 `PROMPT` 常量使用反引号模板字符串。在 prompt 文本中嵌入代码示例时，反引号（如 `` `ref reactive 区别` ``）会提前闭合模板字符串，导致 TS 解析错误。改用书名号（「」）或其他符号包裹代码示例。
+
 ## 开发
 
 ```bash

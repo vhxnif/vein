@@ -20,25 +20,25 @@ interface TreeNode {
 function DocSkeleton() {
     return (
         <div className="animate-pulse">
-            <div className="h-8 bg-[#e8e6dc] rounded w-2/5 mb-3" />
-            <div className="h-4 bg-[#e8e6dc] rounded w-1/4 mb-10" />
+            <div className="h-8 bg-sand rounded w-2/5 mb-3" />
+            <div className="h-4 bg-sand rounded w-1/4 mb-10" />
             <div className="flex gap-8">
                 <div className="w-64 flex-shrink-0 space-y-2.5">
-                    <div className="h-3 bg-[#e8e6dc] rounded w-10 mb-3" />
+                    <div className="h-3 bg-sand rounded w-10 mb-3" />
                     {[80, 60, 75, 50, 70, 55].map((w) => (
                         <div
                             key={w}
-                            className="h-3 bg-[#e8e6dc] rounded"
+                            className="h-3 bg-sand rounded"
                             style={{ width: `${w}%` }}
                         />
                     ))}
                 </div>
                 <div className="flex-1 space-y-3">
-                    <div className="h-6 bg-[#e8e6dc] rounded w-1/3" />
-                    <div className="h-3 bg-[#e8e6dc] rounded w-full" />
-                    <div className="h-3 bg-[#e8e6dc] rounded w-full" />
-                    <div className="h-3 bg-[#e8e6dc] rounded w-3/4" />
-                    <div className="h-3 bg-[#e8e6dc] rounded w-1/2" />
+                    <div className="h-6 bg-sand rounded w-1/3" />
+                    <div className="h-3 bg-sand rounded w-full" />
+                    <div className="h-3 bg-sand rounded w-full" />
+                    <div className="h-3 bg-sand rounded w-3/4" />
+                    <div className="h-3 bg-sand rounded w-1/2" />
                 </div>
             </div>
         </div>
@@ -76,7 +76,7 @@ function DocDetailPage() {
 
     if (!project) {
         return (
-            <p className="font-sans text-[9pt] text-[#6b6a64]">
+            <p className="font-sans text-[9pt] text-stone">
                 No project selected — select one from the sidebar
             </p>
         )
@@ -86,7 +86,7 @@ function DocDetailPage() {
 
     if (error) {
         return (
-            <p className="font-sans text-[9pt] text-[#b53333]">
+            <p className="font-sans text-[9pt] text-error">
                 Failed to load document:{' '}
                 {error instanceof Error ? error.message : String(error)}
             </p>
@@ -95,7 +95,7 @@ function DocDetailPage() {
 
     if (!doc) {
         return (
-            <p className="font-sans text-[9pt] text-[#504e49]">
+            <p className="font-sans text-[9pt] text-olive">
                 Document not found.
             </p>
         )
@@ -117,11 +117,12 @@ function DocDetailPage() {
         <>
             <div className="flex items-start justify-between mb-8">
                 <div>
-                    <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413]">
+                    <h1 className="font-serif text-[20pt] font-medium leading-tight text-near-black">
                         {doc.title}
                     </h1>
-                    <p className="font-sans text-[8.5pt] text-[#504e49] mt-2 leading-relaxed">
-                        {doc.nodeCount} 章节 · {doc.sourcePath || 'unknown'} ·{' '}
+                    <p className="font-sans text-[8.5pt] text-olive mt-2 leading-relaxed">
+                        {doc.nodeCount} section{doc.nodeCount !== 1 ? 's' : ''}{' '}
+                        · {doc.sourcePath || 'unknown'} ·{' '}
                         {doc.createdAt?.slice(0, 10) ?? 'unknown'}
                     </p>
                 </div>
@@ -135,7 +136,7 @@ function DocDetailPage() {
                     </button>
                     <button
                         type="button"
-                        className="btn-ghost text-[#b53333]"
+                        className="btn-ghost text-error"
                         onClick={() => {
                             if (confirm(`Delete "${doc.title}"?`))
                                 deleteMutation.mutate()
@@ -148,32 +149,32 @@ function DocDetailPage() {
 
             {/* Document metadata detail — mirrors CLI formatDocDetail */}
             {showDetail && (
-                <div className="mb-8 p-4 bg-[#faf9f5] ring-warm rounded-[8pt] space-y-1">
-                    <p className="font-sans text-[8.5pt] text-[#504e49]">
-                        <span className="font-medium text-[#141413]">ID:</span>{' '}
+                <div className="mb-8 p-4 bg-ivory ring-warm rounded-[8pt] space-y-1">
+                    <p className="font-sans text-[8.5pt] text-olive">
+                        <span className="font-medium text-near-black">ID:</span>{' '}
                         {doc.id}
                     </p>
-                    <p className="font-sans text-[8.5pt] text-[#504e49]">
-                        <span className="font-medium text-[#141413]">
+                    <p className="font-sans text-[8.5pt] text-olive">
+                        <span className="font-medium text-near-black">
                             ShortID:
                         </span>{' '}
                         {doc.id.slice(0, 8)}...
                     </p>
-                    <p className="font-sans text-[8.5pt] text-[#504e49]">
-                        <span className="font-medium text-[#141413]">
+                    <p className="font-sans text-[8.5pt] text-olive">
+                        <span className="font-medium text-near-black">
                             Created:
                         </span>{' '}
                         {doc.createdAt}
                     </p>
-                    <p className="font-sans text-[8.5pt] text-[#504e49]">
-                        <span className="font-medium text-[#141413]">
+                    <p className="font-sans text-[8.5pt] text-olive">
+                        <span className="font-medium text-near-black">
                             Nodes:
                         </span>{' '}
                         {doc.nodeCount}
                     </p>
                     {doc.ftsSummary && (
-                        <p className="font-sans text-[8.5pt] text-[#504e49]">
-                            <span className="font-medium text-[#141413]">
+                        <p className="font-sans text-[8.5pt] text-olive">
+                            <span className="font-medium text-near-black">
                                 FTS:
                             </span>{' '}
                             {doc.ftsSummary.length > 200
@@ -182,8 +183,8 @@ function DocDetailPage() {
                         </p>
                     )}
                     {Object.keys(extraMeta).length > 0 && (
-                        <div className="pt-2 mt-2 border-t border-[#d4d0c4]/50">
-                            <p className="font-sans text-[8pt] font-semibold text-[#504e49] uppercase tracking-wide mb-2">
+                        <div className="pt-2 mt-2 border-t border-cream/50">
+                            <p className="font-sans text-[8pt] font-semibold text-olive uppercase tracking-wide mb-2">
                                 Metadata
                             </p>
                             {Object.entries(extraMeta).map(([k, v]) => {
@@ -196,9 +197,9 @@ function DocDetailPage() {
                                 return (
                                     <p
                                         key={k}
-                                        className="font-sans text-[8.5pt] text-[#504e49]"
+                                        className="font-sans text-[8.5pt] text-olive"
                                     >
-                                        <span className="font-medium text-[#141413]">
+                                        <span className="font-medium text-near-black">
                                             {k}:
                                         </span>{' '}
                                         {val}
@@ -213,8 +214,8 @@ function DocDetailPage() {
             <div className="flex gap-8">
                 {/* Tree outline */}
                 <div className="w-64 flex-shrink-0">
-                    <h3 className="font-serif text-[12pt] font-medium text-[#141413] mb-4">
-                        大纲
+                    <h3 className="font-serif text-[12pt] font-medium text-near-black mb-4">
+                        Outline
                     </h3>
                     {tree && tree.length > 0 ? (
                         <TreeView
@@ -224,7 +225,7 @@ function DocDetailPage() {
                             docId={docId}
                         />
                     ) : (
-                        <p className="font-sans text-[8.5pt] text-[#504e49]">
+                        <p className="font-sans text-[8.5pt] text-olive">
                             (flat document — no headings)
                         </p>
                     )}
@@ -235,17 +236,17 @@ function DocDetailPage() {
                     {selectedNodeId ? (
                         <NodeContent docId={docId} nodeId={selectedNodeId} />
                     ) : (
-                        <p className="font-serif text-[10pt] text-[#6b6a64] italic">
-                            — 点击左侧章节查看原文
+                        <p className="font-serif text-[10pt] text-stone italic">
+                            — Select a section from the outline to view content
                         </p>
                     )}
                 </div>
             </div>
 
-            <div className="mt-12 pt-4 border-t border-[#d4d0c4]">
+            <div className="mt-12 pt-4 border-t border-cream">
                 <Link
                     to="/docs"
-                    className="font-sans text-[9pt] text-[#504e49] hover:text-[#1B365D] transition-colors no-underline"
+                    className="font-sans text-[9pt] text-olive hover:text-ink transition-colors no-underline"
                 >
                     ← Back to documents
                 </Link>
@@ -281,7 +282,8 @@ function TreeView({
                             type="button"
                             className={`text-left font-sans text-[9pt] leading-snug py-0.5
                                 transition-colors bg-transparent border-none cursor-pointer
-                                ${isSelected ? 'text-[#1B365D] font-medium' : 'text-[#504e49] hover:text-[#141413]'}`}
+                                focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 focus-visible:rounded-[3pt]
+                                ${isSelected ? 'text-ink font-medium' : 'text-olive hover:text-near-black'}`}
                             style={{ paddingLeft: `${d * 12}pt` }}
                             onClick={() => onSelect(node.nodeId)}
                         >
@@ -317,12 +319,12 @@ function NodeContent({ docId, nodeId }: { docId: string; nodeId: string }) {
     })
 
     if (isLoading) {
-        return <p className="font-sans text-[9pt] text-[#504e49]">Loading...</p>
+        return <p className="font-sans text-[9pt] text-olive">Loading...</p>
     }
 
     if (error) {
         return (
-            <p className="font-sans text-[9pt] text-[#b53333]">
+            <p className="font-sans text-[9pt] text-error">
                 Failed to load node:{' '}
                 {error instanceof Error ? error.message : String(error)}
             </p>
@@ -331,27 +333,25 @@ function NodeContent({ docId, nodeId }: { docId: string; nodeId: string }) {
 
     if (!node) {
         return (
-            <p className="font-sans text-[9pt] text-[#504e49]">
-                Node not found.
-            </p>
+            <p className="font-sans text-[9pt] text-olive">Node not found.</p>
         )
     }
 
     return (
         <div>
-            <h2 className="font-serif text-[14pt] font-medium text-[#141413] mb-1">
+            <h2 className="font-serif text-[14pt] font-medium text-near-black mb-1">
                 {node.title}
             </h2>
-            <p className="font-sans text-[8pt] text-[#6b6a64] mb-4">
+            <p className="font-sans text-[8pt] text-stone mb-4">
                 Line: {node.lineNum}
             </p>
 
             {node.summary && (
                 <div className="mb-6">
-                    <h4 className="font-sans text-[8pt] font-semibold text-[#504e49] uppercase tracking-wide mb-2">
+                    <h4 className="font-sans text-[8pt] font-semibold text-olive uppercase tracking-wide mb-2">
                         Summary
                     </h4>
-                    <p className="font-serif text-[9.5pt] text-[#141413] leading-relaxed">
+                    <p className="font-serif text-[9.5pt] text-near-black leading-relaxed">
                         {node.summary}
                     </p>
                 </div>
@@ -359,10 +359,10 @@ function NodeContent({ docId, nodeId }: { docId: string; nodeId: string }) {
 
             {node.text && (
                 <div>
-                    <h4 className="font-sans text-[8pt] font-semibold text-[#504e49] uppercase tracking-wide mb-2">
+                    <h4 className="font-sans text-[8pt] font-semibold text-olive uppercase tracking-wide mb-2">
                         Content
                     </h4>
-                    <div className="font-serif text-[9.5pt] text-[#141413] leading-relaxed whitespace-pre-wrap">
+                    <div className="font-serif text-[9.5pt] text-near-black leading-relaxed whitespace-pre-wrap">
                         {node.text}
                     </div>
                 </div>

@@ -25,10 +25,10 @@ function HistoryPage() {
     if (!project) {
         return (
             <div className="max-w-[780px] mx-auto px-8 py-16">
-                <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413] mb-8">
-                    历史
+                <h1 className="font-serif text-[20pt] font-medium leading-tight text-near-black mb-8">
+                    History
                 </h1>
-                <p className="font-sans text-[9pt] text-[#6b6a64]">
+                <p className="font-sans text-[9pt] text-stone">
                     No project selected — select one from the sidebar
                 </p>
             </div>
@@ -49,40 +49,38 @@ function HistoryPage() {
 
     return (
         <div className="max-w-[780px] mx-auto px-8 py-16">
-            <h1 className="font-serif text-[20pt] font-medium leading-tight text-[#141413] mb-8">
-                历史
+            <h1 className="font-serif text-[20pt] font-medium leading-tight text-near-black mb-8">
+                History
             </h1>
 
             {isLoading ? (
-                <p className="font-sans text-[9pt] text-[#504e49]">
-                    Loading...
-                </p>
+                <p className="font-sans text-[9pt] text-olive">Loading...</p>
             ) : error ? (
-                <p className="font-sans text-[9pt] text-[#b53333]">
+                <p className="font-sans text-[9pt] text-error">
                     Failed to load history:{' '}
                     {error instanceof Error ? error.message : String(error)}
                 </p>
             ) : entries.length === 0 ? (
-                <p className="font-sans text-[9pt] text-[#504e49]">
-                    暂无查询历史。使用 Ask 功能开始检索。
+                <p className="font-sans text-[9pt] text-olive">
+                    No search history yet. Use Ask to start searching.
                 </p>
             ) : (
                 <div>
                     {Object.entries(groups).map(([date, items]) => (
                         <div key={date} className="mb-8">
-                            <h3 className="font-serif text-[11pt] font-medium text-[#504e49] mb-3">
+                            <h3 className="font-serif text-[11pt] font-medium text-olive mb-3">
                                 {date}
                             </h3>
                             {items.map((entry) => (
                                 <div
                                     key={entry.id}
-                                    className="border-b border-[#d4d0c4]/30"
+                                    className="border-b border-cream/30"
                                 >
                                     <button
                                         type="button"
-                                        className="w-full text-left py-3 flex items-center justify-between
+                                        className="w-full text-left px-3 py-3 -mx-3 rounded-[6pt] flex items-center justify-between
                                                    bg-transparent border-none cursor-pointer
-                                                   hover:bg-[#faf9f5]/50 transition-colors"
+                                                   hover:bg-sand/60 transition-colors"
                                         onClick={() =>
                                             setExpandedId(
                                                 expandedId === entry.id
@@ -91,19 +89,19 @@ function HistoryPage() {
                                             )
                                         }
                                     >
-                                        <span className="font-serif text-[10pt] text-[#141413] leading-relaxed">
+                                        <span className="font-serif text-[10pt] text-near-black leading-relaxed">
                                             {entry.query}
                                         </span>
-                                        <span className="font-sans text-[8pt] text-[#504e49] flex items-center gap-3">
+                                        <span className="font-sans text-[8pt] text-olive flex items-center gap-3">
                                             {entry.verdict && (
                                                 <span
                                                     className={
                                                         entry.verdict === 'pass'
-                                                            ? 'text-[#1B365D]'
+                                                            ? 'text-ink'
                                                             : entry.verdict ===
                                                                 'partial'
-                                                              ? 'text-[#b53333]'
-                                                              : 'text-[#6b6a64]'
+                                                              ? 'text-error'
+                                                              : 'text-stone'
                                                     }
                                                 >
                                                     {entry.verdict}{' '}
@@ -134,7 +132,7 @@ function HistoryPage() {
             )}
 
             {totalPages > 1 && (
-                <div className="mt-8 pt-5 border-t border-[#d4d0c4] flex items-center justify-between font-sans text-[9pt] text-[#504e49]">
+                <div className="mt-8 pt-5 border-t border-cream flex items-center justify-between font-sans text-[9pt] text-olive">
                     <button
                         type="button"
                         className="btn-ghost"
@@ -171,7 +169,7 @@ function ExpandedEntry({ id }: { id: string }) {
 
     if (isLoading) {
         return (
-            <div className="px-3 pb-4 font-sans text-[8.5pt] text-[#504e49]">
+            <div className="px-3 pb-4 font-sans text-[8.5pt] text-olive">
                 Loading...
             </div>
         )
@@ -186,8 +184,8 @@ function ExpandedEntry({ id }: { id: string }) {
             </div>
 
             {entry.verdict && (
-                <div className="mt-3 pt-3 border-t border-[#d4d0c4]/50">
-                    <p className="font-sans text-[8pt] text-[#504e49]">
+                <div className="mt-3 pt-3 border-t border-cream/50">
+                    <p className="font-sans text-[8pt] text-olive">
                         Review: {entry.verdict} ({entry.score}/5) ·{' '}
                         {(entry.elapsedMs / 1000).toFixed(1)}s · {entry.steps}{' '}
                         steps
@@ -197,7 +195,7 @@ function ExpandedEntry({ id }: { id: string }) {
 
             {entry.trace && entry.trace.length > 0 && (
                 <details className="mt-2">
-                    <summary className="font-sans text-[8pt] text-[#1B365D] cursor-pointer">
+                    <summary className="font-sans text-[8pt] text-ink cursor-pointer">
                         Trace ({entry.trace.length} steps)
                     </summary>
                     <div className="mt-2 code-block text-[7.5pt]">
@@ -207,9 +205,9 @@ function ExpandedEntry({ id }: { id: string }) {
                                     (step as Record<string, string>)
                                         .resultSummary
                                 )}
-                                className="text-[#504e49] leading-relaxed"
+                                className="text-olive leading-relaxed"
                             >
-                                <span className="text-[#1B365D]">
+                                <span className="text-ink">
                                     {i + 1}.{' '}
                                     {(step as Record<string, string>).tool}
                                 </span>{' '}

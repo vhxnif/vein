@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+/* ── Theme Bridge: Kami Design Tokens → Tailwind ──────────── */
+@theme {
+    --color-parchment: #f5f4ed;
+    --color-ivory: #faf9f5;
+    --color-sand: #e8e6dc;
+    --color-ink: #1b365d;
+    --color-ink-light: #2d5a8a;
+    --color-near-black: #141413;
+    --color-olive: #504e49;
+    --color-stone: #595852;
+    --color-cream: #d4d0c4;
+    --color-error: #b53333;
+    --color-tint: #eef2f7;
+}
+
 /* ── Keyframes ─────────────────────────────────────────────── */
 @keyframes fadeIn {
     from {
@@ -37,7 +52,7 @@
     --near-black: #141413;
     --dark-warm: #3d3d3a;
     --olive: #504e49;
-    --stone: #6b6a64;
+    --stone: #595852;
     --border-cream: #d4d0c4;
 
     /* Functional */
@@ -46,7 +61,6 @@
     /* Tag Tints (solid hex, never rgba) */
     --tint-008: #eef2f7;
     --tint-014: #e4ecf5;
-    --tint-018: #e4ecf5;
     --tint-022: #d0dce9;
     --tint-030: #d6e1ee;
 
@@ -65,6 +79,19 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* Subtle paper texture overlay (Kami print-like feel) */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+}
+
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 767px) {
     .max-w-\[780px\] {
@@ -74,6 +101,38 @@ body {
         padding-top: 24px;
         padding-bottom: 80px;
     }
+}
+
+/* Drop cap for opening paragraphs (Kami print aesthetic) */
+.drop-cap > p:first-of-type::first-letter {
+    float: left;
+    font-family: var(--serif);
+    font-size: 3.2em;
+    line-height: 0.85;
+    padding-right: 6pt;
+    padding-top: 2pt;
+    color: var(--ink-blue);
+}
+
+/* Ornamental section divider */
+.ornament-divider {
+    text-align: center;
+    color: var(--stone);
+    font-family: var(--serif);
+    font-size: 10pt;
+    letter-spacing: 0.3em;
+    user-select: none;
+    padding: 12pt 0;
+}
+
+/* Focus ring for keyboard navigation */
+.focus-ring {
+    outline: none;
+}
+.focus-ring:focus-visible {
+    outline: 2px solid var(--ink-blue);
+    outline-offset: 2px;
+    border-radius: 4pt;
 }
 
 /* Safe area for mobile bottom bar */
@@ -181,24 +240,6 @@ body {
 /* Tags */
 .tag-calm {
     background: var(--tint-008);
-    color: var(--ink-blue);
-    border-radius: 6pt;
-    padding: 2pt 8pt;
-    font-family: var(--sans);
-    font-size: 7.5pt;
-    font-weight: 600;
-}
-.tag-standard {
-    background: var(--tint-018);
-    color: var(--ink-blue);
-    border-radius: 6pt;
-    padding: 2pt 8pt;
-    font-family: var(--sans);
-    font-size: 7.5pt;
-    font-weight: 600;
-}
-.tag-strong {
-    background: var(--tint-030);
     color: var(--ink-blue);
     border-radius: 6pt;
     padding: 2pt 8pt;
