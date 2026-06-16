@@ -91,7 +91,6 @@ async function parseOneFile(
 
 async function writeOneDocument(parsed: ParsedFile): Promise<number> {
     if (parsed.needsCleanup) {
-        await store.deleteTree(parsed.docId)
         await store.deleteDoc(parsed.docId)
     }
     const nodeCount = await store.insertTree([parsed.tree], parsed.docId)

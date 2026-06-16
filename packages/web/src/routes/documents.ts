@@ -1,4 +1,5 @@
-import { mkdir, unlink, writeFile } from 'node:fs/promises'
+import { access, mkdir, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 
 import type { BaseDocNode } from '@vein/core'
 import {
@@ -68,6 +69,30 @@ docsRouter.delete('/:id', async (c) => {
     return c.json({ success: true })
 })
 
+// ── Helpers ─────────────────────────────────────────────────────
+
+/** Resolve a unique file path in the project root, avoiding name conflicts. */
+async function resolveWritePath(
+    root: string,
+    filename: string
+): Promise<string> {
+    const ext = path.extname(filename)
+    const base = path.basename(filename, ext)
+    let candidate = path.join(root, filename)
+    let counter = 1
+    while (true) {
+        try {
+            await access(candidate)
+            // File exists — try next suffix
+            candidate = path.join(root, `${base}_${counter}${ext}`)
+            counter++
+        } catch {
+            // File does not exist — use this path
+            return candidate
+        }
+    }
+}
+
 // ── POST /api/projects/current/documents/import ──────────────────
 // Multipart upload → importBatch with SSE progress
 docsRouter.post('/import', async (c) => {
@@ -85,16 +110,15 @@ docsRouter.post('/import', async (c) => {
         return c.json({ error: 'No files provided' }, 400)
     }
 
-    // Save uploaded files to temp directory
-    const tmpDir = `${root}/.vein/tmp-uploads`
-    await mkdir(tmpDir, { recursive: true })
+    // Save uploaded files directly to project root (mirrors CLI behaviour)
+    await mkdir(root, { recursive: true })
 
     const filePaths: string[] = []
     for (const file of files) {
-        const filePath = `${tmpDir}/${file.name}`
+        const destPath = await resolveWritePath(root, file.name)
         const buffer = Buffer.from(await file.arrayBuffer())
-        await writeFile(filePath, buffer)
-        filePaths.push(filePath)
+        await writeFile(destPath, buffer)
+        filePaths.push(destPath)
     }
 
     const summarize = createCachedSummarizer(config)
@@ -109,8 +133,8 @@ docsRouter.post('/import', async (c) => {
                 config,
                 summarize,
                 force,
-                (progress) => {
-                    stream.writeSSE({
+                async (progress) => {
+                    await stream.writeSSE({
                         event: 'progress',
                         data: JSON.stringify(progress),
                     })
@@ -121,7 +145,7 @@ docsRouter.post('/import', async (c) => {
             const skipped = results.filter((r) => r.status === 'skipped')
             const failed = results.filter((r) => r.status === 'failed')
 
-            stream.writeSSE({
+            await stream.writeSSE({
                 event: 'result',
                 data: JSON.stringify({
                     imported: imported.length,
@@ -133,7 +157,7 @@ docsRouter.post('/import', async (c) => {
             sentResult = true
         } catch (err) {
             if (!sentResult) {
-                stream.writeSSE({
+                await stream.writeSSE({
                     event: 'error',
                     data: JSON.stringify({
                         error:
@@ -144,15 +168,7 @@ docsRouter.post('/import', async (c) => {
                 })
             }
         } finally {
-            // Cleanup temp files
-            for (const fp of filePaths) {
-                try {
-                    await unlink(fp)
-                } catch {
-                    // ignore cleanup errors
-                }
-            }
-            stream.writeSSE({ event: 'done', data: '' })
+            await stream.writeSSE({ event: 'done', data: '' })
         }
     })
 })

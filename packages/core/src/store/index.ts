@@ -297,16 +297,23 @@ async function getCachedResponse(
     model: string
 ): Promise<string | undefined> {
     const client = getRawClient()
-    const result = await client.execute({
-        sql: `UPDATE model_cache SET hit_count = hit_count + 1 WHERE md5 = ? AND model = ? RETURNING response`,
+    // Use SELECT first because raw wrapper doesn't handle UPDATE...RETURNING
+    const selectResult = await client.execute({
+        sql: `SELECT response FROM model_cache WHERE md5 = ? AND model = ?`,
         args: [md5, model],
     })
 
-    const row = result.rows[0] as { response: string } | undefined
+    const row = selectResult.rows[0] as { response: string } | undefined
     if (!row) {
         log.debug({ md5: md5.slice(0, 16), model, content: 'Cache miss' })
         return void 0
     }
+
+    // Fire-and-forget hit count increment (best-effort, don't block cache read)
+    void client.execute({
+        sql: `UPDATE model_cache SET hit_count = hit_count + 1 WHERE md5 = ? AND model = ?`,
+        args: [md5, model],
+    })
 
     return row.response
 }
@@ -441,10 +448,22 @@ async function deleteDoc(id: string) {
     const client = getRawClient()
     try {
         await client.execute('BEGIN')
+        // Delete associated nodes and tree closure entries
+        await client.execute({
+            sql: `DELETE FROM tree_closure
+                  WHERE descendant_id IN (SELECT id FROM nodes WHERE doc_id = ?)`,
+            args: [id],
+        })
+        await client.execute({
+            sql: 'DELETE FROM nodes WHERE doc_id = ?',
+            args: [id],
+        })
+        // Delete FTS entry
         await client.execute({
             sql: `DELETE FROM docs_fts WHERE doc_id = ?`,
             args: [id],
         })
+        // Delete the document itself
         await db.delete(docs).where(eq(docs.id, id))
         await client.execute('COMMIT')
     } catch (e) {

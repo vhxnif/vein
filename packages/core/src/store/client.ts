@@ -19,10 +19,13 @@ function createRawWrapper(db: Database.Database): RawClient {
                 db.exec(sqlOrParams)
                 return { rows: [] }
             }
-            const isSelect = /^\s*SELECT\b/i.test(sqlOrParams.sql)
+            // SELECT, or any statement with RETURNING (e.g. UPDATE ... RETURNING)
+            const returnsRows =
+                /^\s*SELECT\b/i.test(sqlOrParams.sql) ||
+                /\bRETURNING\b/i.test(sqlOrParams.sql)
             const stmt = db.prepare(sqlOrParams.sql)
             const args = sqlOrParams.args ?? []
-            if (isSelect) {
+            if (returnsRows) {
                 return { rows: stmt.all(...args) }
             }
             stmt.run(...args)

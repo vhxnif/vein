@@ -61,7 +61,17 @@ export function ImportProvider({ children }: { children: ReactNode }) {
 
     /** Dismiss and optionally invalidate queries */
     const closeModal = useCallback(() => {
-        if (stateRef.current.phase === 'done' || stateRef.current.result) {
+        // Always invalidate on close: either we have a result, or progress
+        // reached 100% (import completed server-side but result event may
+        // have been dropped). Invalidate is cheap and ensures fresh data.
+        const s = stateRef.current
+        const progressComplete =
+            s.progress?.phase === 'write' &&
+            s.progress.total != null &&
+            s.progress.total > 0 &&
+            s.progress.completed != null &&
+            s.progress.completed >= s.progress.total
+        if (s.phase === 'done' || s.result || progressComplete) {
             queryClient.invalidateQueries({ queryKey: ['documents'] })
         }
         setIsOpen(false)
@@ -348,6 +358,10 @@ export function ImportProvider({ children }: { children: ReactNode }) {
                             <UploadingView
                                 progress={state.progress}
                                 onMinimize={minimize}
+                                onAbort={() => {
+                                    abortRef.current?.abort()
+                                    closeModal()
+                                }}
                             />
                         )}
 
@@ -388,7 +402,12 @@ function MinimizedBar({
     onExpand,
     onClose,
 }: {
-    progress?: { phase: 'parse' | 'write'; message: string }
+    progress?: {
+        phase: 'parse' | 'write'
+        message: string
+        completed?: number
+        total?: number
+    }
     result?: ImportResultEvent
     error?: string
     toast: string | null
@@ -398,7 +417,14 @@ function MinimizedBar({
 }) {
     const isDone = result != null
     const isFailed = error != null
-    const isTerminal = isDone || isFailed
+    const isProgressComplete =
+        progress?.phase === 'write' &&
+        progress.total &&
+        progress.total > 0 &&
+        progress.completed !== undefined &&
+        progress.completed >= progress.total
+    const isTerminal = isDone || isFailed || isProgressComplete
+    const isParse = progress?.phase === 'parse'
 
     return (
         <>
@@ -426,7 +452,7 @@ function MinimizedBar({
                     )}
                     {!isTerminal && (
                         <span
-                            className={`w-2 h-2 rounded-full flex-shrink-0 ${progress?.phase === 'parse' ? 'bg-ink animate-pulse' : 'bg-cream'}`}
+                            className={`w-2 h-2 rounded-full flex-shrink-0 ${isParse ? 'bg-ink animate-pulse' : 'bg-cream'}`}
                         />
                     )}
 
@@ -435,10 +461,12 @@ function MinimizedBar({
                             ? `Done: ${result.imported} imported${result.skipped > 0 ? `, ${result.skipped} skipped` : ''}${result.failed > 0 ? `, ${result.failed} failed` : ''}`
                             : isFailed
                               ? `Failed: ${error}`
-                              : (progress?.message ?? 'Importing...')}
+                              : isProgressComplete
+                                ? 'Complete — awaiting confirmation...'
+                                : (progress?.message ?? 'Importing...')}
                     </p>
 
-                    {!isTerminal && pct !== undefined && (
+                    {!isTerminal && !isParse && pct !== undefined && (
                         <span className="font-sans text-[8pt] text-stone flex-shrink-0 tabular-nums">
                             {pct}%
                         </span>
@@ -489,8 +517,13 @@ function MinimizedBar({
                     )}
                 </div>
 
-                {/* Progress bar (only while uploading) */}
-                {!isTerminal && (
+                {/* Progress bar (only while uploading): indeterminate shimmer for parse, determinate for write */}
+                {!isTerminal && isParse && (
+                    <div className="w-full h-1 bg-cream/60 rounded-full overflow-hidden">
+                        <div className="h-full w-2/5 bg-ink/40 rounded-full animate-[shimmer_1.8s_ease-in-out_infinite]" />
+                    </div>
+                )}
+                {!isTerminal && !isParse && (
                     <div className="w-full h-1 bg-cream/60 rounded-full overflow-hidden">
                         <div
                             className="h-full bg-ink rounded-full transition-[width] duration-300 ease-out"
@@ -595,6 +628,7 @@ function ReadyView({
 function UploadingView({
     progress,
     onMinimize,
+    onAbort,
 }: {
     progress: {
         phase: 'parse' | 'write'
@@ -603,9 +637,20 @@ function UploadingView({
         total?: number
     }
     onMinimize: () => void
+    onAbort: () => void
 }) {
+    const isParse = progress.phase === 'parse'
+    const isDone =
+        !isParse &&
+        progress.total &&
+        progress.total > 0 &&
+        progress.completed !== undefined &&
+        progress.completed >= progress.total
     const pct =
-        progress.total && progress.total > 0 && progress.completed !== undefined
+        !isParse &&
+        progress.total &&
+        progress.total > 0 &&
+        progress.completed !== undefined
             ? Math.round((progress.completed / progress.total) * 100)
             : undefined
 
@@ -615,43 +660,72 @@ function UploadingView({
                 <h2 className="font-serif text-[14pt] font-medium text-near-black">
                     Importing...
                 </h2>
-                <button
-                    type="button"
-                    className="btn-ghost text-[8.5pt]"
-                    onClick={onMinimize}
-                    title="Minimize to background"
-                >
-                    Minimize
-                </button>
+                <div className="flex items-center gap-2">
+                    {isDone && (
+                        <button
+                            type="button"
+                            className="btn-ghost text-[8.5pt]"
+                            onClick={onAbort}
+                            title="Close import"
+                        >
+                            Close
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        className="btn-ghost text-[8.5pt]"
+                        onClick={onMinimize}
+                        title="Minimize to background"
+                    >
+                        Minimize
+                    </button>
+                </div>
             </div>
             <p className="font-sans text-[9pt] text-olive mb-4">
-                {progress.message}
+                {isDone
+                    ? 'Import complete — waiting for server confirmation...'
+                    : progress.message}
             </p>
-            <div className="w-full h-1.5 bg-cream/60 rounded-full overflow-hidden mb-3">
-                <div
-                    className="h-full bg-ink rounded-full transition-[width] duration-300 ease-out"
-                    style={{ width: pct !== undefined ? `${pct}%` : '0%' }}
-                />
-            </div>
-            {pct !== undefined && (
-                <p className="font-sans text-[8pt] text-stone text-right">
-                    {pct}%
-                    {progress.completed !== undefined &&
-                        progress.total !== undefined && (
-                            <span className="ml-2">
-                                ({progress.completed}/{progress.total})
-                            </span>
-                        )}
-                </p>
+
+            {/* Progress bar: indeterminate shimmer for parse, determinate for write */}
+            {isParse ? (
+                <div className="w-full h-1.5 bg-cream/60 rounded-full overflow-hidden mb-3">
+                    <div className="h-full w-2/5 bg-ink/40 rounded-full animate-[shimmer_1.8s_ease-in-out_infinite]" />
+                </div>
+            ) : (
+                <>
+                    <div className="w-full h-1.5 bg-cream/60 rounded-full overflow-hidden mb-3">
+                        <div
+                            className="h-full bg-ink rounded-full transition-[width] duration-300 ease-out"
+                            style={{
+                                width: pct !== undefined ? `${pct}%` : '0%',
+                            }}
+                        />
+                    </div>
+                    {pct !== undefined && (
+                        <p className="font-sans text-[8pt] text-stone text-right">
+                            {pct}%
+                            {progress.completed !== undefined &&
+                                progress.total !== undefined && (
+                                    <span className="ml-2">
+                                        ({progress.completed}/{progress.total})
+                                    </span>
+                                )}
+                        </p>
+                    )}
+                </>
             )}
+
             <div className="flex items-center gap-2 mt-4">
                 <span
-                    className={`w-2 h-2 rounded-full ${progress.phase === 'parse' ? 'bg-ink animate-pulse' : 'bg-cream'}`}
+                    className={`w-2 h-2 rounded-full ${isParse ? 'bg-ink animate-pulse' : isDone ? 'bg-ink' : 'bg-cream'}`}
                 />
                 <span className="font-sans text-[8pt] text-stone">
-                    {progress.phase === 'parse'
+                    {isParse
                         ? 'Parsing & summarizing'
-                        : 'Writing to database'}
+                        : isDone
+                          ? 'Awaiting confirmation...'
+                          : 'Writing to database'}
                 </span>
             </div>
         </>
