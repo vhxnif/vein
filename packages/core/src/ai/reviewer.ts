@@ -40,7 +40,7 @@ Librarian 的结果是否忠实于数据源的原文？是否存在虚构、曲�
 
 ## 输出格式
 
-完成核对后，严格返回 JSON，不含其他文字：
+**你的完整回复必须是且仅是一个 JSON 对象。第一个字符是 {，最后一个字符是 }。不要输出任何前置说明、分析过程、解释或总结。**
 
 {
   "verdict": "pass" | "partial" | "fail",
@@ -60,7 +60,7 @@ Librarian 的结果是否忠实于数据源的原文？是否存在虚构、曲�
 - 如果 getReviewSource 返回 (node not found)，说明 Librarian 引用的节点地址有误，verdict 应为 fail，suggestion 要求检查 nodeId 格式
 - 如果 getReviewSource 返回 (empty)，说明节点存在但内容为空；若该节点对回答问题非必要，可判 partial/pass；若关键内容缺失，判 fail
 - 如果数据源原文与查询主题无关，说明 Librarian 选错了文档，verdict 应为 fail
-- **保持简洁**：你的最终答案必须是纯 JSON，不得输出任何解释性文字、推理过程、分析细节或补充说明。JSON 外不要有任何多余内容`
+- **保持简洁**：你的完整回复必须是且仅是一个 JSON 对象，第一个字符是 {，最后一个字符是 }。如果在 JSON 之外输出任何文字（包括前置说明、分析过程、解释），都是格式错误`
 
 type ReviewResult = {
     verdict: 'pass' | 'partial' | 'fail'
