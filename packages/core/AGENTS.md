@@ -141,7 +141,7 @@ PROMPT + tools [ searchDocsByKeyword, analyzeDocument, reviewResult ]
 ```
 
 - 使用 `@earendil-works/pi-agent-core` 的 `Agent` 类
-- `analyzeDocument` 内并发控制：`Semaphore(MAX_PARALLEL_ANALYZE=5)`
+- `analyzeDocument` 内并发控制：`Semaphore(MAX_PARALLEL_ANALYZE=10)`
 
 ### Document Analyzer（子 Agent）
 
