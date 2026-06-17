@@ -12,6 +12,11 @@
   <img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" />
 </p>
 
+<p align="center">
+  <img src="public/vein_cli.png" height="550" alt="Vein CLI" />
+  <img src="public/vein_web.png" height="550" alt="Vein Web" />
+</p>
+
 ---
 
 ## 📑 目录
@@ -21,7 +26,6 @@
 - [🎯 功能特性](#-功能特性)
 - [📖 命令一览](#-命令一览)
 - [🏗️ 架构设计](#-架构设计)
-- [📸 效果预览](#-效果预览)
 - [🔧 配置](#-配置)
 - [🛠️ 技术栈](#-技术栈)
 - [📄 许可](#-许可)
@@ -255,20 +259,6 @@ Phase 2 — 串行 DB（WAL 模式）
 ```
 
 ---
-
-## 📸 效果预览
-
-### CLI
-
-<p align="center">
-  <img src="public/vein_cli.png" width="700" alt="Vein CLI" />
-</p>
-
-### Web
-
-<p align="center">
-  <img src="public/vein_web.png" width="700" alt="Vein Web" />
-</p>
 
 ---
 
