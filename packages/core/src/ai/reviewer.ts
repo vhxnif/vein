@@ -40,14 +40,21 @@ Librarian 的结果是否忠实于数据源的原文？是否存在虚构、曲�
 
 ## 输出格式
 
-**你的完整回复必须是且仅是一个 JSON 对象。第一个字符是 {，最后一个字符是 }。不要输出任何前置说明、分析过程、解释或总结。**
+按以下 Markdown 结构输出评判结果，不需要任何前置说明：
 
-{
-  "verdict": "pass" | "partial" | "fail",
-  "score": 1-5,
-  "reason": "简要评判理由（1-2句）",
-  "suggestion": "如果不通过，建议 Librarian 如何改进检索；如通过则为空字符串"
-}
+\`\`\`
+## 评判
+
+pass (4/5)   ← pass/partial/fail，及 1-5 评分
+
+## 理由
+
+简要评判理由（1-2句）
+
+## 建议
+
+如果不通过，说明 Librarian 应如何改进；如通过则填\`无\`
+\`\`\`
 
 ### verdict 定义
 - pass（4-5分）：内容直接回答用户问题，信息充分且与原文一致
@@ -60,7 +67,7 @@ Librarian 的结果是否忠实于数据源的原文？是否存在虚构、曲�
 - 如果 getReviewSource 返回 (node not found)，说明 Librarian 引用的节点地址有误，verdict 应为 fail，suggestion 要求检查 nodeId 格式
 - 如果 getReviewSource 返回 (empty)，说明节点存在但内容为空；若该节点对回答问题非必要，可判 partial/pass；若关键内容缺失，判 fail
 - 如果数据源原文与查询主题无关，说明 Librarian 选错了文档，verdict 应为 fail
-- **保持简洁**：你的完整回复必须是且仅是一个 JSON 对象，第一个字符是 {，最后一个字符是 }。如果在 JSON 之外输出任何文字（包括前置说明、分析过程、解释），都是格式错误`
+- **严格按输出格式填写，不要添加任何额外内容**`
 
 type ReviewResult = {
     verdict: 'pass' | 'partial' | 'fail'
@@ -72,6 +79,31 @@ type ReviewResult = {
 type SourceRef = {
     docId: string
     nodeId: string
+}
+
+function parseReviewResult(text: string): ReviewResult {
+    const verdictMatch = text.match(
+        /##\s*评判\s*\n+([^\n(]+)\s*\((\d)\s*\/\s*5\s*\)/i
+    )
+    const verdict = (verdictMatch?.[1]?.trim().toLowerCase() ??
+        'fail') as ReviewResult['verdict']
+    const score = parseInt(verdictMatch?.[2] ?? '1', 10)
+
+    const reasonMatch = text.match(
+        /##\s*理由\s*\n+([^\n][\s\S]*?)(?=\n##\s*建议|\n*$)/i
+    )
+    const reason = reasonMatch?.[1]?.trim() ?? ''
+
+    const suggestionMatch = text.match(
+        /##\s*建议\s*\n+([\s\S]*?)(?=\n##|\n*$)/i
+    )
+    const suggestion = suggestionMatch?.[1]?.trim() ?? ''
+    const cleanSuggestion =
+        suggestion === '无' || suggestion === '`无`' || !suggestion
+            ? ''
+            : suggestion
+
+    return { verdict, score, reason, suggestion: cleanSuggestion }
 }
 
 function normalizeNodeId(nodeId: string): string {
@@ -175,37 +207,9 @@ async function reviewer(
         ],
     })
 
-    const text = content.findLast((it) => it.type === 'text')?.text ?? '{}'
+    const text = content.findLast((it) => it.type === 'text')?.text ?? ''
 
-    // Strip markdown fences and extract first JSON object
-    let json = text.trim()
-    const fenceMatch = json.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
-    if (fenceMatch) {
-        json = fenceMatch[1]!.trim()
-    } else {
-        const objMatch = json.match(/\{[\s\S]*\}/)
-        if (objMatch) {
-            json = objMatch[0]!
-        }
-    }
-
-    let result: ReviewResult
-    try {
-        result = JSON.parse(json) as ReviewResult
-        result = {
-            verdict: result.verdict ?? 'fail',
-            score: result.score ?? 1,
-            reason: result.reason ?? '',
-            suggestion: result.suggestion ?? '',
-        }
-    } catch {
-        result = {
-            verdict: 'fail',
-            score: 1,
-            reason: 'Reviewer 返回格式异常，无法解析',
-            suggestion: '',
-        }
-    }
+    const result = parseReviewResult(text)
 
     onStep?.(`Review: ${result.verdict} (${result.score}/5)`)
     return result
