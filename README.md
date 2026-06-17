@@ -258,27 +258,17 @@ Phase 2 — 串行 DB（WAL 模式）
 
 ## 📸 效果预览
 
-> 以下为占位示例，替换为实际运行截图。
+### CLI
 
-```bash
-$ vein ask "项目中有哪些关于性能优化的讨论？"
-```
+<p align="center">
+  <img src="public/vein_cli.png" width="700" alt="Vein CLI" />
+</p>
 
-```
-🔍 搜索中...
-   ✓ 找到 3 篇相关文档
+### Web
 
-📄 文档 1：性能优化纪要 (rank: 0.85)
-   ├─ 相关性：high
-   ├─ 概述：记录了 Q2 的 API 性能优化讨论...
-   └─ 详细分析：...
-
-📄 文档 2：架构设计文档 (rank: 0.72)
-   ├─ 相关性：medium
-   ...
-
-🔎 自检审查：完整 ✓
-```
+<p align="center">
+  <img src="public/vein_web.png" width="700" alt="Vein Web" />
+</p>
 
 ---
 
