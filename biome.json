@@ -8,6 +8,33 @@
     "files": {
         "ignoreUnknown": false
     },
+    "css": {
+        "parser": {
+            "tailwindDirectives": true
+        }
+    },
+    "overrides": [
+        {
+            "includes": ["**/routeTree.gen.ts"],
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "noExplicitAny": "off"
+                    }
+                }
+            }
+        },
+        {
+            "includes": ["packages/web/src/server.ts"],
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "noExplicitAny": "off"
+                    }
+                }
+            }
+        }
+    ],
     "formatter": {
         "enabled": true,
         "formatWithErrors": false,
@@ -22,7 +49,7 @@
             "trailingCommas": "es5",
             "arrowParentheses": "always"
         },
-        "globals": []
+        "globals": ["Bun"]
     },
     "linter": {
         "enabled": true,
@@ -86,6 +113,9 @@
             "style": {
                 "useConst": "error",
                 "noNonNullAssertion": "off"
+            },
+            "a11y": {
+                "noSvgWithoutTitle": "off"
             }
         }
     },

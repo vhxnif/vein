@@ -43,24 +43,18 @@
 git clone https://github.com/vhxnif/vein.git
 cd vein
 
-# 安装依赖
+# 安装依赖（Bun workspaces）
 bun install
 
-# 构建生产包
-bun run build
-
-# 本地使用
-bun link
+# 构建并全局 link（Bun 构建 → Node.js 运行）
+bun run link
 ```
 
 ### 初始化项目
 
 ```bash
 # 在当前目录创建 Vein 项目
-node build/vein.js new my-knowledge-base
-
-# 或使用开发模式直接运行
-bun run src/command/vein.ts new my-knowledge-base
+vein new my-knowledge-base
 ```
 
 交互式引导会帮你设置项目名称、AI provider 和模型。初始化完成后自动写入 `~/.config/vein/projects.json` 全局注册表。
@@ -128,6 +122,7 @@ AI Agent 深入文档节点 ──→ 阅读原文、理解上下文
 | 🗃️ **LLM 缓存** | `model_cache` 表缓存分词和摘要结果，避免重复调用 |
 | 🚀 **批量导入并发** | Phase 1 4 文件并行 LLM 处理 + Phase 2 串行 DB 写入（WAL 优化） |
 | 🖥️ **交互式 CLI** | 基于 `@clack/prompts` 的友好交互界面，支持非交互 JSON 模式 |
+| 🌐 **Web UI** | 浏览器端全功能界面，实时 SSE 检索进度、文档树浏览、项目配置 |
 
 ---
 
@@ -142,6 +137,7 @@ AI Agent 深入文档节点 ──→ 阅读原文、理解上下文
 | `vein history` | `hs` | 浏览历史问答记录 |
 | `vein browse` | `br` | 交互式浏览文档库 |
 | `vein projects` | `pr` | 管理全局项目注册表 |
+| `vein web` | — | 启动 Web UI 服务 |
 | `vein config` | — | 交互式修改项目配置 |
 
 **常用选项：**
@@ -155,7 +151,69 @@ AI Agent 深入文档节点 ──→ 阅读原文、理解上下文
 
 ---
 
+## 🌐 Web UI
+
+除了 CLI，Vein 还提供了一个基于浏览器的 Web 界面，支持所有核心功能。
+
+### 启动
+
+```bash
+# 开发模式（构建后端 + Node.js 运行）
+bun run dev:web
+
+# 全局安装后一键启动
+vein web
+vein web --port 8080
+
+# 生产构建
+bun run build:web
+```
+
+- API 服务器运行在 `http://localhost:3000`
+- 前端开发服务器 `bun run --filter @vein/web dev:frontend`（`http://localhost:5173`，Vite HMR，自动代理 API）
+
+生产模式下，Hono 服务器在 `:3000` 同时提供 API 和前端静态文件。
+
+### 功能
+
+| 页面 | 功能 |
+|------|------|
+| **Home** | 项目检索入口：输入查询 → 实时 SSE 进度流 → Markdown 结果 + Review 自检 |
+| **Ask** | 同 Home，AI 检索核心页面 |
+| **Docs** | 文档列表（响应式分页/无限滚动）、文档详情（大纲树 + Markdown 渲染）、导入（拖放+进度）/删除 |
+| **History** | 查询历史（按日期分组）、展开查看完整问答 |
+| **Settings** | 项目配置（名称、主模型、摘要模型、分词模型） |
+
+Web UI 采用 [Kami](https://github.com/tw93/Kami) 设计语言：暖色羊皮纸底、墨水蓝单色强调、Serif 排版层级，界面如印刷品般克制优雅。
+
+### 技术栈
+
+| 层 | 技术 |
+|---|------|
+| **API 服务** | Hono（路由、CORS、SSE 流式响应） |
+| **前端框架** | React 19 + Vite |
+| **数据管理** | TanStack Query（服务端状态缓存）+ TanStack Router（类型安全路由） |
+| **样式** | Tailwind CSS v4 + Kami 设计令牌（CSS 变量） |
+| **AI 后端** | 复用 `@vein/core` 全部业务能力 |
+
+---
+
 ## 🏗️ 架构设计
+
+### 包结构（Monorepo）
+
+```
+vein/
+├── packages/
+│   ├── core/          # @vein/core — 业务层（AI / DB / 文档树 / 配置）
+│   ├── cli/           # @vein/cli — thin client（命令解析 + 交互 I/O）
+│   └── web/           # @vein/web — Web UI（Hono API + React SPA）
+├── package.json       # workspace 根
+└── biome.json         # 代码规范
+```
+
+- **Core**：提供完整业务能力（`@vein/core` 单一入口），CLI / 未来 Web 模块只调用高层 API
+- **CLI**：不直接访问 store / pi-ai / 文件系统，所有逻辑委托给 core
 
 ### 数据模型
 
@@ -173,8 +231,8 @@ User Query
   │
   ▼
 Main Librarian Agent (主 Agent)
-  ├─ searchDocsByKeyword(query)          → [{docId, metadata, rank}]
-  ├─ analyzeDocument(docId, userQuery)   → 并发生成子 Agent（最多 5 个）
+  ├─ searchDocsByKeyword(query)          → 结果少时自动换词重搜
+  ├─ analyzeDocument(docId, userQuery)   → 一次性并发 10 个子 Agent
   │                                                │
   │                                                ▼
   │                                    Document Analyzer (子 Agent)
@@ -183,7 +241,7 @@ Main Librarian Agent (主 Agent)
   │                                                │
   │                                                └───────────┘
   │                                         返回 Markdown 分析报告
-  └─ reviewResult(query, answer, sources) → 自检审查（相关性/完整性/准确性）
+  └─ reviewResult(query, answer, sources) → 审查前自查覆盖度，getReviewSource 并行验证
 ```
 
 ### 批量导入管道
@@ -244,6 +302,14 @@ $ vein ask "项目中有哪些关于性能优化的讨论？"
   "segmenter": {
     "provider": "openai",
     "model": "gpt-4o-mini"
+  },
+  "subagent": {
+    "provider": "openai",
+    "model": "gpt-4o-mini"
+  },
+  "reviewer": {
+    "provider": "openai",
+    "model": "gpt-4o"
   }
 }
 ```
@@ -253,6 +319,8 @@ $ vein ask "项目中有哪些关于性能优化的讨论？"
 | `model` | 主检索 Agent 使用的模型 |
 | `summarizer` | 文档摘要专用模型（可选，回退到 `model`） |
 | `segmenter` | 中文分词专用模型（可选，回退到 `model`） |
+| `subagent` | 子 Agent 分析专用模型（可选，回退到 `model`） |
+| `reviewer` | 结果审查专用模型（可选，回退到 `model`） |
 | `db` | SQLite 数据库文件路径 |
 
 AI Provider 通过 `@earendil-works/pi-ai` 统一适配，支持 OpenAI / DeepSeek 及兼容接口。
@@ -264,6 +332,7 @@ AI Provider 通过 `@earendil-works/pi-ai` 统一适配，支持 OpenAI / DeepSe
 | 层级 | 技术 |
 |------|------|
 | **运行时** | Node.js（开发用 Bun 运行 TS 源码） |
+| **包管理** | Bun workspaces（monorepo） |
 | **数据库** | SQLite (better-sqlite3, WAL 模式) |
 | **ORM** | Drizzle ORM |
 | **全文搜索** | FTS5 unicode61 + BM25 排序 |

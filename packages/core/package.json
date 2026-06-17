@@ -1,0 +1,23 @@
+{
+    "name": "@vein/core",
+    "version": "0.1.0",
+    "type": "module",
+    "main": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "dependencies": {
+        "@earendil-works/pi-agent-core": "^0.78.0",
+        "@earendil-works/pi-ai": "^0.74.1",
+        "better-sqlite3": "^12.10.0",
+        "drizzle-orm": "^0.45.2",
+        "pino": "^10.3.1"
+    },
+    "devDependencies": {
+        "@types/better-sqlite3": "^7.6.13",
+        "drizzle-kit": "^0.31.10"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    }
+}

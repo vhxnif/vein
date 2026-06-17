@@ -1,33 +1,24 @@
 {
-  "name": "vein",
-  "version": "0.1.0",
-  "type": "module",
-  "bin": {
-    "vein": "build/vein.js"
-  },
-  "scripts": {
-    "build": "bun build src/command/vein.ts --target node --outdir ./build --sourcemap --minify --external better-sqlite3",
-    "check": "tsc --noEmit",
-    "lint": "bunx --bun @biomejs/biome lint",
-    "lint:fix": "bunx --bun @biomejs/biome lint --write ./src",
-    "format": "bunx --bun @biomejs/biome check --write ./src"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "drizzle-kit": "^0.31.10",
-    "esbuild": "^0.25.12"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
-  "dependencies": {
-    "@biomejs/biome": "^2.4.15",
-    "@clack/prompts": "^1.4.0",
-    "@earendil-works/pi-agent-core": "^0.78.0",
-    "@earendil-works/pi-ai": "^0.74.1",
-    "better-sqlite3": "^12.10.0",
-    "commander": "^14.0.3",
-    "drizzle-orm": "^0.45.2",
-    "pino": "^10.3.1"
-  }
+    "name": "vein",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "workspaces": [
+        "packages/*"
+    ],
+    "scripts": {
+        "build": "bun run --filter @vein/cli build",
+        "link": "bun run --filter @vein/cli build && bun run --filter @vein/cli link && bun run --filter @vein/web build && bun run --filter @vein/web link",
+        "unlink": "bun run --filter @vein/cli unlink && bun run --filter @vein/web unlink",
+        "dev:web": "bun run --filter @vein/web build:backend && bun run --filter @vein/web start",
+        "build:web": "bun run --filter @vein/web build",
+        "check": "tsc --noEmit",
+        "lint": "bunx --bun @biomejs/biome lint",
+        "lint:fix": "bunx --bun @biomejs/biome lint --write .",
+        "format": "bunx --bun @biomejs/biome check --write ."
+    },
+    "devDependencies": {
+        "@biomejs/biome": "^2.4.15",
+        "typescript": "^5"
+    }
 }

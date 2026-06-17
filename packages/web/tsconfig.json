@@ -1,0 +1,12 @@
+{
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "jsx": "react-jsx",
+        "jsxImportSource": "react",
+        "lib": ["ESNext", "DOM", "DOM.Iterable"],
+        "types": ["react", "react-dom"]
+    },
+    "include": ["src"]
+}

@@ -1,0 +1,274 @@
+@import "tailwindcss";
+
+/* ── Theme Bridge: Kami Design Tokens → Tailwind ──────────── */
+@theme {
+    --color-parchment: #f5f4ed;
+    --color-ivory: #faf9f5;
+    --color-sand: #e8e6dc;
+    --color-ink: #1b365d;
+    --color-ink-light: #2d5a8a;
+    --color-near-black: #141413;
+    --color-olive: #504e49;
+    --color-stone: #595852;
+    --color-cream: #d4d0c4;
+    --color-error: #b53333;
+    --color-tint: #eef2f7;
+}
+
+/* ── Keyframes ─────────────────────────────────────────────── */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse-dot {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* ── Kami Design Tokens ───────────────────────────────────── */
+:root {
+    /* Canvas & Surfaces */
+    --parchment: #f5f4ed;
+    --ivory: #faf9f5;
+    --warm-sand: #e8e6dc;
+
+    /* Brand - Ink Blue */
+    --ink-blue: #1b365d;
+    --ink-light: #2d5a8a;
+
+    /* Warm Neutrals */
+    --near-black: #141413;
+    --dark-warm: #3d3d3a;
+    --olive: #504e49;
+    --stone: #595852;
+    --border-cream: #d4d0c4;
+
+    /* Functional */
+    --error: #b53333;
+
+    /* Tag Tints (solid hex, never rgba) */
+    --tint-008: #eef2f7;
+    --tint-014: #e4ecf5;
+    --tint-022: #d0dce9;
+    --tint-030: #d6e1ee;
+
+    /* Typography */
+    --serif: "Charter", "Noto Serif SC", "Georgia", serif;
+    --mono: "JetBrains Mono", "Fira Code", monospace;
+    --sans: system-ui, -apple-system, sans-serif;
+}
+
+/* ── Base Styles ──────────────────────────────────────────── */
+body {
+    font-family: var(--serif);
+    background-color: var(--parchment);
+    color: var(--near-black);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle paper texture overlay (Kami print-like feel) */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 767px) {
+    .max-w-\[780px\] {
+        max-width: 100%;
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 24px;
+        padding-bottom: 80px;
+    }
+}
+
+/* Drop cap for opening paragraphs (Kami print aesthetic) */
+.drop-cap > p:first-of-type::first-letter {
+    float: left;
+    font-family: var(--serif);
+    font-size: 3.2em;
+    line-height: 0.85;
+    padding-right: 6pt;
+    padding-top: 2pt;
+    color: var(--ink-blue);
+}
+
+/* Ornamental section divider */
+.ornament-divider {
+    text-align: center;
+    color: var(--stone);
+    font-family: var(--serif);
+    font-size: 10pt;
+    letter-spacing: 0.3em;
+    user-select: none;
+    padding: 12pt 0;
+}
+
+/* Focus ring for keyboard navigation */
+.focus-ring {
+    outline: none;
+}
+.focus-ring:focus-visible {
+    outline: 2px solid var(--ink-blue);
+    outline-offset: 2px;
+    border-radius: 4pt;
+}
+
+/* Safe area for mobile bottom bar */
+.safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 8px);
+}
+
+/* ── Kami Components (Tailwind-compatible utility classes) ── */
+
+/* Ring shadow for buttons and cards */
+.ring-warm {
+    box-shadow: 0 0 0 1pt var(--border-cream);
+}
+
+/* Whisper shadow for featured cards */
+.whisper {
+    box-shadow: 0 4pt 24pt rgba(0, 0, 0, 0.05);
+}
+
+/* Quote block */
+.quote-block {
+    border-left: 2pt solid var(--ink-blue);
+    padding-left: 16pt;
+    color: var(--olive);
+    font-style: italic;
+}
+
+/* Dash list */
+.dash-list {
+    list-style: none;
+    padding-left: 0;
+}
+.dash-list li::before {
+    content: "— ";
+    color: var(--stone);
+}
+
+/* Serif metric numbers */
+.metric-value {
+    font-family: var(--serif);
+    font-feature-settings: "tnum";
+    font-weight: 500;
+}
+
+/* Code block */
+.code-block {
+    background: var(--ivory);
+    border: 0.5pt solid var(--border-cream);
+    border-radius: 6pt;
+    font-family: var(--mono);
+    font-size: 0.9em;
+    line-height: 1.4;
+    padding: 12pt 16pt;
+    overflow-x: auto;
+}
+
+/* Buttons */
+.btn-primary {
+    background: var(--ink-blue);
+    color: #fff;
+    border-radius: 8pt;
+    padding: 6pt 16pt;
+    font-family: var(--sans);
+    font-size: 9pt;
+    font-weight: 500;
+    box-shadow: 0 0 0 1pt var(--ink-blue);
+    cursor: pointer;
+    transition: opacity 150ms ease;
+}
+.btn-primary:hover {
+    opacity: 0.9;
+}
+
+.btn-secondary {
+    background: var(--warm-sand);
+    color: var(--near-black);
+    border-radius: 8pt;
+    padding: 6pt 16pt;
+    font-family: var(--sans);
+    font-size: 9pt;
+    font-weight: 500;
+    box-shadow: 0 0 0 1pt var(--border-cream);
+    cursor: pointer;
+    transition: background 150ms ease;
+}
+.btn-secondary:hover {
+    background: var(--border-cream);
+}
+
+.btn-ghost {
+    background: transparent;
+    color: var(--olive);
+    border-radius: 8pt;
+    padding: 6pt 16pt;
+    font-family: var(--sans);
+    font-size: 9pt;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 150ms ease;
+}
+.btn-ghost:hover {
+    color: var(--near-black);
+}
+
+.btn-danger {
+    background: transparent;
+    color: var(--error);
+    border-radius: 8pt;
+    padding: 6pt 16pt;
+    font-family: var(--sans);
+    font-size: 9pt;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+}
+.btn-danger:hover {
+    background: var(--error);
+    color: #fff;
+}
+
+/* Tags */
+.tag-calm {
+    background: var(--tint-008);
+    color: var(--ink-blue);
+    border-radius: 6pt;
+    padding: 2pt 8pt;
+    font-family: var(--sans);
+    font-size: 7.5pt;
+    font-weight: 600;
+}

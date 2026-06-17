@@ -1,0 +1,85 @@
+import Database from 'better-sqlite3'
+import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { resolveProjectRoot } from '../config'
+import * as schema from './schema'
+
+export type { BetterSQLite3Database }
+
+type RawClient = {
+    execute(sqlOrParams: string | { sql: string; args?: unknown[] }): Promise<{
+        rows: unknown[]
+    }>
+}
+
+function createRawWrapper(db: Database.Database): RawClient {
+    return {
+        async execute(sqlOrParams) {
+            if (typeof sqlOrParams === 'string') {
+                db.exec(sqlOrParams)
+                return { rows: [] }
+            }
+            // SELECT, or any statement with RETURNING (e.g. UPDATE ... RETURNING)
+            const returnsRows =
+                /^\s*SELECT\b/i.test(sqlOrParams.sql) ||
+                /\bRETURNING\b/i.test(sqlOrParams.sql)
+            const stmt = db.prepare(sqlOrParams.sql)
+            const args = sqlOrParams.args ?? []
+            if (returnsRows) {
+                return { rows: stmt.all(...args) }
+            }
+            stmt.run(...args)
+            return { rows: [] }
+        },
+    }
+}
+
+function createDb(dbPath: string) {
+    const db = new Database(dbPath)
+    db.pragma('journal_mode = WAL')
+    db.pragma('foreign_keys = ON')
+
+    const raw = createRawWrapper(db)
+    const drizzleDb = drizzle(db, { schema })
+
+    return { db: drizzleDb, raw, native: db }
+}
+
+function resolveDbPath(): string {
+    const root = resolveProjectRoot()
+    if (!root) {
+        console.error(
+            'No vein project found. Run "vein new <name>" to initialize one.'
+        )
+        process.exit(1)
+    }
+    return `${root}/.vein/data.db`
+}
+
+const _instances = new Map<string, ReturnType<typeof createDb>>()
+
+function getInstance() {
+    const dbPath = resolveDbPath()
+    let instance = _instances.get(dbPath)
+    if (!instance) {
+        instance = createDb(dbPath)
+        _instances.set(dbPath, instance)
+    }
+    return instance
+}
+
+const db = new Proxy({} as ReturnType<typeof createDb>['db'], {
+    get(_, prop) {
+        return Reflect.get(getInstance().db, prop)
+    },
+})
+
+function getRawClient(): RawClient {
+    return getInstance().raw
+}
+
+function getNativeDb(): Database.Database {
+    return getInstance().native
+}
+
+export { createDb, db, getNativeDb, getRawClient }

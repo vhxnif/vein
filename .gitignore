@@ -5,6 +5,7 @@ node_modules
 out
 build
 dist
+packages/*/dist/
 plans
 *.tgz
 
@@ -34,3 +35,5 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+PLAN.md

@@ -1,0 +1,26 @@
+{
+    "name": "@vein/cli",
+    "version": "0.1.0",
+    "type": "module",
+    "bin": {
+        "vein": "./dist/vein.js"
+    },
+    "scripts": {
+        "build": "bun build src/command/vein.ts --target node --outdir ./dist --sourcemap --minify --external better-sqlite3",
+        "check": "tsc --noEmit",
+        "link": "bun link",
+        "unlink": "bun unlink"
+    },
+    "dependencies": {
+        "@vein/core": "workspace:*",
+        "@clack/prompts": "^1.4.0",
+        "@earendil-works/pi-ai": "^0.74.1",
+        "commander": "^14.0.3"
+    },
+    "devDependencies": {
+        "esbuild": "^0.25.12"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    }
+}
