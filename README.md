@@ -180,13 +180,13 @@ bun run build:web
 
 ### 功能
 
-| 页面 | 功能 |
-|------|------|
-| **Home** | 项目检索入口：输入查询 → 实时 SSE 进度流 → Markdown 结果 + Review 自检 |
-| **Ask** | 同 Home，AI 检索核心页面 |
-| **Docs** | 文档列表（响应式分页/无限滚动）、文档详情（大纲树 + Markdown 渲染）、导入（拖放+进度）/删除 |
-| **History** | 查询历史（按日期分组）、展开查看完整问答 |
-| **Settings** | 项目配置（名称、主模型、摘要模型、分词模型） |
+| 页面 | 路由 | 功能 |
+|------|------|------|
+| **Ask** | `/` | 搜索框 + ndjson 流式检索结果（Markdown 正文 + Review 自检 + 可折叠 Trace） |
+| **Docs** | `/docs` `/docs/:id` | 文档列表（响应式分页/无限滚动）、文档详情（大纲树 + 节点原文）、导入弹窗（拖放上传 + 进度流）/删除 |
+| **History** | `/history` | 查询历史（按日期分组）、展开查看完整问答与审查结果 |
+| **Projects** | `/projects` | 项目选择器：列表展示全局注册项目、切换/取消当前项目 |
+| **Settings** | `/settings` | 项目配置（名称、主模型、摘要、分词、子 Agent、审查 5 个独立模型槽位） |
 
 Web UI 采用 [Kami](https://github.com/tw93/Kami) 设计语言：暖色羊皮纸底、墨水蓝单色强调、Serif 排版层级，界面如印刷品般克制优雅。
 
@@ -194,7 +194,7 @@ Web UI 采用 [Kami](https://github.com/tw93/Kami) 设计语言：暖色羊皮�
 
 | 层 | 技术 |
 |---|------|
-| **API 服务** | Hono（路由、CORS、SSE 流式响应） |
+| **API 服务** | Hono（路由、CORS、ndjson 流式检索 + SSE 导入进度） |
 | **前端框架** | React 19 + Vite |
 | **数据管理** | TanStack Query（服务端状态缓存）+ TanStack Router（类型安全路由） |
 | **样式** | Tailwind CSS v4 + Kami 设计令牌（CSS 变量） |
@@ -216,7 +216,7 @@ vein/
 └── biome.json         # 代码规范
 ```
 
-- **Core**：提供完整业务能力（`@vein/core` 单一入口），CLI / 未来 Web 模块只调用高层 API
+- **Core**：提供完整业务能力（`@vein/core` 单一入口），CLI / Web 只调用高层 API
 - **CLI**：不直接访问 store / pi-ai / 文件系统，所有逻辑委托给 core
 
 ### 数据模型
