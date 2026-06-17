@@ -14,6 +14,10 @@ const prompt = `你是一个文档检索结果审查员。你的任务是审查 
 2. Librarian 引用的数据源地址列表（docId + nodeId）
 3. Librarian 整理后的检索结果
 
+## 数据源地址规范
+
+每个 source 的 nodeId 应为纯节点 ID（如 0001），系统会自动清洗。如果你看到的 nodeId 带有章节标题（如 "0001: 背景"），系统已提取出 "0001"。
+
 ## 验证流程
 
 1. 一次性调用多次 getReviewSource 工具并行获取所有数据源的原文
@@ -29,6 +33,7 @@ const prompt = `你是一个文档检索结果审查员。你的任务是审查 
 返回的内容是否覆盖了用户问题的主要方面？是否有明显的遗漏？
 - 如果仅检查了单一数据源，需特别审视：是否有重要信息可能存在于其他未检查的文档中？
 - 当数据源内容不足以全面回答查询时，应判为 partial 或 fail
+- 如果 Librarian 的结果引用了具体数据但未提供对应 source，应判为 partial 并建议补充 source
 
 ### 3. 准确性
 Librarian 的结果是否忠实于数据源的原文？是否存在虚构、曲解或遗漏关键信息？
@@ -51,7 +56,9 @@ Librarian 的结果是否忠实于数据源的原文？是否存在虚构、曲�
 
 ### 重要原则
 - 不要引入外部知识，只基于 getReviewSource 返回的原文进行评判
-- 如果 Librarian 未提供数据源或源内容为空，verdict 应为 fail
+- 如果 Librarian 未提供数据源，verdict 应为 fail，suggestion 必须要求："从子 Agent 输出的 ## 数据来源 中收集 docId 和纯 nodeId（仅冒号前数字前缀），以 JSON 数组传入 sources 参数"
+- 如果 getReviewSource 返回 (node not found)，说明 Librarian 引用的节点地址有误，verdict 应为 fail，suggestion 要求检查 nodeId 格式
+- 如果 getReviewSource 返回 (empty)，说明节点存在但内容为空；若该节点对回答问题非必要，可判 partial/pass；若关键内容缺失，判 fail
 - 如果数据源原文与查询主题无关，说明 Librarian 选错了文档，verdict 应为 fail`
 
 type ReviewResult = {
@@ -66,12 +73,20 @@ type SourceRef = {
     nodeId: string
 }
 
+function normalizeNodeId(nodeId: string): string {
+    const trimmed = nodeId.trim()
+    // Handle "0001: background" or "0001_xxx" by taking the first segment.
+    const first = trimmed.split(/[:_\s]+/)[0]
+    return first ?? trimmed
+}
+
 function buildReviewTools(): ToolDef[] {
     return [
         {
             name: 'getReviewSource',
             description:
-                '根据 docId 和 nodeId 获取文档节点的原始文本，用于验证 Librarian 结果是否准确',
+                '根据 docId 和 nodeId 获取文档节点的原始文本，用于验证 Librarian 结果是否准确。' +
+                'nodeId 会被自动清洗（取冒号/下划线/空格前的第一个 token）。',
             parameters: Type.Object({
                 docId: Type.String({ description: '文档 ID' }),
                 nodeId: Type.String({ description: '节点 ID' }),
@@ -83,10 +98,12 @@ function buildReviewTools(): ToolDef[] {
                 docId: string
                 nodeId: string
             }) => {
+                const normalized = normalizeNodeId(nodeId)
                 const d = await getNodeDetails<BaseDocNode>(
-                    `${nodeId}_${docId}`
+                    `${normalized}_${docId}`
                 )
-                return d?.text ?? '(empty)'
+                if (!d) return '(node not found)'
+                return d.text ?? '(empty)'
             },
         },
     ]
@@ -100,8 +117,20 @@ async function reviewer(
     modelOverride?: ModelProvider,
     reviewCount?: number
 ): Promise<ReviewResult> {
-    const sourcesText = sources?.length
-        ? sources
+    // Deduplicate by (docId, normalized nodeId) to avoid redundant fetches.
+    const uniqueSources = sources?.length
+        ? [
+              ...new Map(
+                  sources.map((s) => [
+                      `${s.docId}:${normalizeNodeId(s.nodeId)}`,
+                      { ...s, nodeId: normalizeNodeId(s.nodeId) },
+                  ])
+              ).values(),
+          ]
+        : []
+
+    const sourcesText = uniqueSources.length
+        ? uniqueSources
               .map((s) => `- docId: ${s.docId}, nodeId: ${s.nodeId}`)
               .join('\n')
         : '(无数据源)'
@@ -128,7 +157,8 @@ async function reviewer(
         onToolCall: (name, args) => {
             if (name === 'getReviewSource') {
                 const a = args as { docId?: string; nodeId?: string }
-                onStep?.(`Verifying: ${a.docId ?? '?'}/${a.nodeId ?? '?'}...`)
+                const nid = normalizeNodeId(a.nodeId ?? '')
+                onStep?.(`Verifying: ${a.docId ?? '?'}/${nid}...`)
             }
         },
         messages: [

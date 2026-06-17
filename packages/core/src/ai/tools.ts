@@ -8,10 +8,12 @@ import type { LibrarianResult, TraceStep } from './librarian'
  */
 async function searchDocsByKeyword(
     query: string,
-    segmenter?: ModelProvider
+    segmenter?: ModelProvider,
+    limit = 10,
+    offset = 0
 ): Promise<string> {
     const segmented = await segmentText(query, segmenter)
-    const results = await store.searchDocsByKeyword(segmented, 10)
+    const results = await store.searchDocsByKeyword(segmented, limit, offset)
 
     const enriched = await Promise.all(
         results.map(async (r) => {

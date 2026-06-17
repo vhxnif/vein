@@ -481,7 +481,8 @@ type KeywordDocResult = {
 
 async function searchDocsByKeyword(
     segmentedQuery: string,
-    k: number
+    limit: number,
+    offset = 0
 ): Promise<KeywordDocResult[]> {
     const raw = getRawClient()
 
@@ -501,9 +502,9 @@ async function searchDocsByKeyword(
                 FROM docs_fts
                 WHERE docs_fts MATCH ?
                 ORDER BY rank
-                LIMIT ?
+                LIMIT ? OFFSET ?
             `,
-            args: [ftsQuery, k],
+            args: [ftsQuery, limit, offset],
         })
         const rows = result.rows as Array<{
             doc_id: string
