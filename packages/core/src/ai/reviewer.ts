@@ -59,7 +59,8 @@ Librarian 的结果是否忠实于数据源的原文？是否存在虚构、曲�
 - 如果 Librarian 未提供数据源，verdict 应为 fail，suggestion 必须要求："从子 Agent 输出的 ## 数据来源 中收集 docId 和纯 nodeId（仅冒号前数字前缀），以 JSON 数组传入 sources 参数"
 - 如果 getReviewSource 返回 (node not found)，说明 Librarian 引用的节点地址有误，verdict 应为 fail，suggestion 要求检查 nodeId 格式
 - 如果 getReviewSource 返回 (empty)，说明节点存在但内容为空；若该节点对回答问题非必要，可判 partial/pass；若关键内容缺失，判 fail
-- 如果数据源原文与查询主题无关，说明 Librarian 选错了文档，verdict 应为 fail`
+- 如果数据源原文与查询主题无关，说明 Librarian 选错了文档，verdict 应为 fail
+- **保持简洁**：你的最终答案必须是纯 JSON，不得输出任何解释性文字、推理过程、分析细节或补充说明。JSON 外不要有任何多余内容`
 
 type ReviewResult = {
     verdict: 'pass' | 'partial' | 'fail'
