@@ -244,11 +244,12 @@ async function browseDocNodes(docId: string, nodePage = 1): Promise<void> {
 
     const choices = pageNodes.map((n) => {
         const indent = '  '.repeat(n.depth)
+        const shortId = n.nodeId.split('_')[0]
         const title =
             n.title.length > 60 ? `${n.title.slice(0, 60)}...` : n.title
         return {
             value: n.nodeId,
-            label: `${indent}${title}`,
+            label: `${indent}${title} (${shortId})`,
             hint: n.depth > 0 ? `L${n.depth + 1}` : '',
         }
     })

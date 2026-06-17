@@ -46,10 +46,7 @@ cd vein
 # 安装依赖（Bun workspaces）
 bun install
 
-# 构建 CLI
-bun run build
-
-# 全局 link（构建 + link 到 PATH）
+# 构建并全局 link（Bun 构建 → Node.js 运行）
 bun run link
 ```
 
@@ -58,9 +55,6 @@ bun run link
 ```bash
 # 在当前目录创建 Vein 项目
 vein new my-knowledge-base
-
-# 或直接运行构建产物
-node packages/cli/dist/vein.js new my-knowledge-base
 ```
 
 交互式引导会帮你设置项目名称、AI provider 和模型。初始化完成后自动写入 `~/.config/vein/projects.json` 全局注册表。

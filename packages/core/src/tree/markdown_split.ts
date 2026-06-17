@@ -478,7 +478,8 @@ function renderDocOutline(tree: DocNode, indent = 0): string {
     const pad = '  '.repeat(indent)
     const lines: string[] = []
     for (const node of tree.nodes) {
-        lines.push(`${pad}- ${node.value.title}`)
+        const id = node.nodeId.split('_')[0]
+        lines.push(`${pad}- ${node.value.title} (${id})`)
         if (node.nodes.length > 0) {
             lines.push(renderDocOutline(node, indent + 1))
         }

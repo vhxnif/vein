@@ -410,7 +410,10 @@ function TreeView({
                             style={{ paddingLeft: `${d * 12}pt` }}
                             onClick={() => onSelect(node.nodeId)}
                         >
-                            {node.value.title || shortId}
+                            {node.value.title || shortId}{' '}
+                            <span className="text-[7.5pt] text-stone/60 font-normal">
+                                ({shortId})
+                            </span>
                         </button>
                         {node.nodes && node.nodes.length > 0 && (
                             <TreeView
