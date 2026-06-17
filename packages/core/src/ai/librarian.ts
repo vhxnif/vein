@@ -32,7 +32,7 @@ const PROMPT = `你是一个文档检索 Librarian。通过关键词搜索定位
 
 | 步骤 | 工具 | 返回 |
 |------|------|------|
-| 1 | searchDocsByKeyword(query, limit?, offset?) | [{docId, metadata, rank}] |
+| 1 | searchDocsByKeyword(query, limit?, offset?) | [{docId, snippet, rank}] |
 | 2 | analyzeDocument(docId, userQuery) | 子 Agent 深度分析结果（Markdown 格式） |
 | 3 | reviewResult(query, result, sources) | 审查结果 |
 
@@ -52,7 +52,7 @@ const PROMPT = `你是一个文档检索 Librarian。通过关键词搜索定位
    - 返回结果 ≤2 篇时，换一组关键词重新搜索（使用同义词、上位词或拆分/重组关键词）
    - 选排名靠前的相关文档调用 analyzeDocument，同一条消息中一次性批量并发调用（系统最多同时 10 个）。一次性选择所有可能相关的文档，不要分批
    - **去重**：已分析过的文档不要重复分析，即使新搜索又命中了同一篇
-   - **初筛**：利用 searchDocsByKeyword 返回的 metadata.title，优先分析标题与查询相关的文档，标题明显无关的可跳过
+    - **初筛**：利用 searchDocsByKeyword 返回的 snippet（文档核心摘要），优先分析与查询相关的文档，snippet 明显无关的可跳过
    - **搜索止损**（满足任一即直接、简洁地告知用户"文档库中未找到相关内容"，不再继续搜索或调用 reviewResult，且不得解释搜索过程）：
      - 连续多次搜索均未命中任何文档
      - 已分析多篇文档，且全部相关性为 "none"
@@ -304,7 +304,7 @@ function makeSearchDocsByKeyword(ctx: ToolCtx, segmenter?: ModelProvider): any {
             '关键词应是用户问题中最具区分度的概念词和专有名词，避免泛化词（功能/系统/模块）和问题意图词（迭代/演进/历史/如何）。' +
             '示例：「周期监测功能是如何迭代的」→ 关键词应为「周期监测」。' +
             '默认返回前 10 条，可通过 offset 翻页；如果前 10 条均不相关，可用 offset=10 获取更多结果。' +
-            '返回 [{docId, metadata, rank}]，按匹配度降序。',
+            '返回 [{docId, metadata, snippet, rank}]，按匹配度降序。snippet 为文档核心摘要，用于快速判断文档是否与查询相关。',
         parameters: Type.Object({
             query: Type.String({ description: '搜索关键词' }),
             limit: Type.Optional(
@@ -660,20 +660,14 @@ function summarizeResult(tool: string, raw: string): string {
         const parsed = JSON.parse(raw) as unknown
         if (tool === 'searchDocsByKeyword') {
             if (Array.isArray(parsed)) {
-                const titles = (
-                    parsed as Array<{ metadata?: Record<string, unknown> }>
-                )
-                    .map((d) => {
-                        const meta = d.metadata
-                        return meta &&
-                            typeof meta === 'object' &&
-                            'title' in meta
-                            ? String(meta.title)
-                            : ''
-                    })
+                const snippets = (parsed as Array<{ snippet?: string }>)
+                    .map((d) => d.snippet ?? '')
                     .filter(Boolean)
-                const head = titles.slice(0, 3).join(', ')
-                return `${parsed.length} docs: ${head}${titles.length > 3 ? '…' : ''}`
+                const head = snippets
+                    .slice(0, 3)
+                    .map((s) => ellipsis(s, 40))
+                    .join(', ')
+                return `${parsed.length} docs: ${head}${snippets.length > 3 ? '…' : ''}`
             }
         }
         if (tool === 'reviewResult') {
@@ -862,25 +856,18 @@ function buildResultLabel(
             }
             case 'searchDocsByKeyword': {
                 const parsed = JSON.parse(resultText) as Array<{
-                    metadata?: string
+                    snippet?: string
                 }>
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    const titles = parsed
-                        .map((d) => {
-                            try {
-                                return (
-                                    JSON.parse(d.metadata ?? '{}') as {
-                                        title?: string
-                                    }
-                                ).title
-                            } catch {
-                                return ''
-                            }
-                        })
+                    const snippets = parsed
+                        .map((d) => d.snippet ?? '')
                         .filter(Boolean)
-                    if (titles.length > 0) {
-                        const preview = titles.slice(0, 3).join(', ')
-                        return `Found ${parsed.length} result${parsed.length > 1 ? 's' : ''}: ${preview}${titles.length > 3 ? '...' : ''}`
+                    if (snippets.length > 0) {
+                        const preview = snippets
+                            .slice(0, 3)
+                            .map((s) => ellipsis(s, 40))
+                            .join(', ')
+                        return `Found ${parsed.length} result${parsed.length > 1 ? 's' : ''}: ${preview}${snippets.length > 3 ? '...' : ''}`
                     }
                     return `Found ${parsed.length} results`
                 }

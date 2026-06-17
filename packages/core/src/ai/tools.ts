@@ -17,10 +17,19 @@ async function searchDocsByKeyword(
 
     const enriched = await Promise.all(
         results.map(async (r) => {
-            const doc = await store.getDoc(r.docId)
+            let snippet = ''
+            try {
+                const rootNode = await store.getNodeDetails<{
+                    summary?: string
+                    prefixSummary?: string
+                }>(`0000_${r.docId}`)
+                snippet = rootNode?.summary ?? rootNode?.prefixSummary ?? ''
+            } catch {
+                // best-effort, snippet is optional for filtering
+            }
             return {
                 docId: r.docId,
-                metadata: doc ? JSON.parse(doc.metadata) : {},
+                snippet,
                 rank: r.rank,
             }
         })
