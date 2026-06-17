@@ -485,43 +485,37 @@ async function searchDocsByKeyword(
 ): Promise<KeywordDocResult[]> {
     const raw = getRawClient()
 
-    // Try AND first (precise), fall back to OR (broad) if no results.
-    // This handles LLM segmentation non-determinism: when the LLM produces
-    // tokens that happen to align with the index, AND gives cleaner results;
-    // when it doesn't, OR ensures we still find matching docs.
+    // OR semantics: LLM segmentation is non-deterministic and may not align
+    // with the indexed tokens. OR + BM25 ranking gives robust recall while
+    // keeping the most relevant docs at the top via rank ordering.
     const tokens = segmentedQuery.trim().split(/\s+/)
-    const candidates = [
-        segmentedQuery, // AND (default for space-separated tokens)
-        tokens.length > 1 ? tokens.map((t) => `"${t}"`).join(' OR ') : null,
-    ].filter(Boolean) as string[]
+    const ftsQuery =
+        tokens.length === 1
+            ? `"${tokens[0]}"`
+            : tokens.map((t) => `"${t}"`).join(' OR ')
 
-    for (const ftsQuery of candidates) {
-        try {
-            const result = await raw.execute({
-                sql: `
-                    SELECT doc_id, rank
-                    FROM docs_fts
-                    WHERE docs_fts MATCH ?
-                    ORDER BY rank
-                    LIMIT ?
-                `,
-                args: [ftsQuery, k],
-            })
-            const rows = result.rows as Array<{
-                doc_id: string
-                rank: number
-            }>
-            if (rows.length > 0) {
-                return rows.map((r) => ({
-                    docId: r.doc_id,
-                    rank: r.rank,
-                }))
-            }
-        } catch {
-            // FTS query syntax error (e.g., special chars), try next
-        }
+    try {
+        const result = await raw.execute({
+            sql: `
+                SELECT doc_id, rank
+                FROM docs_fts
+                WHERE docs_fts MATCH ?
+                ORDER BY rank
+                LIMIT ?
+            `,
+            args: [ftsQuery, k],
+        })
+        const rows = result.rows as Array<{
+            doc_id: string
+            rank: number
+        }>
+        return rows.map((r) => ({
+            docId: r.doc_id,
+            rank: r.rank,
+        }))
+    } catch {
+        return []
     }
-    return []
 }
 
 // ── browse / overview helpers ──────────────────────────────────────

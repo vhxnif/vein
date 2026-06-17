@@ -4,9 +4,7 @@ import { segmentText } from '../utils/segment'
 import type { LibrarianResult, TraceStep } from './librarian'
 
 /**
- * Shared business logic: segment + FTS search + enrich metadata.
- * FTS5 OR semantics (handled in store layer) make the LLM segmentation
- * robust against non-deterministic tokenization.
+ * Shared business logic: segment + FTS search (OR semantics) + enrich metadata.
  */
 async function searchDocsByKeyword(
     query: string,
