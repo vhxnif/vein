@@ -14,13 +14,8 @@ export const Route = createFileRoute('/')({
 function TimelineBlockView({ block }: { block: TimelineBlock }) {
     if (block.type === 'thinking') {
         return (
-            <div className="my-2 px-3 py-2 rounded-[6pt] bg-sand/30 border border-cream/30">
-                <div className="font-sans text-[7pt] font-semibold text-stone/60 uppercase tracking-wide mb-1">
-                    Thinking
-                </div>
-                <div className="font-mono text-[8.5pt] text-stone leading-relaxed whitespace-pre-wrap">
-                    {block.text}
-                </div>
+            <div className="my-2 italic text-stone/70">
+                <Markdown>{block.text}</Markdown>
             </div>
         )
     }
