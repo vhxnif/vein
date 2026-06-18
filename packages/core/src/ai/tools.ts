@@ -76,6 +76,7 @@ type SearchOptions = {
     reviewerModel?: ModelProvider
     searchAgentModel?: ModelProvider
     onStep?: (label: string) => void
+    signal?: AbortSignal
 }
 
 type SearchResult = LibrarianResult & {
@@ -96,6 +97,7 @@ async function searchDocuments(
         subagentModel: opts?.subagentModel,
         reviewerModel: opts?.reviewerModel,
         searchAgentModel: opts?.searchAgentModel,
+        signal: opts?.signal,
     })
     const docNames = await resolveDocNames(result.trace)
     return { ...result, docNames }

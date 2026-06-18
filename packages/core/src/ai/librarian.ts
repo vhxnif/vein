@@ -1217,6 +1217,7 @@ async function librarian(
         subagentModel?: ModelProvider
         reviewerModel?: ModelProvider
         searchAgentModel?: ModelProvider
+        signal?: AbortSignal
     }
 ): Promise<LibrarianResult> {
     const provider = getModelProvider()
@@ -1345,7 +1346,23 @@ async function librarian(
         }
     })
 
-    await agent.prompt(msg)
+    // Wire external abort signal to agent so client disconnect stops the pipeline
+    let onAbort: (() => void) | undefined
+    if (opts?.signal) {
+        if (opts.signal.aborted) {
+            throw new DOMException('Aborted', 'AbortError')
+        }
+        onAbort = () => agent.abort()
+        opts.signal.addEventListener('abort', onAbort, { once: true })
+    }
+
+    try {
+        await agent.prompt(msg)
+    } finally {
+        if (opts?.signal && onAbort) {
+            opts.signal.removeEventListener('abort', onAbort)
+        }
+    }
 
     const messages = agent.state.messages
     log.info({

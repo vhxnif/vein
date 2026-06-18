@@ -1,10 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useCallback, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Markdown } from '../components/Markdown'
 import { RunCat } from '../components/RunCat'
-import type { SearchResult } from '../lib/api'
-import { searchQuery } from '../lib/api'
 import { useProject } from '../lib/project'
+import { useSearch } from '../lib/search-context'
 
 export const Route = createFileRoute('/')({
     component: HomePage,
@@ -12,41 +11,16 @@ export const Route = createFileRoute('/')({
 
 function HomePage() {
     const { project } = useProject()
-    const [query, setQuery] = useState('')
-    const [searching, setSearching] = useState(false)
-    const [result, setResult] = useState<SearchResult | null>(null)
-    const [error, setError] = useState<string | null>(null)
-    const [elapsed, setElapsed] = useState(0)
-    const [steps, setSteps] = useState<string[]>([])
-    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const { query, searching, result, error, elapsed, steps, runSearch } =
+        useSearch()
 
-    const handleSearch = useCallback(async () => {
-        if (!query.trim() || searching) return
-        if (timerRef.current) clearInterval(timerRef.current)
+    const [input, setInput] = useState(query)
 
-        setSearching(true)
-        setResult(null)
-        setError(null)
-        setElapsed(0)
-        setSteps([])
-
-        const startTime = Date.now()
-        timerRef.current = setInterval(() => {
-            setElapsed(Math.round((Date.now() - startTime) / 100) / 10)
-        }, 100)
-
-        try {
-            const res = await searchQuery(query.trim(), (label) => {
-                setSteps((prev) => [...prev, label])
-            })
-            setResult(res)
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Search failed')
-        } finally {
-            setSearching(false)
-            if (timerRef.current) clearInterval(timerRef.current)
-        }
-    }, [query, searching])
+    const handleSearch = () => {
+        const q = input.trim()
+        if (!q || searching) return
+        runSearch(q)
+    }
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') handleSearch()
@@ -74,8 +48,8 @@ function HomePage() {
             <div className="mb-4">
                 <input
                     type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.currentTarget.value)}
+                    value={input}
+                    onChange={(e) => setInput(e.currentTarget.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Type your question..."
                     className="w-full bg-ivory ring-warm rounded-[8pt] px-6 py-4

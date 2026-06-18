@@ -27,12 +27,25 @@ searchRouter.post('/', async (c) => {
 
     const startedAt = performance.now()
 
+    // Use the request's abort signal to detect client disconnection
+    const signal = c.req.raw.signal
+
     const stream = new ReadableStream({
         async start(controller) {
             const send = (obj: unknown) => {
-                const line = `${JSON.stringify(obj)}\n`
-                controller.enqueue(new TextEncoder().encode(line))
+                try {
+                    const line = `${JSON.stringify(obj)}\n`
+                    controller.enqueue(new TextEncoder().encode(line))
+                } catch {
+                    // Controller closed (client disconnected) — ignore
+                }
             }
+
+            let aborted = false
+            const onAbort = () => {
+                aborted = true
+            }
+            signal.addEventListener('abort', onAbort, { once: true })
 
             try {
                 const result = await searchDocuments(query, {
@@ -41,9 +54,14 @@ searchRouter.post('/', async (c) => {
                     reviewerModel: config.reviewer,
                     searchAgentModel: config.searchAgent,
                     onStep: (label) => {
-                        send({ type: 'step', label })
+                        if (!aborted) {
+                            send({ type: 'step', label })
+                        }
                     },
+                    signal,
                 })
+
+                if (aborted) return
 
                 const elapsedMs = Math.round(performance.now() - startedAt)
 
@@ -68,13 +86,19 @@ searchRouter.post('/', async (c) => {
                         : undefined,
                 })
             } catch (err) {
+                if (aborted) return
                 send({
                     type: 'error',
                     message:
                         err instanceof Error ? err.message : 'Search failed',
                 })
             } finally {
-                controller.close()
+                signal.removeEventListener('abort', onAbort)
+                try {
+                    controller.close()
+                } catch {
+                    // Already closed
+                }
             }
         },
     })
