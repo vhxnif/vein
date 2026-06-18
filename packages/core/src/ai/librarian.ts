@@ -709,7 +709,7 @@ class Semaphore {
 // ── Main Agent Tools ───────────────────────────────────────────
 
 function makeAnalyzeDocument(
-    { cached, ok, tool, onStep }: ToolCtx,
+    { cached, ok, tool }: ToolCtx,
     sem: Semaphore,
     modelOverride?: ModelProvider
 ): any {
@@ -738,7 +738,7 @@ function makeAnalyzeDocument(
                         return await analyzeDocument(
                             docId,
                             userQuery,
-                            onStep,
+                            undefined,
                             modelOverride
                         )
                     } catch (err) {
@@ -772,7 +772,7 @@ function makeAnalyzeDocument(
 }
 
 function makeSearchDocuments(
-    { cached, ok, tool, onStep }: ToolCtx,
+    { cached, ok, tool }: ToolCtx,
     segmenter?: ModelProvider,
     searchModel?: ModelProvider
 ): any {
@@ -793,7 +793,7 @@ function makeSearchDocuments(
             const key = `searchDocuments:${userQuery}`
             return ok(
                 await cached(key, () =>
-                    searchAndScreen(userQuery, segmenter, searchModel, onStep)
+                    searchAndScreen(userQuery, segmenter, searchModel)
                 )
             )
         }),
