@@ -175,21 +175,36 @@ import {
 
 ## 查询路径（Librarian 检索）
 
-采用 **主 Agent + 子 Agent 委托** 架构：主 Agent 负责搜索和汇总，子 Agent（Document Analyzer）负责逐文档深度分析：
+采用 **主 Agent + 子 Agent 委托** 架构，三层子 Agent：
+
+| 层级 | Agent | 作用 |
+|------|-------|------|
+| 1 | SearchScreener | 关键词搜索 + snippet+大纲初筛，返回精简 docId 列表 |
+| 2 | Document Analyzer | 逐文档深度分析原文 |
+| 3 | Reviewer | 自检审查 |
 
 ### 主 Agent（Librarian）
 
 | 步骤 | 工具 | 作用 |
 |------|------|------|
-| 1 | `searchDocsByKeyword` | 关键词在 `docs_fts` 中全文搜索，返回 [{docId, metadata, rank}] |
-| 2 | `analyzeDocument(docId, userQuery)` | 委托子 Agent 深度分析单篇文档，返回 Markdown 格式分析结果 |
-| 3 | `reviewResult` | 自检：审查检索结果是否满足用户需求 |
+| 1 | `searchDocuments(userQuery)` | 委托 SearchScreener 子 Agent 搜索+初筛，返回 [{docId, relevance, reason}] |
+| 2 | `analyzeDocument(docId, userQuery)` | 委托 Document Analyzer 子 Agent 深度分析单篇文档 |
+| 3 | `reviewResult` | 自检审查 |
 
-- 步骤 2 并发控制：对搜索结果中的文档调用 `analyzeDocument`（数量不限），系统通过 `Semaphore` 限制最多同时运行 10 个子 Agent，超出排队等待
-- 步骤 3 输出要求：按文档逐一列出，直接引用子 Agent 的「详细分析」内容，不重新概括
+- 步骤 1 的 SearchScreener 子 Agent 内部处理关键词提取、≤2 结果时换词重搜、snippet+大纲联合筛选，主 Agent 只看到精简后的列表
+- 步骤 2 并发控制：通过 `Semaphore` 限制最多 10 个 Document Analyzer 同时运行
+- 步骤 3 输出要求：按文档逐一列出，直接引用子 Agent 的「详细分析」内容
 - 自检后若 verdict 为 partial/fail，会根据 suggestion 回溯重试（最多 2 次）
 
-### 子 Agent（Document Analyzer）
+### SearchScreener 子 Agent
+
+独立的 `Agent` 实例，≤6 步预算，使用 `searchDocsByKeyword` 工具（返回结果已嵌入紧凑大纲 `outline` 字段）：
+
+| 工具 | 返回 |
+|------|------|
+| `searchDocsByKeyword(query)` | [{docId, snippet, rank, outline}] — outline 为 compactDocText 产物（仅标题骨架，无摘要） |
+
+### Document Analyzer 子 Agent
 
 独立的 `Agent` 实例，拥有自己的工具集和 ≤10 步预算（`beforeToolCall` 强制约束）：
 
@@ -207,14 +222,21 @@ User Query
   │
   ▼
 Main Librarian Agent
-  ├─ searchDocsByKeyword(query)         → [{docId, metadata, rank}]
-  ├─ analyzeDocument(docId, userQuery)  → spawns Subagent (max 10 concurrent) ─┐
-  │                                                │                      │
-  │                                                ▼                      │
-  │                                    Document Analyzer Subagent
-  │                                    ├─ getDocStructure(docId)
-  │                                    └─ getDocNodeDetails(docId, nodeId)
-  │                                                │                      │
+  ├─ searchDocuments(userQuery)       → spawns SearchScreener subagent ─┐
+  │                                                │                     │
+  │                                                ▼                     │
+  │                                    SearchScreener Subagent
+  │                                    └─ searchDocsByKeyword(query)
+  │                                          returns [{docId, snippet, outline}]
+  │                                                │                     │
+  │                                                └──────────────────────┘
+  │                                          returns [{docId, relevance, reason}]
+  ├─ analyzeDocument(docId, userQuery)  → spawns Doc Analyzer (max 10)  ─┐
+  │                                                │                     │
+  │                                    Document Analyzer Subagent         │
+  │                                    ├─ getDocStructure(docId)          │
+  │                                    └─ getDocNodeDetails(docId, nodeId)│
+  │                                                │                     │
   │                                                └──────────────────────┘
   │                                          returns Markdown analysis
   └─ reviewResult(query, finalAnswer, sources)
@@ -247,6 +269,18 @@ Reviewer 是独立的评估 Agent，评估维度：相关性、完整性、准�
     "segmenter": {
         "provider": "openai",
         "model": "gpt-4o-mini"
+    },
+    "subagent": {
+        "provider": "openai",
+        "model": "gpt-4o-mini"
+    },
+    "reviewer": {
+        "provider": "deepseek",
+        "model": "deepseek-v4-pro"
+    },
+    "searchAgent": {
+        "provider": "openai",
+        "model": "gpt-4o-mini"
     }
 }
 ```
@@ -259,9 +293,15 @@ Reviewer 是独立的评估 Agent，评估维度：相关性、完整性、准�
 | `model.provider` | AI provider，如 `deepseek`、`openai` |
 | `model.model` | 模型名称，如 `deepseek-v4-pro`、`gpt-4o-mini` |
 | `summarizer.provider` | 文档摘要专用 AI provider（可选，未配置时回退到 `model`） |
-| `summarizer.model` | 摘要专用模型名称（可选，未配置时回退到 `model`） |
+| `summarizer.model` | 摘要专用模型名称 |
 | `segmenter.provider` | 中文分词专用 AI provider（可选，未配置时回退到 `model`） |
-| `segmenter.model` | 分词专用模型名称（可选，未配置时回退到 `model`） |
+| `segmenter.model` | 分词专用模型名称 |
+| `subagent.provider` | Document Analyzer 子 Agent 专用模型（可选，回退到 `model`） |
+| `subagent.model` | 分析子 Agent 模型名称 |
+| `reviewer.provider` | Reviewer 审查专用模型（可选，回退到 `model`） |
+| `reviewer.model` | 审查模型名称 |
+| `searchAgent.provider` | SearchScreener 搜索筛选专用模型（可选，回退到 `model`） |
+| `searchAgent.model` | 搜索筛选模型名称 |
 
 ## 全局项目注册表
 
@@ -338,7 +378,7 @@ vein projects [--remove <name>]
     别名 pr。
 
 vein config
-    交互式查看和修改项目配置（model / summarizer / segmenter）。
+    交互式查看和修改项目配置（model / summarizer / segmenter / subagent / reviewer / searchAgent）。
     循环菜单选择要修改的字段，每次改动即时保存到 .vein/config.json。
 ```
 
@@ -406,7 +446,7 @@ insertTree → insertDoc (含 docs_fts)
 - 工具调用并行化：`base.ts` 的 `call()` 中 LLM 返回的多个 tool call（如 `getReviewSource`）通过 `Promise.all` 并行执行，消除串行等待
 - 子 Agent 进度同步：子 Agent 内部 tool 调用通过 `onStep` 回调透传到主 Agent 的 spinner 显示（如 `  Loading document structure...`）
 - reviewer 进度同步：reviewer 内部 `getReviewSource` 调用通过 `onStep` 回调透传，如 `Verifying: doc1/0001...`、`Review: pass (5/5)`
-- 模型配置灵活定制：主模型、摘要、分词、子 Agent、审查 5 个场景可独立指定模型，未配置时回退到主模型
+- 模型配置灵活定制：主模型、摘要、分词、文档分析子 Agent、搜索筛选子 Agent、审查 6 个场景可独立指定模型，未配置时回退到主模型
 - 中文分词：`segmentText()` 通过 LLM 调用实现，写入 FTS 前分词。长文本（>3000 字符）自动按行切分为多个 chunk 独立分词
 - Librarian 检索进度：执行中显示通用提示，完成后自动更新为具体结果。子 Agent 输出结果的 spinner 显示格式为 `Analysis: high · 1.2KB`
 

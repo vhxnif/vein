@@ -74,7 +74,7 @@ resegmentAllDocuments(config, force) → { written, skipped, failed }
 ```typescript
 searchDocuments(query, opts?) → SearchResult
 // SearchResult = LibrarianResult & { docNames: Map<string, string> }
-// opts: { segmenter?, onStep? }
+// opts: { segmenter?, subagentModel?, reviewerModel?, searchAgentModel?, onStep? }
 ```
 
 ### 文档浏览
@@ -132,24 +132,41 @@ TreeNode<T> {
 
 ## AI Agent 架构
 
+### 三层子 Agent
+
+| 层级 | Agent | 步骤预算 | 工具 | 日志模块 |
+|------|-------|---------|------|---------|
+| 1 | SearchScreener | ≤6 | `searchDocsByKeyword`（含嵌入 outline） | `search-screener` |
+| 2 | Document Analyzer | ≤10 | `getDocStructure`, `getDocNodeDetails` | `doc-analyzer` |
+| 3 | Reviewer | — | `getReviewSource` | `ai` |
+
 ### Librarian（主 Agent）
 
 ```
-PROMPT + tools [ searchDocsByKeyword, analyzeDocument, reviewResult ]
+PROMPT + tools [ searchDocuments, analyzeDocument, reviewResult ]
   → Agent.run()
   → 返回 LibrarianResult { content, trace: TraceStep[], review?: ReviewResult }
 ```
 
-- 使用 `@earendil-works/pi-agent-core` 的 `Agent` 类
+- `searchDocuments` 内部 spawn SearchScreener 子 Agent，步骤以 `[Search]` 前缀透传 `onStep`
+- `searchDocsByKeyword` 工具现在返回结果嵌入 `outline` 字段（compactDocText 产物），子 Agent 可同时查看 snippet + 大纲
 - `analyzeDocument` 内并发控制：`Semaphore(MAX_PARALLEL_ANALYZE=10)`
+- 步骤以 `[${shortDocId}]` 前缀透传 `onStep`
 
-### Document Analyzer（子 Agent）
+### Adding a new model config field — checklist
 
-独立 Agent 实例，≤10 步预算，输出 Markdown 格式分析。
+当一个场景需要独立模型配置时，必须同步修改 6 个位置：
 
-### Reviewer（审查 Agent）
+1. `config/type.ts` — `ProjectConfig` 新增 `fieldName?: ModelProvider`
+2. `store/migrations/config_schema.ts` — JSON Schema 新增对应属性
+3. `cli/command/config.command.ts` — `display()` 新增显示行 + 菜单新增选项 + switch 新增 case
+4. `cli/command/ask.command.ts` — `searchDocuments()` 调用处传入 `fieldName: config.fieldName`
+5. `web/routes/search.ts` — 同上
+6. `librarian.ts` — `buildMainTools()` 和 `librarian()` opts 新增参数，透传到对应工具
 
-纯评估 Agent，返回 `{ verdict, score, reason, suggestion }`。
+### Agent event ordering quirk
+
+`beforeToolCall` 是 async hook，Agent 框架可能在其 resolve 前就派发 `tool_execution_start` 事件。这导致首次 tool start 日志中 `stepCount: 0` 而非 `1`。预算拦截（在 `beforeToolCall` 内同步执行）不受影响。这是框架行为，所有子 Agent 一致。
 
 ## 导入管道
 
