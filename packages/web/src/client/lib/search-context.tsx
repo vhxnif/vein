@@ -9,13 +9,21 @@ import {
 import type { SearchResult } from './api'
 import { searchQuery } from './api'
 
-interface ToolCallState {
-    id: string
-    name: string
-    label: string
-    status: 'running' | 'done'
-    summary?: string
-}
+// ── Timeline types ──────────────────────────────────────────
+
+export type TimelineBlock =
+    | { type: 'thinking'; id: string; text: string }
+    | {
+          type: 'tool'
+          id: string
+          name: string
+          label: string
+          status: 'running' | 'done'
+          summary?: string
+      }
+    | { type: 'text'; id: string; text: string }
+
+// ── State ───────────────────────────────────────────────────
 
 export interface SearchState {
     query: string
@@ -23,12 +31,8 @@ export interface SearchState {
     result: SearchResult | null
     error: string | null
     elapsed: number
-    /** Accumulated streaming text from the main agent. */
-    streamingText: string
-    /** Accumulated thinking deltas from the main agent. */
-    thinkingText: string
-    /** Active and completed tool calls. */
-    toolCalls: ToolCallState[]
+    /** Chronological timeline of streaming events (thinking, tools, text). */
+    timeline: TimelineBlock[]
 }
 
 interface SearchContextType extends SearchState {
@@ -43,9 +47,7 @@ const initialState: SearchState = {
     result: null,
     error: null,
     elapsed: 0,
-    streamingText: '',
-    thinkingText: '',
-    toolCalls: [],
+    timeline: [],
 }
 
 const SearchContext = createContext<SearchContextType>({
@@ -58,13 +60,14 @@ const SearchContext = createContext<SearchContextType>({
     },
 })
 
+// ── Provider ────────────────────────────────────────────────
+
 export function SearchProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<SearchState>(initialState)
     const abortRef = useRef<AbortController | null>(null)
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     const clearSearch = useCallback(() => {
-        // Abort inflight request
         if (abortRef.current) {
             abortRef.current.abort()
             abortRef.current = null
@@ -77,7 +80,6 @@ export function SearchProvider({ children }: { children: ReactNode }) {
     }, [])
 
     const runSearch = useCallback(async (q: string) => {
-        // Abort previous inflight request
         if (abortRef.current) {
             abortRef.current.abort()
         }
@@ -93,9 +95,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
             result: null,
             error: null,
             elapsed: 0,
-            streamingText: '',
-            thinkingText: '',
-            toolCalls: [],
+            timeline: [],
         }))
 
         const startTime = Date.now()
@@ -116,19 +116,41 @@ export function SearchProvider({ children }: { children: ReactNode }) {
                     onThinkingDelta: (delta) => {
                         setState((prev) => {
                             if (!prev.searching) return prev
-                            return {
-                                ...prev,
-                                thinkingText: prev.thinkingText + delta,
+                            const timeline = [...prev.timeline]
+                            const last = timeline[timeline.length - 1]
+                            if (last && last.type === 'thinking') {
+                                timeline[timeline.length - 1] = {
+                                    ...last,
+                                    text: last.text + delta,
+                                }
+                            } else {
+                                timeline.push({
+                                    type: 'thinking',
+                                    id: crypto.randomUUID(),
+                                    text: delta,
+                                })
                             }
+                            return { ...prev, timeline }
                         })
                     },
                     onTextDelta: (delta) => {
                         setState((prev) => {
                             if (!prev.searching) return prev
-                            return {
-                                ...prev,
-                                streamingText: prev.streamingText + delta,
+                            const timeline = [...prev.timeline]
+                            const last = timeline[timeline.length - 1]
+                            if (last && last.type === 'text') {
+                                timeline[timeline.length - 1] = {
+                                    ...last,
+                                    text: last.text + delta,
+                                }
+                            } else {
+                                timeline.push({
+                                    type: 'text',
+                                    id: crypto.randomUUID(),
+                                    text: delta,
+                                })
                             }
+                            return { ...prev, timeline }
                         })
                     },
                     onToolCallStart: (toolCallId, toolName, label) => {
@@ -136,9 +158,10 @@ export function SearchProvider({ children }: { children: ReactNode }) {
                             if (!prev.searching) return prev
                             return {
                                 ...prev,
-                                toolCalls: [
-                                    ...prev.toolCalls,
+                                timeline: [
+                                    ...prev.timeline,
                                     {
+                                        type: 'tool' as const,
                                         id: toolCallId,
                                         name: toolName,
                                         label,
@@ -153,14 +176,15 @@ export function SearchProvider({ children }: { children: ReactNode }) {
                             if (!prev.searching) return prev
                             return {
                                 ...prev,
-                                toolCalls: prev.toolCalls.map((tc) =>
-                                    tc.id === toolCallId
+                                timeline: prev.timeline.map((block) =>
+                                    block.type === 'tool' &&
+                                    block.id === toolCallId
                                         ? {
-                                              ...tc,
+                                              ...block,
                                               status: 'done' as const,
                                               summary,
                                           }
-                                        : tc
+                                        : block
                                 ),
                             }
                         })
@@ -174,7 +198,6 @@ export function SearchProvider({ children }: { children: ReactNode }) {
                 result: res,
             }))
         } catch (err) {
-            // Ignore aborted requests
             if (err instanceof DOMException && err.name === 'AbortError') {
                 return
             }
