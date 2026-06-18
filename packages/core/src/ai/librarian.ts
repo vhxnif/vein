@@ -1218,6 +1218,21 @@ async function librarian(
         reviewerModel?: ModelProvider
         searchAgentModel?: ModelProvider
         signal?: AbortSignal
+        /** Optional thinking/reasoning level. Defaults to 'high' for models that support it. */
+        thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+        /** Streaming callbacks for real-time LLM output (web UI). */
+        onThinkingDelta?: (delta: string) => void
+        onTextDelta?: (delta: string) => void
+        onToolCallStart?: (
+            toolCallId: string,
+            toolName: string,
+            label: string
+        ) => void
+        onToolCallEnd?: (
+            toolCallId: string,
+            toolName: string,
+            summary: string
+        ) => void
     }
 ): Promise<LibrarianResult> {
     const provider = getModelProvider()
@@ -1234,6 +1249,7 @@ async function librarian(
         initialState: {
             systemPrompt: PROMPT,
             model,
+            thinkingLevel: opts?.thinkingLevel ?? 'off',
             tools: buildMainTools(
                 opts?.segmenter,
                 onStep,
@@ -1299,6 +1315,47 @@ async function librarian(
                 if (event.toolName === 'reviewResult') {
                     onStep('Compiling final answer...')
                 }
+            }
+        })
+    }
+
+    // Streaming subscriber for web UI: forward LLM text/thinking deltas,
+    // and tool execution lifecycle events with human-readable labels.
+    const hasStreamCallbacks =
+        opts?.onThinkingDelta ||
+        opts?.onTextDelta ||
+        opts?.onToolCallStart ||
+        opts?.onToolCallEnd
+    if (hasStreamCallbacks) {
+        agent.subscribe((event) => {
+            if (event.type === 'message_update') {
+                const ae = event.assistantMessageEvent
+                if (ae.type === 'thinking_delta') {
+                    opts?.onThinkingDelta?.(ae.delta)
+                } else if (ae.type === 'text_delta') {
+                    opts?.onTextDelta?.(ae.delta)
+                }
+            }
+            if (event.type === 'tool_execution_start') {
+                const label = buildStepLabel(
+                    event.toolName,
+                    (event.args as Record<string, unknown>) ?? {}
+                )
+                opts?.onToolCallStart?.(event.toolCallId, event.toolName, label)
+            }
+            if (event.type === 'tool_execution_end') {
+                const resultText =
+                    event.result?.content
+                        ?.filter(
+                            (it: { type: string; text?: string }) =>
+                                it.type === 'text'
+                        )
+                        .map((it: { text?: string }) => it.text)
+                        .join('') ?? ''
+                const summary =
+                    buildResultLabel(event.toolName, resultText) ??
+                    `${resultText.length} chars`
+                opts?.onToolCallEnd?.(event.toolCallId, event.toolName, summary)
             }
         })
     }

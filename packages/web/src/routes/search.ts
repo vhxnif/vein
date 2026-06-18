@@ -11,7 +11,10 @@ const searchRouter = new Hono()
 // ── POST /api/projects/current/search ───────────────────────────
 // Streams the librarian agent execution via ndjson.
 // Each line is a JSON object:
-//   { "type": "step", "label": "Searching..." }
+//   { "type": "thinking_delta", "delta": "..." }
+//   { "type": "text_delta", "delta": "..." }
+//   { "type": "tool_call_start", "toolCallId": "...", "toolName": "...", "label": "..." }
+//   { "type": "tool_call_end", "toolCallId": "...", "toolName": "...", "summary": "..." }
 //   { "type": "done", "content": "...", "review": {...}, ... }
 //   { "type": "error", "message": "..." }
 searchRouter.post('/', async (c) => {
@@ -53,12 +56,32 @@ searchRouter.post('/', async (c) => {
                     subagentModel: config.subagent,
                     reviewerModel: config.reviewer,
                     searchAgentModel: config.searchAgent,
-                    onStep: (label) => {
-                        if (!aborted) {
-                            send({ type: 'step', label })
-                        }
-                    },
+                    thinkingLevel: config.thinkingLevel,
                     signal,
+                    onThinkingDelta: (delta) => {
+                        if (!aborted) send({ type: 'thinking_delta', delta })
+                    },
+                    onTextDelta: (delta) => {
+                        if (!aborted) send({ type: 'text_delta', delta })
+                    },
+                    onToolCallStart: (toolCallId, toolName, label) => {
+                        if (!aborted)
+                            send({
+                                type: 'tool_call_start',
+                                toolCallId,
+                                toolName,
+                                label,
+                            })
+                    },
+                    onToolCallEnd: (toolCallId, toolName, summary) => {
+                        if (!aborted)
+                            send({
+                                type: 'tool_call_end',
+                                toolCallId,
+                                toolName,
+                                summary,
+                            })
+                    },
                 })
 
                 if (aborted) return

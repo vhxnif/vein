@@ -9,13 +9,26 @@ import {
 import type { SearchResult } from './api'
 import { searchQuery } from './api'
 
+interface ToolCallState {
+    id: string
+    name: string
+    label: string
+    status: 'running' | 'done'
+    summary?: string
+}
+
 export interface SearchState {
     query: string
     searching: boolean
     result: SearchResult | null
     error: string | null
     elapsed: number
-    steps: string[]
+    /** Accumulated streaming text from the main agent. */
+    streamingText: string
+    /** Accumulated thinking deltas from the main agent. */
+    thinkingText: string
+    /** Active and completed tool calls. */
+    toolCalls: ToolCallState[]
 }
 
 interface SearchContextType extends SearchState {
@@ -30,7 +43,9 @@ const initialState: SearchState = {
     result: null,
     error: null,
     elapsed: 0,
-    steps: [],
+    streamingText: '',
+    thinkingText: '',
+    toolCalls: [],
 }
 
 const SearchContext = createContext<SearchContextType>({
@@ -78,7 +93,9 @@ export function SearchProvider({ children }: { children: ReactNode }) {
             result: null,
             error: null,
             elapsed: 0,
-            steps: [],
+            streamingText: '',
+            thinkingText: '',
+            toolCalls: [],
         }))
 
         const startTime = Date.now()
@@ -95,11 +112,59 @@ export function SearchProvider({ children }: { children: ReactNode }) {
         try {
             const res = await searchQuery(
                 q,
-                (label) => {
-                    setState((prev) => {
-                        if (!prev.searching) return prev
-                        return { ...prev, steps: [...prev.steps, label] }
-                    })
+                {
+                    onThinkingDelta: (delta) => {
+                        setState((prev) => {
+                            if (!prev.searching) return prev
+                            return {
+                                ...prev,
+                                thinkingText: prev.thinkingText + delta,
+                            }
+                        })
+                    },
+                    onTextDelta: (delta) => {
+                        setState((prev) => {
+                            if (!prev.searching) return prev
+                            return {
+                                ...prev,
+                                streamingText: prev.streamingText + delta,
+                            }
+                        })
+                    },
+                    onToolCallStart: (toolCallId, toolName, label) => {
+                        setState((prev) => {
+                            if (!prev.searching) return prev
+                            return {
+                                ...prev,
+                                toolCalls: [
+                                    ...prev.toolCalls,
+                                    {
+                                        id: toolCallId,
+                                        name: toolName,
+                                        label,
+                                        status: 'running' as const,
+                                    },
+                                ],
+                            }
+                        })
+                    },
+                    onToolCallEnd: (toolCallId, _toolName, summary) => {
+                        setState((prev) => {
+                            if (!prev.searching) return prev
+                            return {
+                                ...prev,
+                                toolCalls: prev.toolCalls.map((tc) =>
+                                    tc.id === toolCallId
+                                        ? {
+                                              ...tc,
+                                              status: 'done' as const,
+                                              summary,
+                                          }
+                                        : tc
+                                ),
+                            }
+                        })
+                    },
                 },
                 signal
             )

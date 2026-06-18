@@ -77,6 +77,21 @@ type SearchOptions = {
     searchAgentModel?: ModelProvider
     onStep?: (label: string) => void
     signal?: AbortSignal
+    /** Thinking/reasoning level for the main agent. */
+    thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+    /** Streaming callbacks for real-time LLM output (web UI). */
+    onThinkingDelta?: (delta: string) => void
+    onTextDelta?: (delta: string) => void
+    onToolCallStart?: (
+        toolCallId: string,
+        toolName: string,
+        label: string
+    ) => void
+    onToolCallEnd?: (
+        toolCallId: string,
+        toolName: string,
+        summary: string
+    ) => void
 }
 
 type SearchResult = LibrarianResult & {
@@ -98,6 +113,11 @@ async function searchDocuments(
         reviewerModel: opts?.reviewerModel,
         searchAgentModel: opts?.searchAgentModel,
         signal: opts?.signal,
+        thinkingLevel: opts?.thinkingLevel,
+        onThinkingDelta: opts?.onThinkingDelta,
+        onTextDelta: opts?.onTextDelta,
+        onToolCallStart: opts?.onToolCallStart,
+        onToolCallEnd: opts?.onToolCallEnd,
     })
     const docNames = await resolveDocNames(result.trace)
     return { ...result, docNames }

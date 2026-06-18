@@ -4,11 +4,12 @@ import { useProject } from '../lib/project'
 
 export function Layout({ children }: { children: ReactNode }) {
     return (
-        <div className="flex min-h-screen bg-parchment">
-            {/* Desktop sidebar */}
+        <div className="min-h-screen bg-parchment">
+            {/* Desktop sidebar — fixed, independent of main scroll */}
             <aside
-                className="hidden md:flex w-[48px] flex-shrink-0 flex-col items-center py-4 gap-3
-                               border-r border-cream/50"
+                className="hidden md:flex fixed z-30 left-0 top-0 h-screen
+                           w-[48px] flex-shrink-0 flex-col items-center py-4 gap-3
+                           border-r border-cream/50 bg-parchment"
             >
                 {/* Project selector */}
                 <ProjectSelector />
@@ -71,7 +72,9 @@ export function Layout({ children }: { children: ReactNode }) {
             </aside>
 
             {/* Main content */}
-            <main className="flex-1 min-w-0 pb-16 md:pb-0">{children}</main>
+            <main className="min-w-0 pb-16 md:pb-0 md:pl-[48px]">
+                {children}
+            </main>
 
             {/* Mobile bottom tab bar */}
             <nav

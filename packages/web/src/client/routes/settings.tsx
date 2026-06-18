@@ -58,6 +58,9 @@ function SettingsPage() {
     const [reviewerModel, setReviewerModel] = useState(
         config?.reviewer?.model ?? ''
     )
+    const [thinkingLevel, setThinkingLevel] = useState(
+        config?.thinkingLevel ?? ''
+    )
 
     // Sync state when config loads
     if (config && name !== config.name && config.name) {
@@ -72,6 +75,7 @@ function SettingsPage() {
         setSubagentModel(config.subagent?.model ?? '')
         setReviewerProvider(config.reviewer?.provider ?? '')
         setReviewerModel(config.reviewer?.model ?? '')
+        setThinkingLevel(config.thinkingLevel ?? '')
     }
 
     const saveMutation = useMutation({
@@ -91,6 +95,7 @@ function SettingsPage() {
                 reviewer: reviewerProvider
                     ? { provider: reviewerProvider, model: reviewerModel }
                     : undefined,
+                thinkingLevel: thinkingLevel || undefined,
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['config'] })
@@ -237,6 +242,42 @@ function SettingsPage() {
                     onModelChange={setReviewerModel}
                     optional
                 />
+            </section>
+
+            {/* Thinking */}
+            <section className="mb-10">
+                <h3 className="font-serif text-[12pt] font-medium text-olive mb-4">
+                    Thinking
+                </h3>
+                <div className="space-y-1">
+                    <label
+                        htmlFor="thinkingLevel"
+                        className="block font-sans text-[8.5pt] text-stone"
+                    >
+                        Reasoning level
+                    </label>
+                    <select
+                        id="thinkingLevel"
+                        value={thinkingLevel}
+                        onChange={(e) =>
+                            setThinkingLevel(e.currentTarget.value)
+                        }
+                        className="w-full bg-ivory border border-cream rounded-[6pt]
+                                   px-3 py-2 font-sans text-[9pt] text-near-black
+                                   outline-none focus:border-ink focus-visible:ring-2 focus-visible:ring-ink transition-colors"
+                    >
+                        <option value="">off (default)</option>
+                        <option value="minimal">minimal</option>
+                        <option value="low">low</option>
+                        <option value="medium">medium</option>
+                        <option value="high">high</option>
+                        <option value="xhigh">xhigh</option>
+                    </select>
+                    <p className="font-sans text-[7.5pt] text-stone mt-1">
+                        Enables the model to show its reasoning process. Higher
+                        levels use more tokens.
+                    </p>
+                </div>
             </section>
 
             {/* Database */}

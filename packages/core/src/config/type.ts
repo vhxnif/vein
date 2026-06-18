@@ -19,4 +19,6 @@ export type ProjectConfig = {
     reviewer?: ModelProvider
     /** Optional model for the Search Screener subagent. Falls back to 'model' if not set. */
     searchAgent?: ModelProvider
+    /** Optional thinking/reasoning level for the main agent. Defaults to 'off' (no thinking). Set to 'high' or 'xhigh' to enable. */
+    thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
 }
