@@ -74,6 +74,7 @@ type SearchOptions = {
     segmenter?: ModelProvider
     subagentModel?: ModelProvider
     reviewerModel?: ModelProvider
+    searchAgentModel?: ModelProvider
     onStep?: (label: string) => void
 }
 
@@ -94,6 +95,7 @@ async function searchDocuments(
         segmenter: opts?.segmenter,
         subagentModel: opts?.subagentModel,
         reviewerModel: opts?.reviewerModel,
+        searchAgentModel: opts?.searchAgentModel,
     })
     const docNames = await resolveDocNames(result.trace)
     return { ...result, docNames }

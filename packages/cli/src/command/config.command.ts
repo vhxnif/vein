@@ -21,6 +21,7 @@ function display(c: ProjectConfig): string {
         `Segmenter:  ${formatMd(c.segmenter)}`,
         `Subagent:   ${formatMd(c.subagent)}`,
         `Reviewer:   ${formatMd(c.reviewer)}`,
+        `Search:     ${formatMd(c.searchAgent)}`,
     ].join('\n')
 }
 
@@ -117,6 +118,11 @@ export function register(program: Command) {
                             label: 'Reviewer',
                             hint: formatMd(config.reviewer),
                         },
+                        {
+                            value: 'searchAgent',
+                            label: 'Search Screener',
+                            hint: formatMd(config.searchAgent),
+                        },
                         { value: 'done', label: 'Done — save and exit' },
                     ],
                 })
@@ -163,6 +169,15 @@ export function register(program: Command) {
                             'defaults to Model if unset'
                         )
                         config = { ...config, reviewer: md }
+                        break
+                    }
+                    case 'searchAgent': {
+                        const md = await pickModel(
+                            'Search Screener',
+                            config.searchAgent,
+                            'defaults to Model if unset'
+                        )
+                        config = { ...config, searchAgent: md }
                         break
                     }
                 }

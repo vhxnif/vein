@@ -17,4 +17,6 @@ export type ProjectConfig = {
     subagent?: ModelProvider
     /** Optional model for the result reviewer. Falls back to 'model' if not set. */
     reviewer?: ModelProvider
+    /** Optional model for the Search Screener subagent. Falls back to 'model' if not set. */
+    searchAgent?: ModelProvider
 }

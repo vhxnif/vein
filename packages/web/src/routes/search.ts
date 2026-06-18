@@ -39,6 +39,7 @@ searchRouter.post('/', async (c) => {
                     segmenter: config.segmenter,
                     subagentModel: config.subagent,
                     reviewerModel: config.reviewer,
+                    searchAgentModel: config.searchAgent,
                     onStep: (label) => {
                         send({ type: 'step', label })
                     },
