@@ -591,8 +591,7 @@ async function searchAndScreen(
                 })
                 return {
                     block: true,
-                    reason:
-                        '已达到步骤预算上限，请基于已有搜索结果输出最终筛选列表',
+                    reason: '已达到步骤预算上限，请基于已有搜索结果输出最终筛选列表',
                 }
             }
         },
@@ -1116,7 +1115,8 @@ function buildResultLabel(
                         relevance?: string
                     }>
                     if (Array.isArray(parsed)) {
-                        if (parsed.length === 0) return 'No relevant documents found'
+                        if (parsed.length === 0)
+                            return 'No relevant documents found'
                         const counts: Record<string, number> = {}
                         for (const d of parsed) {
                             const r = d.relevance ?? 'unknown'
