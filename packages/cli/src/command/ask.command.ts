@@ -131,6 +131,7 @@ export function register(program: Command) {
                         segmenter: config.segmenter,
                         subagentModel: config.subagent,
                         reviewerModel: config.reviewer,
+                        searchAgentModel: config.searchAgent,
                         onStep: searchSpinner
                             ? (label) => searchSpinner.message(label)
                             : undefined,

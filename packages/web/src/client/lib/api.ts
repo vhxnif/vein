@@ -360,14 +360,31 @@ function parseSSEEvent(raw: string): ImportSSEEvent | null {
 
 // ── Search ─────────────────────────────────────────────────────
 
+export interface SearchStreamCallbacks {
+    onThinkingDelta?: (delta: string) => void
+    onTextDelta?: (delta: string) => void
+    onToolCallStart?: (
+        toolCallId: string,
+        toolName: string,
+        label: string
+    ) => void
+    onToolCallEnd?: (
+        toolCallId: string,
+        toolName: string,
+        summary: string
+    ) => void
+}
+
 export async function searchQuery(
     q: string,
-    onStep: (label: string) => void
+    callbacks?: SearchStreamCallbacks,
+    signal?: AbortSignal
 ): Promise<SearchResult> {
     const res = await fetch(u('/projects/current/search'), {
         method: 'POST',
         headers: h({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ q }),
+        signal,
     })
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Search failed' }))
@@ -379,30 +396,52 @@ export async function searchQuery(
     const decoder = new TextDecoder()
     let buffer = ''
 
-    while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() ?? ''
-        for (const line of lines) {
-            if (!line.trim()) continue
-            const data = JSON.parse(line) as Record<string, unknown>
-            if (data.type === 'step') {
-                onStep(String(data.label))
-            } else if (data.type === 'done') {
-                return data as unknown as SearchResult
-            } else if (data.type === 'error') {
-                throw new Error(String(data.message))
+    // Abort reader on external signal (page navigation / unmount)
+    const onAbort = () => reader.cancel()
+    signal?.addEventListener('abort', onAbort, { once: true })
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
+            for (const line of lines) {
+                if (!line.trim()) continue
+                const data = JSON.parse(line) as Record<string, unknown>
+                if (data.type === 'thinking_delta') {
+                    callbacks?.onThinkingDelta?.(String(data.delta))
+                } else if (data.type === 'text_delta') {
+                    callbacks?.onTextDelta?.(String(data.delta))
+                } else if (data.type === 'tool_call_start') {
+                    callbacks?.onToolCallStart?.(
+                        String(data.toolCallId),
+                        String(data.toolName),
+                        String(data.label)
+                    )
+                } else if (data.type === 'tool_call_end') {
+                    callbacks?.onToolCallEnd?.(
+                        String(data.toolCallId),
+                        String(data.toolName),
+                        String(data.summary)
+                    )
+                } else if (data.type === 'done') {
+                    return data as unknown as SearchResult
+                } else if (data.type === 'error') {
+                    throw new Error(String(data.message))
+                }
             }
         }
-    }
 
-    if (buffer.trim()) {
-        const data = JSON.parse(buffer) as Record<string, unknown>
-        if (data.type === 'done') return data as unknown as SearchResult
-        if (data.type === 'error') throw new Error(String(data.message))
-    }
+        if (buffer.trim()) {
+            const data = JSON.parse(buffer) as Record<string, unknown>
+            if (data.type === 'done') return data as unknown as SearchResult
+            if (data.type === 'error') throw new Error(String(data.message))
+        }
 
-    throw new Error('Search stream ended without result')
+        throw new Error('Search stream ended without result')
+    } finally {
+        signal?.removeEventListener('abort', onAbort)
+    }
 }

@@ -118,7 +118,7 @@ AI Agent 深入文档节点 ──→ 阅读原文、理解上下文
 | 特性 | 说明 |
 |------|------|
 | 🔍 **中文分词搜索** | LLM 驱动的中文分词 + SQLite FTS5 BM25 排序，精准匹配中文语义 |
-| 🤖 **多 Agent 协作检索** | 主 Agent 搜索 + 子 Agent 逐文档深度分析 + Reviewer 自检审查 |
+| 🤖 **多 Agent 协作检索** | 三层子 Agent：SearchScreener 搜索筛选 → Document Analyzer 深度分析 → Reviewer 自检审查 |
 | 🌲 **文档树形结构** | Markdown 自动拆分为节点树，支持层级浏览和精准定位 |
 | 💾 **项目级配置** | 每个项目独立 `.vein/config.json`，可为分词/摘要/检索配置不同模型 |
 | 🌐 **全局项目注册表** | `vein -p <name>` 从任意目录操作已注册项目 |
@@ -186,7 +186,7 @@ bun run build:web
 | **Docs** | `/docs` `/docs/:id` | 文档列表（响应式分页/无限滚动）、文档详情（大纲树 + 节点原文）、导入弹窗（拖放上传 + 进度流）/删除 |
 | **History** | `/history` | 查询历史（按日期分组）、展开查看完整问答与审查结果 |
 | **Projects** | `/projects` | 项目选择器：列表展示全局注册项目、切换/取消当前项目 |
-| **Settings** | `/settings` | 项目配置（名称、主模型、摘要、分词、子 Agent、审查 5 个独立模型槽位） |
+| **Settings** | `/settings` | 项目配置（名称、主模型、摘要、分词、文档分析子 Agent、搜索筛选子 Agent、审查 6 个独立模型槽位） |
 
 Web UI 采用 [Kami](https://github.com/tw93/Kami) 设计语言：暖色羊皮纸底、墨水蓝单色强调、Serif 排版层级，界面如印刷品般克制优雅。
 
@@ -235,8 +235,11 @@ User Query
   │
   ▼
 Main Librarian Agent (主 Agent)
-  ├─ searchDocsByKeyword(query)          → 结果少时自动换词重搜
-  ├─ analyzeDocument(docId, userQuery)   → 一次性并发 10 个子 Agent
+  ├─ searchDocuments(userQuery)          → SearchScreener 子 Agent：关键词搜索 + snippet/大纲初筛
+  │                                                │
+  │                                                └───────────┘
+  │                                         返回筛选后的文档列表
+  ├─ analyzeDocument(docId, userQuery)   → 一次性并发 10 个 Document Analyzer
   │                                                │
   │                                                ▼
   │                                    Document Analyzer (子 Agent)
@@ -290,6 +293,10 @@ Phase 2 — 串行 DB（WAL 模式）
   "reviewer": {
     "provider": "openai",
     "model": "gpt-4o"
+  },
+  "searchAgent": {
+    "provider": "openai",
+    "model": "gpt-4o-mini"
   }
 }
 ```
@@ -299,8 +306,9 @@ Phase 2 — 串行 DB（WAL 模式）
 | `model` | 主检索 Agent 使用的模型 |
 | `summarizer` | 文档摘要专用模型（可选，回退到 `model`） |
 | `segmenter` | 中文分词专用模型（可选，回退到 `model`） |
-| `subagent` | 子 Agent 分析专用模型（可选，回退到 `model`） |
+| `subagent` | Document Analyzer 子 Agent 专用模型（可选，回退到 `model`） |
 | `reviewer` | 结果审查专用模型（可选，回退到 `model`） |
+| `searchAgent` | SearchScreener 搜索筛选专用模型（可选，回退到 `model`） |
 | `db` | SQLite 数据库文件路径 |
 
 AI Provider 通过 `@earendil-works/pi-ai` 统一适配，支持 OpenAI / DeepSeek 及兼容接口。

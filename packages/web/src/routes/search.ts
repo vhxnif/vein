@@ -11,7 +11,10 @@ const searchRouter = new Hono()
 // ── POST /api/projects/current/search ───────────────────────────
 // Streams the librarian agent execution via ndjson.
 // Each line is a JSON object:
-//   { "type": "step", "label": "Searching..." }
+//   { "type": "thinking_delta", "delta": "..." }
+//   { "type": "text_delta", "delta": "..." }
+//   { "type": "tool_call_start", "toolCallId": "...", "toolName": "...", "label": "..." }
+//   { "type": "tool_call_end", "toolCallId": "...", "toolName": "...", "summary": "..." }
 //   { "type": "done", "content": "...", "review": {...}, ... }
 //   { "type": "error", "message": "..." }
 searchRouter.post('/', async (c) => {
@@ -27,22 +30,61 @@ searchRouter.post('/', async (c) => {
 
     const startedAt = performance.now()
 
+    // Use the request's abort signal to detect client disconnection
+    const signal = c.req.raw.signal
+
     const stream = new ReadableStream({
         async start(controller) {
             const send = (obj: unknown) => {
-                const line = `${JSON.stringify(obj)}\n`
-                controller.enqueue(new TextEncoder().encode(line))
+                try {
+                    const line = `${JSON.stringify(obj)}\n`
+                    controller.enqueue(new TextEncoder().encode(line))
+                } catch {
+                    // Controller closed (client disconnected) — ignore
+                }
             }
+
+            let aborted = false
+            const onAbort = () => {
+                aborted = true
+            }
+            signal.addEventListener('abort', onAbort, { once: true })
 
             try {
                 const result = await searchDocuments(query, {
                     segmenter: config.segmenter,
                     subagentModel: config.subagent,
                     reviewerModel: config.reviewer,
-                    onStep: (label) => {
-                        send({ type: 'step', label })
+                    searchAgentModel: config.searchAgent,
+                    thinkingLevel: config.thinkingLevel,
+                    signal,
+                    onThinkingDelta: (delta) => {
+                        if (!aborted) send({ type: 'thinking_delta', delta })
+                    },
+                    onTextDelta: (delta) => {
+                        if (!aborted) send({ type: 'text_delta', delta })
+                    },
+                    onToolCallStart: (toolCallId, toolName, label) => {
+                        if (!aborted)
+                            send({
+                                type: 'tool_call_start',
+                                toolCallId,
+                                toolName,
+                                label,
+                            })
+                    },
+                    onToolCallEnd: (toolCallId, toolName, summary) => {
+                        if (!aborted)
+                            send({
+                                type: 'tool_call_end',
+                                toolCallId,
+                                toolName,
+                                summary,
+                            })
                     },
                 })
+
+                if (aborted) return
 
                 const elapsedMs = Math.round(performance.now() - startedAt)
 
@@ -67,13 +109,19 @@ searchRouter.post('/', async (c) => {
                         : undefined,
                 })
             } catch (err) {
+                if (aborted) return
                 send({
                     type: 'error',
                     message:
                         err instanceof Error ? err.message : 'Search failed',
                 })
             } finally {
-                controller.close()
+                signal.removeEventListener('abort', onAbort)
+                try {
+                    controller.close()
+                } catch {
+                    // Already closed
+                }
             }
         },
     })

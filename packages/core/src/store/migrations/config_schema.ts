@@ -135,5 +135,21 @@ export const configSchema = {
                 },
             },
         },
+        searchAgent: {
+            type: 'object',
+            description:
+                "Optional model for the Search Screener subagent (keyword extraction + snippet screening). Falls back to 'model' if not set.",
+            required: ['provider', 'model'],
+            properties: {
+                provider: {
+                    type: 'string',
+                    $ref: '#/properties/model/properties/provider',
+                },
+                model: {
+                    type: 'string',
+                    description: 'Model identifier.',
+                },
+            },
+        },
     },
 }

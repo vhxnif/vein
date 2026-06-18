@@ -15,6 +15,7 @@
         "check": "tsc --noEmit",
         "lint": "bunx --bun @biomejs/biome lint",
         "lint:fix": "bunx --bun @biomejs/biome lint --write .",
+        "lint:hex": "sh -c '! grep -rq \"\\[#\" packages/web/src/client/' || (echo 'ERROR: hardcoded hex colors found in web client' && exit 1)",
         "format": "bunx --bun @biomejs/biome check --write ."
     },
     "devDependencies": {

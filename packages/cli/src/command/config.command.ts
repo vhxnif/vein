@@ -21,6 +21,8 @@ function display(c: ProjectConfig): string {
         `Segmenter:  ${formatMd(c.segmenter)}`,
         `Subagent:   ${formatMd(c.subagent)}`,
         `Reviewer:   ${formatMd(c.reviewer)}`,
+        `Search:     ${formatMd(c.searchAgent)}`,
+        `Thinking:  ${c.thinkingLevel ?? 'off'}`,
     ].join('\n')
 }
 
@@ -117,6 +119,16 @@ export function register(program: Command) {
                             label: 'Reviewer',
                             hint: formatMd(config.reviewer),
                         },
+                        {
+                            value: 'searchAgent',
+                            label: 'Search Screener',
+                            hint: formatMd(config.searchAgent),
+                        },
+                        {
+                            value: 'thinkingLevel',
+                            label: 'Thinking Level',
+                            hint: config.thinkingLevel ?? 'off',
+                        },
                         { value: 'done', label: 'Done — save and exit' },
                     ],
                 })
@@ -163,6 +175,42 @@ export function register(program: Command) {
                             'defaults to Model if unset'
                         )
                         config = { ...config, reviewer: md }
+                        break
+                    }
+                    case 'searchAgent': {
+                        const md = await pickModel(
+                            'Search Screener',
+                            config.searchAgent,
+                            'defaults to Model if unset'
+                        )
+                        config = { ...config, searchAgent: md }
+                        break
+                    }
+                    case 'thinkingLevel': {
+                        const level: string | symbol = await select({
+                            message: `Thinking level (current: ${config.thinkingLevel ?? 'off'})`,
+                            options: [
+                                {
+                                    value: 'off',
+                                    label: 'off',
+                                    hint: 'no reasoning',
+                                },
+                                { value: 'minimal', label: 'minimal' },
+                                { value: 'low', label: 'low' },
+                                { value: 'medium', label: 'medium' },
+                                { value: 'high', label: 'high' },
+                                { value: 'xhigh', label: 'xhigh' },
+                            ],
+                        })
+                        if (typeof level === 'string') {
+                            config = {
+                                ...config,
+                                thinkingLevel:
+                                    level === 'off'
+                                        ? undefined
+                                        : (level as ProjectConfig['thinkingLevel']),
+                            }
+                        }
                         break
                     }
                 }

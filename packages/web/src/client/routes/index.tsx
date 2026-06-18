@@ -1,56 +1,120 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useCallback, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Markdown } from '../components/Markdown'
 import { RunCat } from '../components/RunCat'
-import type { SearchResult } from '../lib/api'
-import { searchQuery } from '../lib/api'
 import { useProject } from '../lib/project'
+import { type TimelineBlock, useSearch } from '../lib/search-context'
 
 export const Route = createFileRoute('/')({
     component: HomePage,
 })
 
+// ── Braille spinner (classic single-char) ────────────────────
+
+const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
+function BrailleSpinner({ size = 'text-[10pt]' }: { size?: string }) {
+    const [frame, setFrame] = useState(0)
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setFrame((f) => (f + 1) % BRAILLE_FRAMES.length)
+        }, 120)
+        return () => clearInterval(timer)
+    }, [])
+
+    return (
+        <span
+            className={`inline-flex flex-shrink-0 leading-none ${size}`}
+            aria-hidden="true"
+        >
+            {BRAILLE_FRAMES[frame]}
+        </span>
+    )
+}
+
+// ── Single timeline block renderer ────────────────────────────
+
+function TimelineBlockView({ block }: { block: TimelineBlock }) {
+    if (block.type === 'thinking') {
+        return (
+            <div className="my-2 italic text-stone/70">
+                <Markdown>{block.text}</Markdown>
+            </div>
+        )
+    }
+
+    if (block.type === 'tool') {
+        return (
+            <div
+                className={`my-1.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[8pt] font-mono max-w-full ${
+                    block.status === 'running'
+                        ? 'border-olive/30 bg-olive/5 text-olive'
+                        : 'border-cream bg-ivory text-stone'
+                }`}
+            >
+                {block.status === 'running' && <BrailleSpinner />}
+                <span className="truncate">{block.label}</span>
+                {block.status === 'done' && block.summary && (
+                    <span className="text-stone/60 truncate">
+                        → {block.summary}
+                    </span>
+                )}
+            </div>
+        )
+    }
+
+    if (block.type === 'text') {
+        return <Markdown>{block.text}</Markdown>
+    }
+
+    return null
+}
+
+// ── Home page ────────────────────────────────────────────────
+
 function HomePage() {
     const { project } = useProject()
-    const [query, setQuery] = useState('')
-    const [searching, setSearching] = useState(false)
-    const [result, setResult] = useState<SearchResult | null>(null)
-    const [error, setError] = useState<string | null>(null)
-    const [elapsed, setElapsed] = useState(0)
-    const [steps, setSteps] = useState<string[]>([])
-    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const { query, searching, result, error, elapsed, timeline, runSearch } =
+        useSearch()
 
-    const handleSearch = useCallback(async () => {
-        if (!query.trim() || searching) return
-        if (timerRef.current) clearInterval(timerRef.current)
+    const [input, setInput] = useState(query)
+    const contentEndRef = useRef<HTMLDivElement>(null)
 
-        setSearching(true)
-        setResult(null)
-        setError(null)
-        setElapsed(0)
-        setSteps([])
-
-        const startTime = Date.now()
-        timerRef.current = setInterval(() => {
-            setElapsed(Math.round((Date.now() - startTime) / 100) / 10)
-        }, 100)
-
-        try {
-            const res = await searchQuery(query.trim(), (label) => {
-                setSteps((prev) => [...prev, label])
+    // Auto-scroll to latest content as streaming progresses
+    useEffect(() => {
+        if (searching || result) {
+            contentEndRef.current?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'end',
             })
-            setResult(res)
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Search failed')
-        } finally {
-            setSearching(false)
-            if (timerRef.current) clearInterval(timerRef.current)
         }
-    }, [query, searching])
+        // timeline is read via closure to trigger re-scroll on new blocks
+        void timeline.length
+    }, [timeline, searching, result])
+
+    const handleSearch = () => {
+        const q = input.trim()
+        if (!q || searching) return
+        runSearch(q)
+    }
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') handleSearch()
     }
+
+    const runningCount = timeline.filter(
+        (b) => b.type === 'tool' && b.status === 'running'
+    ).length
+
+    // For the completed collapsed view: split timeline into
+    // "process" (everything except the last text block) and
+    // "finalText" (the last text block, if any).
+    const lastBlock = timeline[timeline.length - 1]
+    const lastIsText = lastBlock?.type === 'text'
+    const processBlocks = lastIsText ? timeline.slice(0, -1) : timeline
+
+    const hasProcessContent = processBlocks.length > 0
 
     return (
         <div className="max-w-[780px] mx-auto px-8 py-16">
@@ -74,8 +138,8 @@ function HomePage() {
             <div className="mb-4">
                 <input
                     type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.currentTarget.value)}
+                    value={input}
+                    onChange={(e) => setInput(e.currentTarget.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Type your question..."
                     className="w-full bg-ivory ring-warm rounded-[8pt] px-6 py-4
@@ -86,34 +150,43 @@ function HomePage() {
                 />
             </div>
 
-            {/* Searching indicator */}
-            {searching && (
+            {/* Searching state with no content yet */}
+            {searching && timeline.length === 0 && (
+                <div className="mb-8 flex items-center gap-3">
+                    <RunCat size={24} />
+                    <span className="font-sans text-[9pt] text-olive">
+                        Searching...
+                    </span>
+                    <span className="font-mono text-[8pt] text-stone tabular-nums ml-auto">
+                        {elapsed}s
+                    </span>
+                </div>
+            )}
+
+            {/* ── Streaming: timeline + status bar ── */}
+            {searching && timeline.length > 0 && (
                 <div className="mb-8">
-                    <div className="flex items-center gap-3">
-                        <RunCat size={24} />
-                        <span className="font-sans text-[9pt] text-olive">
-                            {steps.length > 0
-                                ? steps[steps.length - 1]
-                                : 'Searching...'}
+                    {/* Timeline blocks */}
+                    <div className="space-y-1">
+                        {timeline.map((block) => (
+                            <TimelineBlockView key={block.id} block={block} />
+                        ))}
+                    </div>
+
+                    {/* Status bar fixed at bottom of content */}
+                    <div className="flex items-center gap-2 mt-3">
+                        <RunCat size={16} />
+                        <span className="font-sans text-[8pt] text-olive">
+                            {runningCount > 0
+                                ? `${runningCount} tool${runningCount > 1 ? 's' : ''} running`
+                                : lastBlock?.type === 'thinking'
+                                  ? 'Thinking...'
+                                  : 'Streaming...'}
                         </span>
                         <span className="font-mono text-[8pt] text-stone tabular-nums ml-auto">
                             {elapsed}s
                         </span>
                     </div>
-                    {steps.length > 1 && (
-                        <div className="mt-2 pl-7 space-y-1">
-                            {steps
-                                .slice(Math.max(0, steps.length - 6), -1)
-                                .map((s) => (
-                                    <div
-                                        key={s}
-                                        className="font-mono text-[7.5pt] text-stone"
-                                    >
-                                        ✓ {s}
-                                    </div>
-                                ))}
-                        </div>
-                    )}
                 </div>
             )}
 
@@ -124,13 +197,40 @@ function HomePage() {
                 </div>
             )}
 
-            {/* Result */}
+            {/* ── Completed result ──────────────────────────── */}
             {result && (
-                <div
-                    className="mt-10 mb-16"
-                    style={{ animation: 'fadeIn 300ms ease' }}
-                >
-                    <Markdown>{result.content}</Markdown>
+                <div className="mb-16">
+                    {/* Collapsed reasoning process */}
+                    {hasProcessContent && (
+                        <details className="mb-6">
+                            <summary className="font-sans text-[7.5pt] font-semibold text-stone uppercase tracking-wide cursor-pointer select-none hover:text-ink transition-colors">
+                                Reasoning process (
+                                {
+                                    processBlocks.filter(
+                                        (b) => b.type === 'tool'
+                                    ).length
+                                }{' '}
+                                tools
+                                {processBlocks.some(
+                                    (b) => b.type === 'thinking'
+                                ) && ', thinking'}
+                                )
+                            </summary>
+                            <div className="mt-3 pl-4 border-l-2 border-cream space-y-1">
+                                {processBlocks.map((block) => (
+                                    <TimelineBlockView
+                                        key={block.id}
+                                        block={block}
+                                    />
+                                ))}
+                            </div>
+                        </details>
+                    )}
+
+                    {/* Final answer */}
+                    <div style={{ animation: 'fadeIn 300ms ease' }}>
+                        <Markdown>{result.content}</Markdown>
+                    </div>
 
                     {/* Review */}
                     {result.review && (
@@ -168,11 +268,14 @@ function HomePage() {
             )}
 
             {/* Empty state */}
-            {!searching && !result && !error && (
+            {!searching && !result && !error && timeline.length === 0 && (
                 <p className="mt-12 font-sans text-[9pt] text-stone text-center">
                     Press Enter to search
                 </p>
             )}
+
+            {/* Scroll anchor */}
+            <div ref={contentEndRef} />
         </div>
     )
 }

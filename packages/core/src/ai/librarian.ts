@@ -26,48 +26,34 @@ const MAX_ANALYZE_RESULT_FULL = 5
 
 // ── Prompts ───────────────────────────────────────────────────
 
-const PROMPT = `你是一个文档检索 Librarian。通过关键词搜索定位文档，然后将深度分析委托给文档分析子 Agent，最后汇总结果。
+const PROMPT = `你是一个文档检索 Librarian。通过搜索子 Agent 定位文档，将深度分析委托给文档分析子 Agent，最后汇总并自检。
 
 ## 工具
 
 | 步骤 | 工具 | 返回 |
 |------|------|------|
-| 1 | searchDocsByKeyword(query, limit?, offset?) | [{docId, snippet, rank}] |
+| 1 | searchDocuments(userQuery) | [{docId, relevance, reason}] — 子 Agent 已筛选的文档列表 |
 | 2 | analyzeDocument(docId, userQuery) | 子 Agent 深度分析结果（Markdown 格式） |
 | 3 | reviewResult(query, result, sources) | 审查结果 |
 
 ## 流程
 
-1. **理解问题意图**：分析用户查询的核心意图和关键维度
-   - 用户真正想知道什么？问题的关键维度是什么（概念、技术点、实体、场景等）？
-   - 意图分析结果直接影响关键词提取——明确主体概念后，剔除修饰词和意图词
-2. **提取核心关键词**：从理解中提炼 1-3 个最具区分度的关键词，调用 searchDocsByKeyword
-   - 关键词必须是问题的核心概念，而非边缘修饰词或停用词
-   - 优先提取专有名词、技术术语、特定实体等区分度高的词
-   - 避免过于宽泛的词（如"内容""介绍""文档""功能""系统""模块"），多个关键词应互补覆盖
-   - **禁止将问题意图词作为关键词**：用户问"如何迭代"/"怎么演进"/"发展历史"时，"迭代""演进""历史""如何"等是提问方式而非搜索目标，应提取问题的主体概念（如"周期监测"），而不是意图词
-   - 示例：「Vue 3 中 ref 和 reactive 的区别」→ 关键词应为「ref reactive」，而非宽泛的「Vue 3」
-   - 示例：「周期监测功能是如何迭代的」→ 关键词应为「周期监测」，而非「功能 迭代」
-3. **搜索结果处理**：
-   - 返回结果 ≤2 篇时，换一组关键词重新搜索（使用同义词、上位词或拆分/重组关键词）
-   - 选排名靠前的相关文档调用 analyzeDocument，同一条消息中一次性批量并发调用（系统最多同时 10 个）。一次性选择所有可能相关的文档，不要分批
+1. 调用 searchDocuments(userQuery) 搜索相关文档（子 Agent 内部处理关键词提取和重搜）
+   - 如果返回空列表 []，直接输出"文档库中未找到相关内容"并停止，不要继续搜索或调用 reviewResult
+2. 对返回的文档调用 analyzeDocument，同一条消息中一次性批量并发调用（系统最多同时 10 个）
+   - 返回的文档已经过初筛，应全部分析
    - **去重**：已分析过的文档不要重复分析，即使新搜索又命中了同一篇
-    - **初筛**：利用 searchDocsByKeyword 返回的 snippet（文档核心摘要），优先分析与查询相关的文档，snippet 明显无关的可跳过
-   - **搜索止损**（满足任一即直接、简洁地告知用户"文档库中未找到相关内容"，不再继续搜索或调用 reviewResult，且不得解释搜索过程）：
-     - 连续多次搜索均未命中任何文档
-     - 已分析多篇文档，且全部相关性为 "none"
-   - 子 Agent 返回 Markdown 格式分析，包含：## 相关性、## 概述、## 关键发现、## 数据来源、## 详细分析
-4. 整理所有文档的分析结果，形成最终答案
+3. 整理所有文档的分析结果，形成最终答案
    - 按文档逐一列出，每篇包含：文档标题、相关性、子 Agent 的「详细分析」原文
    - 不要用自己的话重新概括子 Agent 的分析——直接引用子 Agent 返回的内容
    - 对 relevance 为 low 的可压缩，none 的忽略
+   - 所有文档相关性均为 "none" 时，直接输出"文档库中未找到相关内容"并停止，不要调用 reviewResult
    - **时序排序**：如果文档/分析结果之间存在时序关系（如版本演进、日期先后、事件因果），必须按时序排列；无法判断时序时按相关性 rank 降序排列
-5. 调用 reviewResult 自检
+4. 调用 reviewResult 自检
    - 仅在找到至少 1 篇相关性非 "none" 的文档时才调用 reviewResult
-   - 如果所有文档相关性均为 "none"，直接告知用户未找到相关内容，不要调用 reviewResult
    - **必须填充 sources 参数**：从各文档分析的「## 数据来源」中收集全部 nodeId，以 JSON 字符串形式传入 sources，格式：'[{"docId":"abc","nodeId":"0001"}]'。**提取 nodeId 时只取冒号前的纯数字前缀（如 "0001: 背景" 取 "0001"），不要带章节标题**。sources 为空或缺省时审查员会直接判 fail
    - 调用前先自我审视：当前结果是否全面覆盖了用户问题的各个方面？
-   - 如有明显遗漏，主动补搜/补分析后再审查，避免浪费审查重试次数
+   - 如有明显遗漏，可再次调用 searchDocuments 补搜（传入调整后的 userQuery），然后补分析遗漏文档后再审查
    - reviewResult 不通过时（partial/fail），增量调整（扩大搜索、补分析遗漏文档），最多重试 2 次
    - 系统硬性约束：reviewResult 最多调用 3 次（含首次），主 Agent 工具调用总数上限 40 次，超限将被强制终止并基于现有结果输出
 
@@ -147,6 +133,43 @@ high / medium / low / none
 - 如果 getDocStructure 返回的内容与用户问题明显无关，直接返回 none，不要浪费步骤读原文
 - 详细分析中必须包含原文引用和 nodeId 出处
 - 不要编造文档中不存在的内容`
+
+const SEARCH_SCREENER_PROMPT = `你是一个文档搜索筛选员。根据用户查询搜索文档库，只返回可能包含相关信息的文档。
+
+## 工具
+
+| 工具 | 返回 |
+|------|------|
+| searchDocsByKeyword(query, limit?, offset?) | [{docId, snippet, rank, outline}] |
+
+其中 outline 是文档标题大纲（仅章节标题，无摘要正文），snippet 是文档核心摘要。
+两者结合判断：snippet 模糊但 outline 中有相关章节标题 → 可能相关。
+
+## 流程
+
+1. 分析用户查询，识别核心主题（剔除意图词如"如何迭代"/"发展历史"等，聚焦主体概念）
+2. 提取 1-3 个区分度高的关键词，调用 searchDocsByKeyword
+3. 结合 snippet + outline 筛选相关性：
+   - snippet 或 outline 与核心主题明显相关 → 保留
+   - outline 中有专门章节（如"XXX优化"/"XXX功能"）匹配查询 → high
+   - snippet 与 outline 均描述无关模块/系统 → 跳过
+   - snippet 很短（<20 字符）且 outline 简单 → 降低优先级
+4. 返回 ≤2 篇时，换一组关键词重新搜索（同义词/上位词/拆分重组）
+5. 止损：连续 2 轮搜索返回 0 条相关结果时，返回空列表
+
+## 输出格式
+
+只返回纯 JSON 数组（不要 Markdown 包裹，不要解释）：
+[{"docId":"<id>","relevance":"high|medium|low","reason":"<基于 snippet+outline 的一句话概述>"}]
+
+## 约束
+
+- 最多 5 次搜索
+- 最多返回 10 篇文档
+- 只返回 snippet/outline 表明与查询相关的文档
+- 相关性标注：high=大纲中有专门章节，medium=部分涉及，low=仅边缘提及
+- 空结果时返回 []
+`
 
 function renderDocStructure(
     nodes: TreeNode<BaseDocNode>[],
@@ -304,7 +327,8 @@ function makeSearchDocsByKeyword(ctx: ToolCtx, segmenter?: ModelProvider): any {
             '关键词应是用户问题中最具区分度的概念词和专有名词，避免泛化词（功能/系统/模块）和问题意图词（迭代/演进/历史/如何）。' +
             '示例：「周期监测功能是如何迭代的」→ 关键词应为「周期监测」。' +
             '默认返回前 10 条，可通过 offset 翻页；如果前 10 条均不相关，可用 offset=10 获取更多结果。' +
-            '返回 [{docId, metadata, snippet, rank}]，按匹配度降序。snippet 为文档核心摘要，用于快速判断文档是否与查询相关。',
+            '返回 [{docId, snippet, rank, outline}]，按匹配度降序。' +
+            'snippet 为文档核心摘要，outline 为文档标题大纲（仅章节标题，无摘要正文），二者结合用于判断相关性。',
         parameters: Type.Object({
             query: Type.String({ description: '搜索关键词' }),
             limit: Type.Optional(
@@ -327,14 +351,39 @@ function makeSearchDocsByKeyword(ctx: ToolCtx, segmenter?: ModelProvider): any {
                 offset?: number
             }
             const key = `searchDocsByKeyword:${query}:${limit ?? 10}:${offset ?? 0}`
-            const result = await cached(key, () =>
-                searchDocsByKeyword(
+            const result = await cached(key, async () => {
+                const raw = await searchDocsByKeyword(
                     query,
                     segmenter,
                     Math.min(limit ?? 10, 20),
                     offset ?? 0
                 )
-            )
+                // Enrich each result with a compact document outline
+                // (nodeId + title only, no summaries) for better screening
+                const parsed = JSON.parse(raw) as Array<{
+                    docId: string
+                    snippet: string
+                    rank: number
+                }>
+                if (!Array.isArray(parsed) || parsed.length === 0) {
+                    return raw
+                }
+                const enriched = await Promise.all(
+                    parsed.map(async (doc) => {
+                        try {
+                            const tree = await getFullTree<BaseDocNode>(
+                                doc.docId
+                            )
+                            const full = renderDocStructure(tree)
+                            const outline = compactDocText(full)
+                            return { ...doc, outline }
+                        } catch {
+                            return { ...doc, outline: '' }
+                        }
+                    })
+                )
+                return JSON.stringify(enriched)
+            })
             return ok(result)
         }),
     }
@@ -484,6 +533,138 @@ async function analyzeDocument(
     )
 }
 
+// ── Search Screener Subagent ───────────────────────────────────
+
+/**
+ * Spawns a lightweight subagent that searches the document library with
+ * automatic keyword extraction, re-search fallback, and snippet-based
+ * relevance screening. Returns a curated list of docIds so the main agent
+ * does not have to process raw search results.
+ */
+async function searchAndScreen(
+    userQuery: string,
+    segmenter?: ModelProvider,
+    modelOverride?: ModelProvider,
+    onStep?: (label: string) => void
+): Promise<string> {
+    const provider = modelOverride ?? getModelProvider()
+    const model = getModel(provider.provider as never, provider.model)
+
+    const slog = logger.child({ module: 'search-screener' })
+    slog.info({
+        model: `${provider.provider}/${provider.model}`,
+        queryLen: userQuery.length,
+        content: 'SearchScreener start',
+    })
+
+    const cache = new Map<string, string>()
+    const ctx: ToolCtx = {
+        cached: async (key, fn) => {
+            const hit = cache.get(key)
+            if (hit !== undefined) return hit
+            const val = await fn()
+            cache.set(key, val)
+            return val
+        },
+        ok: (s) => ({
+            content: [{ type: 'text' as const, text: s }],
+            details: {},
+        }),
+        tool: (fn) => fn,
+    }
+
+    const MAX_STEPS = 6
+    let stepCount = 0
+
+    const agent = new Agent({
+        initialState: {
+            systemPrompt: SEARCH_SCREENER_PROMPT,
+            model,
+            tools: [makeSearchDocsByKeyword(ctx, segmenter)],
+        },
+        beforeToolCall: async () => {
+            stepCount++
+            if (stepCount > MAX_STEPS) {
+                slog.warn({
+                    stepCount,
+                    content: 'SearchScreener step budget exceeded, blocking',
+                })
+                return {
+                    block: true,
+                    reason: '已达到步骤预算上限，请基于已有搜索结果输出最终筛选列表',
+                }
+            }
+        },
+    })
+
+    // Forward subagent steps to the user + log instrumentation
+    const toolStartTimes = new Map<string, number>()
+    agent.subscribe((event) => {
+        if (event.type === 'tool_execution_start') {
+            toolStartTimes.set(event.toolCallId, performance.now())
+            const label = buildStepLabel(
+                event.toolName,
+                (event.args as Record<string, unknown>) ?? {}
+            )
+            onStep?.(`[Search] ${label}`)
+            slog.debug({
+                toolName: event.toolName,
+                stepCount,
+                content: 'SearchScreener tool start',
+            })
+        }
+        if (event.type === 'tool_execution_end') {
+            const start = toolStartTimes.get(event.toolCallId)
+            const elapsedMs =
+                start !== undefined
+                    ? Math.round(performance.now() - start)
+                    : undefined
+            const resultText =
+                event.result?.content
+                    ?.filter(
+                        (it: { type: string; text?: string }) =>
+                            it.type === 'text'
+                    )
+                    .map((it: { text?: string }) => it.text)
+                    .join('') ?? ''
+            const label = buildResultLabel(event.toolName, resultText)
+            if (label) {
+                onStep?.(`  ${label}`)
+            }
+            slog.debug({
+                toolName: event.toolName,
+                resultLen: resultText.length,
+                elapsedMs,
+                content: 'SearchScreener tool end',
+            })
+        }
+    })
+
+    await agent.prompt(
+        `用户查询: ${userQuery}\n\n请搜索相关文档并返回筛选后的列表。`
+    )
+
+    const messages = agent.state.messages
+    slog.info({
+        msgCount: messages.length,
+        content: 'SearchScreener complete',
+    })
+
+    const lastAssistant = [...messages]
+        .reverse()
+        .find((m) => m.role === 'assistant')
+
+    const raw =
+        lastAssistant?.content
+            .filter((it) => it.type === 'text')
+            .map((it) => it.text)
+            .join('\n') ?? ''
+
+    // Try to extract JSON array from the output (model may wrap in markdown)
+    const jsonMatch = raw.match(/\[[\s\S]*\]/)
+    return jsonMatch ? jsonMatch[0] : raw || '[]'
+}
+
 /** Extract relevance and summary from the subagent's markdown output. */
 function parseAnalyzeResult(raw: string): {
     relevance: string
@@ -528,7 +709,7 @@ class Semaphore {
 // ── Main Agent Tools ───────────────────────────────────────────
 
 function makeAnalyzeDocument(
-    { cached, ok, tool, onStep }: ToolCtx,
+    { cached, ok, tool }: ToolCtx,
     sem: Semaphore,
     modelOverride?: ModelProvider
 ): any {
@@ -557,7 +738,7 @@ function makeAnalyzeDocument(
                         return await analyzeDocument(
                             docId,
                             userQuery,
-                            onStep,
+                            undefined,
                             modelOverride
                         )
                     } catch (err) {
@@ -590,11 +771,41 @@ function makeAnalyzeDocument(
     }
 }
 
+function makeSearchDocuments(
+    { cached, ok, tool }: ToolCtx,
+    segmenter?: ModelProvider,
+    searchModel?: ModelProvider
+): any {
+    return {
+        name: 'searchDocuments',
+        description:
+            '搜索文档库中与用户查询相关的文档。' +
+            '内部子 Agent 处理关键词提取、重搜和 snippet 相关性筛选。' +
+            '返回已筛选的文档列表 [{docId, relevance, reason}]。' +
+            '空列表 [] 表示未找到相关文档。',
+        parameters: Type.Object({
+            userQuery: Type.String({
+                description: '用户原始查询，透传给搜索子 Agent',
+            }),
+        }),
+        execute: tool(async (_, p) => {
+            const { userQuery } = p as { userQuery: string }
+            const key = `searchDocuments:${userQuery}`
+            return ok(
+                await cached(key, () =>
+                    searchAndScreen(userQuery, segmenter, searchModel)
+                )
+            )
+        }),
+    }
+}
+
 function buildMainTools(
     segmenter?: ModelProvider,
     onStep?: (label: string) => void,
     subagentModel?: ModelProvider,
-    reviewerModel?: ModelProvider
+    reviewerModel?: ModelProvider,
+    searchAgentModel?: ModelProvider
 ): any[] {
     const sem = new Semaphore(MAX_PARALLEL_ANALYZE)
     const cache = new Map<string, string>()
@@ -616,7 +827,7 @@ function buildMainTools(
     }
 
     return [
-        makeSearchDocsByKeyword(ctx, segmenter),
+        makeSearchDocuments(ctx, segmenter, searchAgentModel),
         makeAnalyzeDocument(ctx, sem, subagentModel),
         makeReviewResult(ctx, reviewerModel),
     ]
@@ -655,6 +866,28 @@ function summarizeResult(tool: string, raw: string): string {
     if (tool === 'analyzeDocument') {
         const { relevance, summary } = parseAnalyzeResult(raw)
         return `${relevance}: ${ellipsis(summary, 80)}`
+    }
+    if (tool === 'searchDocuments') {
+        try {
+            const parsed = JSON.parse(raw) as Array<{
+                docId?: string
+                relevance?: string
+                reason?: string
+            }>
+            if (Array.isArray(parsed)) {
+                const samples = parsed
+                    .slice(0, 3)
+                    .map(
+                        (d) =>
+                            `${d.docId?.slice(0, 8) ?? '?'}:${d.relevance ?? '?'}`
+                    )
+                    .join(', ')
+                return `${parsed.length} docs: ${samples}${parsed.length > 3 ? '…' : ''}`
+            }
+        } catch {
+            // ignore
+        }
+        return raw.slice(0, 120)
     }
     try {
         const parsed = JSON.parse(raw) as unknown
@@ -818,6 +1051,8 @@ function buildStepLabel(
     switch (toolName) {
         case 'searchDocsByKeyword':
             return `Searching: "${ellipsis(String(args.query ?? ''), 36)}"...`
+        case 'searchDocuments':
+            return `Searching document library...`
         case 'analyzeDocument':
             return `Analyzing document ${(String(args.docId ?? '')).slice(0, 8)}...`
         case 'getDocStructure':
@@ -873,6 +1108,44 @@ function buildResultLabel(
                 }
                 return undefined
             }
+            case 'searchDocuments': {
+                try {
+                    const parsed = JSON.parse(resultText) as Array<{
+                        docId?: string
+                        relevance?: string
+                    }>
+                    if (Array.isArray(parsed)) {
+                        if (parsed.length === 0)
+                            return 'No relevant documents found'
+                        const counts: Record<string, number> = {}
+                        for (const d of parsed) {
+                            const r = d.relevance ?? 'unknown'
+                            counts[r] = (counts[r] ?? 0) + 1
+                        }
+                        const parts = Object.entries(counts).map(
+                            ([k, v]) => `${k}:${v}`
+                        )
+                        return `Screened ${parsed.length} doc(s): ${parts.join(', ')}`
+                    }
+                } catch {
+                    // ignore parse error
+                }
+                return undefined
+            }
+            case 'reviewResult': {
+                try {
+                    const parsed = JSON.parse(resultText) as {
+                        verdict?: string
+                        score?: number
+                    }
+                    if (parsed.verdict) {
+                        return `Review: ${parsed.verdict} (${parsed.score ?? '?'}/5)`
+                    }
+                } catch {
+                    // ignore parse error
+                }
+                return undefined
+            }
             default:
                 return undefined
         }
@@ -921,6 +1194,8 @@ function buildToolDetail(
     switch (toolName) {
         case 'searchDocsByKeyword':
             return `"${String(args.query ?? '')}"`
+        case 'searchDocuments':
+            return `"${ellipsis(String(args.userQuery ?? ''), 60)}"`
         case 'analyzeDocument':
             return `doc=${(String(args.docId ?? '')).slice(0, 8)}`
         case 'getDocStructure':
@@ -941,6 +1216,23 @@ async function librarian(
         segmenter?: ModelProvider
         subagentModel?: ModelProvider
         reviewerModel?: ModelProvider
+        searchAgentModel?: ModelProvider
+        signal?: AbortSignal
+        /** Optional thinking/reasoning level. Defaults to 'high' for models that support it. */
+        thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+        /** Streaming callbacks for real-time LLM output (web UI). */
+        onThinkingDelta?: (delta: string) => void
+        onTextDelta?: (delta: string) => void
+        onToolCallStart?: (
+            toolCallId: string,
+            toolName: string,
+            label: string
+        ) => void
+        onToolCallEnd?: (
+            toolCallId: string,
+            toolName: string,
+            summary: string
+        ) => void
     }
 ): Promise<LibrarianResult> {
     const provider = getModelProvider()
@@ -957,11 +1249,13 @@ async function librarian(
         initialState: {
             systemPrompt: PROMPT,
             model,
+            thinkingLevel: opts?.thinkingLevel ?? 'off',
             tools: buildMainTools(
                 opts?.segmenter,
                 onStep,
                 opts?.subagentModel,
-                opts?.reviewerModel
+                opts?.reviewerModel,
+                opts?.searchAgentModel
             ),
         },
         transformContext: async (messages) => pruneContext(messages),
@@ -983,16 +1277,28 @@ async function librarian(
     })
 
     if (onStep) {
+        let analyzeCount = 0
         agent.subscribe((event) => {
             if (event.type === 'tool_execution_start') {
-                onStep(
-                    buildStepLabel(
-                        event.toolName,
-                        (event.args as Record<string, unknown>) ?? {}
+                if (event.toolName === 'reviewResult') {
+                    const prefix =
+                        analyzeCount > 0
+                            ? `${analyzeCount} doc(s) analyzed · `
+                            : ''
+                    onStep(`${prefix}Reviewing answer quality...`)
+                } else {
+                    onStep(
+                        buildStepLabel(
+                            event.toolName,
+                            (event.args as Record<string, unknown>) ?? {}
+                        )
                     )
-                )
+                }
             }
             if (event.type === 'tool_execution_end') {
+                if (event.toolName === 'analyzeDocument') {
+                    analyzeCount++
+                }
                 const resultText =
                     event.result?.content
                         ?.filter(
@@ -1005,6 +1311,51 @@ async function librarian(
                 if (label) {
                     onStep(label)
                 }
+                // Transition: compiling final answer after review
+                if (event.toolName === 'reviewResult') {
+                    onStep('Compiling final answer...')
+                }
+            }
+        })
+    }
+
+    // Streaming subscriber for web UI: forward LLM text/thinking deltas,
+    // and tool execution lifecycle events with human-readable labels.
+    const hasStreamCallbacks =
+        opts?.onThinkingDelta ||
+        opts?.onTextDelta ||
+        opts?.onToolCallStart ||
+        opts?.onToolCallEnd
+    if (hasStreamCallbacks) {
+        agent.subscribe((event) => {
+            if (event.type === 'message_update') {
+                const ae = event.assistantMessageEvent
+                if (ae.type === 'thinking_delta') {
+                    opts?.onThinkingDelta?.(ae.delta)
+                } else if (ae.type === 'text_delta') {
+                    opts?.onTextDelta?.(ae.delta)
+                }
+            }
+            if (event.type === 'tool_execution_start') {
+                const label = buildStepLabel(
+                    event.toolName,
+                    (event.args as Record<string, unknown>) ?? {}
+                )
+                opts?.onToolCallStart?.(event.toolCallId, event.toolName, label)
+            }
+            if (event.type === 'tool_execution_end') {
+                const resultText =
+                    event.result?.content
+                        ?.filter(
+                            (it: { type: string; text?: string }) =>
+                                it.type === 'text'
+                        )
+                        .map((it: { text?: string }) => it.text)
+                        .join('') ?? ''
+                const summary =
+                    buildResultLabel(event.toolName, resultText) ??
+                    `${resultText.length} chars`
+                opts?.onToolCallEnd?.(event.toolCallId, event.toolName, summary)
             }
         })
     }
@@ -1052,7 +1403,23 @@ async function librarian(
         }
     })
 
-    await agent.prompt(msg)
+    // Wire external abort signal to agent so client disconnect stops the pipeline
+    let onAbort: (() => void) | undefined
+    if (opts?.signal) {
+        if (opts.signal.aborted) {
+            throw new DOMException('Aborted', 'AbortError')
+        }
+        onAbort = () => agent.abort()
+        opts.signal.addEventListener('abort', onAbort, { once: true })
+    }
+
+    try {
+        await agent.prompt(msg)
+    } finally {
+        if (opts?.signal && onAbort) {
+            opts.signal.removeEventListener('abort', onAbort)
+        }
+    }
 
     const messages = agent.state.messages
     log.info({
