@@ -21,6 +21,24 @@ src/
 
 ## AI Agent Architecture
 
+### Directory Layout
+
+```
+ai/
+├── types.ts              ToolCtx, ToolMeta — cross-cutting types
+├── base.ts               call(), getModel(), createSummarizer()
+├── tools.ts              searchDocsByKeyword() + its ToolMeta
+├── librarian.ts          Main orchestrator (Agent + instrumentation)
+├── index.ts              Barrel exports
+└── sub-agents/
+    ├── doc-analyzer.ts   Document Analyzer: analyzeDocument() + createAnalyzeDocumentTool()
+    ├── search-screener.ts  Search Screener: searchAndScreen() + createSearchDocumentsTool()
+    ├── reviewer.ts       Reviewer: reviewer() + createReviewResultTool()
+    └── utils.ts          Shared: Semaphore, ellipsis, extractResultText(), renderDocStructure()
+```
+
+### Sub-Agent Tiers
+
 | Tier | Agent | Budget | Tools | Log Module |
 |------|-------|:---:|-------|------------|
 | 1 | SearchScreener | ≤6 | `searchDocsByKeyword` (embeds `outline`) | `search-screener` |
@@ -28,8 +46,48 @@ src/
 | 3 | Reviewer | — | `getReviewSource` | `ai` |
 
 - Main Librarian returns `LibrarianResult { content, trace, review? }`
-- `analyzeDocument` concurrency: `Semaphore(MAX_PARALLEL_ANALYZE=10)`
+- `analyzeDocument` concurrency: `Semaphore(MAX_PARALLEL_ANALYZE=10)` (in `doc-analyzer.ts`)
 - Review retries up to 2x on partial/fail verdict
+
+### ToolMeta Pattern
+
+Each `create*Tool()` returns `{ tool, meta }` where `meta: ToolMeta` bundles per-tool formatting:
+
+```ts
+type ToolMeta = {
+    stepLabel: (args) => string           // "Analyzing document abc123..."
+    resultLabel: (text) => string | undefined  // "Analysis: high · 5.2KB"
+    resultSummary: (raw) => string        // "high: document covers X and Y"
+    logDetail: (args) => string           // "doc=abc123"
+}
+```
+
+`buildMainTools()` collects metas into `Record<string, ToolMeta>` and threads it through:
+`createLibrarianAgent()` → `installAgentInstrumentation()` → `extractFinalResult()`.
+
+No separate registry file. Adding a tool: define its ToolMeta alongside the `create*Tool()` function,
+return both, and it automatically participates in all instrumentation.
+
+**Tool ownership**: `tools.ts` owns metadata for `searchDocsByKeyword`. Sub-agent files own
+metadata for tools they create (`analyzeDocument`, `searchDocuments`, `reviewResult`, etc.).
+
+### Instrumentation (Single Subscriber)
+
+`installAgentInstrumentation()` merges what were 3 separate `agent.subscribe()` calls into one
+handler that processes `tool_execution_start`, `tool_execution_end`, and `message_update` events.
+Returns `toolTimings: Map<string, number>` for trace extraction.
+
+### Main Librarian Pipeline
+
+```ts
+librarian(msg, onStep, opts):
+    { agent, toolMeta } = createLibrarianAgent(onStep, opts)
+    toolTimings = installAgentInstrumentation(agent, toolMeta, onStep, opts)
+    cleanup = wireAbort(agent, opts?.signal)
+    await agent.prompt(msg)
+    cleanup()
+    return extractFinalResult(agent.state.messages, toolTimings, toolMeta)
+```
 
 ### Adding a New Model Config Field — Checklist
 
@@ -71,6 +129,9 @@ Must touch 6 locations:
 ### Code Patterns
 
 - **`compactDocText` regex**: Use `/^\s*\d+\s+\S/` instead of hardcoded `/^\s*\d{4}\s/` — nodeId format may change.
+- **`extractResultText(result)`**: Always use this helper (from `sub-agents/utils.ts`) to extract text from tool results instead of inline `.filter().map().join()` chains.
+- **Tool metadata ownership**: `tools.ts` functions own their metadata in `tools.ts`. Sub-agent tools own theirs in the sub-agent file. Never mix — if a tool moves files, its meta moves with it.
+- **Cross-cutting types (`ToolCtx`, `ToolMeta`)**: These live in `ai/types.ts` (not `sub-agents/`) because `librarian.ts`, `tools.ts`, and sub-agents all depend on them.
 
 ### Template Literal Trap
 
