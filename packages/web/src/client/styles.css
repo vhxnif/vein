@@ -80,6 +80,28 @@
 }
 
 /* ── Base Styles ──────────────────────────────────────────── */
+html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-cream) transparent;
+}
+
+html::-webkit-scrollbar {
+    width: 5px;
+}
+
+html::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+html::-webkit-scrollbar-thumb {
+    background: var(--border-cream);
+    border-radius: 3px;
+}
+
+html::-webkit-scrollbar-thumb:hover {
+    background: var(--stone);
+}
+
 body {
     font-family: var(--serif);
     background-color: var(--parchment);
@@ -271,4 +293,27 @@ body::before {
     font-family: var(--sans);
     font-size: 7.5pt;
     font-weight: 600;
+}
+
+/* ── Custom Scrollbar ─────────────────────────────────────── */
+.kami-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-cream) transparent;
+}
+
+.kami-scrollbar::-webkit-scrollbar {
+    width: 5px;
+}
+
+.kami-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.kami-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--border-cream);
+    border-radius: 3px;
+}
+
+.kami-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--stone);
 }

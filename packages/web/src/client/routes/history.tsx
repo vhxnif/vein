@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Markdown } from '../components/Markdown'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { annotateNodeRefs, Markdown } from '../components/Markdown'
 import type { HistoryEntry } from '../lib/api'
 import { fetchHistory, fetchHistoryEntry } from '../lib/api'
 import { useProject } from '../lib/project'
@@ -281,6 +281,29 @@ function ExpandedEntry({ id }: { id: string }) {
         staleTime: 60_000,
     })
 
+    // Build docIdMap from trace args.docId
+    const docIdMap = useMemo(() => {
+        const m = new Map<string, string>()
+        if (entry?.trace) {
+            for (const step of entry.trace) {
+                const args = (step as Record<string, unknown>).args as
+                    | Record<string, unknown>
+                    | undefined
+                const docId = args?.docId as string | undefined
+                if (docId) {
+                    m.set(docId.slice(0, 8), docId)
+                }
+            }
+        }
+        return m
+    }, [entry?.trace])
+
+    const annotatedAnswer = useMemo(() => {
+        const raw = entry?.answer || ''
+        if (!raw) return ''
+        return annotateNodeRefs(raw, docIdMap)
+    }, [entry?.answer, docIdMap])
+
     if (isLoading) {
         return (
             <div className="px-3 pb-4 font-sans text-[8.5pt] text-olive">
@@ -294,7 +317,7 @@ function ExpandedEntry({ id }: { id: string }) {
     return (
         <div className="px-3 pb-4">
             <div className="mt-2">
-                <Markdown>{entry.answer || '(no answer)'}</Markdown>
+                <Markdown docIdMap={docIdMap}>{annotatedAnswer}</Markdown>
             </div>
 
             {entry.verdict && (

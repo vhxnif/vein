@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useEffect, useRef, useState } from 'react'
-import { Markdown } from '../components/Markdown'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { annotateNodeRefs, Markdown } from '../components/Markdown'
 import { RunCat } from '../components/RunCat'
 import { useProject } from '../lib/project'
 import { type TimelineBlock, useSearch } from '../lib/search-context'
@@ -116,6 +116,23 @@ function HomePage() {
     const processBlocks = lastIsText ? timeline.slice(0, -1) : timeline
 
     const hasProcessContent = processBlocks.length > 0
+
+    // Build shortId → fullDocId lookup from result.docNames
+    const docIdMap = useMemo(() => {
+        const m = new Map<string, string>()
+        if (result?.docNames) {
+            for (const fullId of Object.keys(result.docNames)) {
+                m.set(fullId.slice(0, 8), fullId)
+            }
+        }
+        return m
+    }, [result?.docNames])
+
+    // Annotate node references in content for hover tooltips
+    const annotatedContent = useMemo(() => {
+        if (!result?.content) return ''
+        return annotateNodeRefs(result.content, docIdMap)
+    }, [result?.content, docIdMap])
 
     return (
         <div className="max-w-[780px] mx-auto px-8 py-16">
@@ -259,7 +276,9 @@ function HomePage() {
 
                     {/* Final answer */}
                     <div style={{ animation: 'fadeIn 300ms ease' }}>
-                        <Markdown>{result.content}</Markdown>
+                        <Markdown docIdMap={docIdMap}>
+                            {annotatedContent}
+                        </Markdown>
                     </div>
 
                     {/* Review */}
