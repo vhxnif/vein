@@ -9,7 +9,7 @@ export {
     listProviders,
     setModelProvider,
 } from './ai/base'
-export type { LibrarianResult, TraceStep } from './ai/librarian'
+export type { LibrarianResult, Mode, TraceStep } from './ai/librarian'
 export { librarian } from './ai/librarian'
 export type { ReviewResult, SourceRef } from './ai/sub-agents/reviewer'
 export { reviewer } from './ai/sub-agents/reviewer'

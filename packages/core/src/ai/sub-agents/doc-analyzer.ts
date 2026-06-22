@@ -3,16 +3,15 @@ import { Agent } from '@earendil-works/pi-agent-core'
 import { getModel, Type } from '@earendil-works/pi-ai'
 import { logger } from '../../config'
 import type { ModelProvider } from '../../config/type'
-import { getFullTree, getNodeDetails } from '../../store'
-import type { BaseDocNode } from '../../tree/type'
 import { getErrorMessage } from '../../utils/common'
 import { getModelProvider } from '../base'
 import type { ToolCtx, ToolMeta } from '../types'
 import {
     ellipsis,
     extractResultText,
+    makeGetDocNodeDetails,
+    makeGetDocStructure,
     parseAnalyzeResult,
-    renderDocStructure,
     Semaphore,
 } from './utils'
 
@@ -129,51 +128,6 @@ high / medium / low / none
 - 如果 getDocStructure 返回的内容与用户问题明显无关，直接返回 none，不要浪费步骤读原文
 - 详细分析中必须包含原文引用和 nodeId 出处
 - 不要编造文档中不存在的内容`
-
-function makeGetDocStructure({ cached, ok, tool }: ToolCtx): any {
-    return {
-        name: 'getDocStructure',
-        description: '获取文档结构（含标题和摘要），返回缩进树形文本。',
-        parameters: Type.Object({
-            docId: Type.String({ description: '文章Id' }),
-        }),
-        execute: tool(async (_, p) => {
-            const { docId } = p as { docId: string }
-            const result = await cached(
-                `getDocStructure:${docId}`,
-                async () => {
-                    const tree = await getFullTree<BaseDocNode>(`${docId}`)
-                    return renderDocStructure(tree)
-                }
-            )
-            return ok(result)
-        }),
-    }
-}
-
-function makeGetDocNodeDetails({ cached, ok, tool }: ToolCtx): any {
-    return {
-        name: 'getDocNodeDetails',
-        description: '获取文章节点详细原文',
-        parameters: Type.Object({
-            docId: Type.String({ description: '文章Id' }),
-            nodeId: Type.String({ description: '文章节点Id' }),
-        }),
-        execute: tool(async (_, p) => {
-            const { docId, nodeId } = p as { docId: string; nodeId: string }
-            const result = await cached(
-                `getDocNodeDetails:${docId}:${nodeId}`,
-                async () => {
-                    const d = await getNodeDetails<BaseDocNode>(
-                        `${nodeId}_${docId}`
-                    )
-                    return d?.text ?? ''
-                }
-            )
-            return ok(result)
-        }),
-    }
-}
 
 /**
  * Runs a subagent that deeply analyzes a single document against the user's

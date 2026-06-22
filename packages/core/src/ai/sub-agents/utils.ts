@@ -1,4 +1,7 @@
+import { Type } from '@earendil-works/pi-ai'
+import { getFullTree, getNodeDetails } from '../../store'
 import type { BaseDocNode, TreeNode } from '../../tree/type'
+import type { ToolCtx } from '../types'
 
 export class Semaphore {
     private waiters: (() => void)[] = []
@@ -113,4 +116,61 @@ export function compactAnalyzeResult(text: string): string {
     const { relevance, summary } = parseAnalyzeResult(text)
     const sources = extractAnalyzeSources(text)
     return `[compacted] relevance=${relevance} summary=${ellipsis(summary, 100)} sources=${sources ? ellipsis(sources, 200) : 'none'}`
+}
+
+// ── Shared tool factories for doc-analyzer & fragment-extractor ──
+
+/**
+ * Creates a `getDocStructure` tool for document sub-agents.
+ * Returns the full document tree rendered as indented text.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: AgentTool type constraints
+export function makeGetDocStructure({ cached, ok, tool }: ToolCtx): any {
+    return {
+        name: 'getDocStructure',
+        description: '获取文档结构（含标题和摘要），返回缩进树形文本。',
+        parameters: Type.Object({
+            docId: Type.String({ description: '文章Id' }),
+        }),
+        execute: tool(async (_: unknown, p: unknown) => {
+            const { docId } = p as { docId: string }
+            const result = await cached(
+                `getDocStructure:${docId}`,
+                async () => {
+                    const tree = await getFullTree<BaseDocNode>(`${docId}`)
+                    return renderDocStructure(tree)
+                }
+            )
+            return ok(result)
+        }),
+    }
+}
+
+/**
+ * Creates a `getDocNodeDetails` tool for document sub-agents.
+ * Returns the full text of a single document node.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: AgentTool type constraints
+export function makeGetDocNodeDetails({ cached, ok, tool }: ToolCtx): any {
+    return {
+        name: 'getDocNodeDetails',
+        description: '获取文章节点详细原文',
+        parameters: Type.Object({
+            docId: Type.String({ description: '文章Id' }),
+            nodeId: Type.String({ description: '文章节点Id' }),
+        }),
+        execute: tool(async (_: unknown, p: unknown) => {
+            const { docId, nodeId } = p as { docId: string; nodeId: string }
+            const result = await cached(
+                `getDocNodeDetails:${docId}:${nodeId}`,
+                async () => {
+                    const d = await getNodeDetails<BaseDocNode>(
+                        `${nodeId}_${docId}`
+                    )
+                    return d?.text ?? ''
+                }
+            )
+            return ok(result)
+        }),
+    }
 }

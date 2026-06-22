@@ -377,13 +377,13 @@ export interface SearchStreamCallbacks {
 
 export async function searchQuery(
     q: string,
-    callbacks?: SearchStreamCallbacks,
+    options?: SearchStreamCallbacks & { mode?: 'default' | 'raw' },
     signal?: AbortSignal
 ): Promise<SearchResult> {
     const res = await fetch(u('/projects/current/search'), {
         method: 'POST',
         headers: h({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ q }),
+        body: JSON.stringify({ q, mode: options?.mode ?? 'default' }),
         signal,
     })
     if (!res.ok) {
@@ -411,17 +411,17 @@ export async function searchQuery(
                 if (!line.trim()) continue
                 const data = JSON.parse(line) as Record<string, unknown>
                 if (data.type === 'thinking_delta') {
-                    callbacks?.onThinkingDelta?.(String(data.delta))
+                    options?.onThinkingDelta?.(String(data.delta))
                 } else if (data.type === 'text_delta') {
-                    callbacks?.onTextDelta?.(String(data.delta))
+                    options?.onTextDelta?.(String(data.delta))
                 } else if (data.type === 'tool_call_start') {
-                    callbacks?.onToolCallStart?.(
+                    options?.onToolCallStart?.(
                         String(data.toolCallId),
                         String(data.toolName),
                         String(data.label)
                     )
                 } else if (data.type === 'tool_call_end') {
-                    callbacks?.onToolCallEnd?.(
+                    options?.onToolCallEnd?.(
                         String(data.toolCallId),
                         String(data.toolName),
                         String(data.summary)

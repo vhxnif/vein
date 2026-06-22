@@ -79,6 +79,7 @@ function HomePage() {
         useSearch()
 
     const [input, setInput] = useState(query)
+    const [mode, setMode] = useState<'default' | 'raw'>('default')
     const contentEndRef = useRef<HTMLDivElement>(null)
 
     // Auto-scroll to latest content as streaming progresses
@@ -96,7 +97,7 @@ function HomePage() {
     const handleSearch = () => {
         const q = input.trim()
         if (!q || searching) return
-        runSearch(q)
+        runSearch(q, mode)
     }
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -135,7 +136,7 @@ function HomePage() {
             )}
 
             {/* Search bar */}
-            <div className="mb-4">
+            <div className="mb-3">
                 <input
                     type="text"
                     value={input}
@@ -148,6 +149,35 @@ function HomePage() {
                                focus:ring-ink transition-shadow"
                     disabled={searching}
                 />
+            </div>
+
+            {/* Mode selector */}
+            <div className="mb-6 flex items-center gap-2">
+                <span className="font-sans text-[8pt] text-stone">Mode:</span>
+                <button
+                    type="button"
+                    disabled={searching}
+                    onClick={() => setMode('default')}
+                    className={`px-3 py-1 rounded-full font-sans text-[8pt] font-medium transition-colors ${
+                        mode === 'default'
+                            ? 'bg-ink text-ivory'
+                            : 'bg-cream text-stone hover:bg-warm'
+                    }`}
+                >
+                    Analyze+Review
+                </button>
+                <button
+                    type="button"
+                    disabled={searching}
+                    onClick={() => setMode('raw')}
+                    className={`px-3 py-1 rounded-full font-sans text-[8pt] font-medium transition-colors ${
+                        mode === 'raw'
+                            ? 'bg-ink text-ivory'
+                            : 'bg-cream text-stone hover:bg-warm'
+                    }`}
+                >
+                    Raw Fragments
+                </button>
             </div>
 
             {/* Searching state with no content yet */}

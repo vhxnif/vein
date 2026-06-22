@@ -6,6 +6,7 @@ import { logger } from '../config'
 import type { ModelProvider } from '../config/type'
 import { getModelProvider } from './base'
 import { createAnalyzeDocumentTool } from './sub-agents/doc-analyzer'
+import { createGetDocumentFragmentsTool } from './sub-agents/fragment-extractor'
 import type { ReviewResult } from './sub-agents/reviewer'
 import { createReviewResultTool } from './sub-agents/reviewer'
 import { createSearchDocumentsTool } from './sub-agents/search-screener'
@@ -73,6 +74,62 @@ const PROMPT = `你是一个文档检索 Librarian。通过搜索子 Agent 定�
 
 `
 
+// ── Raw-mode Prompt ──────────────────────────────────────────
+
+const RAW_MODE_PROMPT = `你是一个文档检索 Librarian。通过搜索子 Agent 定位文档，将片段提取委托给文档片段提取子 Agent，最后汇总并给出最终报告。
+
+## 工具
+
+| 步骤 | 工具 | 返回 |
+|------|------|------|
+| 1 | searchDocuments(userQuery) | [{docId, relevance, reason}] — 子 Agent 已筛选的文档列表 |
+| 2 | getDocumentFragments(docId, userQuery) | 子 Agent 提取的相关原始片段（Markdown，含 nodeId 出处） |
+
+## 流程
+
+1. 调用 searchDocuments(userQuery) 搜索相关文档（子 Agent 内部处理关键词提取和重搜）
+   - 如果返回空列表 []，直接输出"文档库中未找到相关内容"并停止
+2. 对返回的文档调用 getDocumentFragments，同一条消息中一次性批量并发调用（系统最多同时 10 个）
+   - 返回的文档已经过初筛，应全部提取
+   - **去重**：已提取过的文档不要重复提取，即使新搜索又命中了同一篇
+3. 整理所有文档的原始片段，形成最终答案
+   - 你（主 Agent）负责判断相关性、总结内容、按时序排列
+   - **必须以文档为单位组织**：每个文档一个独立段落，标题使用子 Agent 返回的「## 文档信息」中的文档标题
+   - 每个文档段落排版：**文档标题（加粗）** → 该文档的相关内容概述 → 关键原文引用（带 nodeId 出处）
+   - 不同文档之间用空行分隔，绝对不能把不同文档的片段混在一起
+   - **不要直接堆砌片段**——你需要理解片段内容后，用自己的话组织成连贯的报告，同时保留原文引用（nodeId 出处）
+   - 对 relevance 为 low 的可压缩（一两句话带过），none 的忽略
+   - 所有文档相关性均为 "none" 时，直接输出"文档库中未找到相关内容"并停止
+   - **时序排序**：如果文档/片段之间存在时序关系（如版本演进、日期先后、事件因果），必须按时序排列；无法判断时序时按相关性 rank 降序排列
+
+## 输出格式
+
+最终答案必须直接输出内容，按文档逐一列出。格式示例：
+
+**文档A标题**
+该文档主要内容概述……（引用原文：nodeId 0001、0003）
+> 原文引用内容（nodeId 0001）
+
+**文档B标题**
+该文档主要内容概述……（引用原文：nodeId 0002）
+> 原文引用内容（nodeId 0002）
+
+绝对禁止以下形式：
+- 禁止任何标题前缀（如"XX相关文档检索结果"、"检索结果"、"检索总结"）
+- 禁止任何过渡性语句（如"以下是..."、"根据检索结果..."）
+- 禁止开头打招呼（如"您好"、"你好"）
+- 禁止结尾总结（如"综上所述"、"以上结果供您参考"）
+- **禁止暴露内部流程细节**（如"搜索了X轮""重试了X次""提取了X篇"等），用户不需要感知检索过程
+- 未找到相关内容时，只输出"文档库中未找到相关内容"，不要附加任何解释、原因或过程描述
+
+## 约束
+
+- 最终答案必须包含原文引用和出处（nodeId）
+- 已获取的信息不要重复获取
+- **批量并发**：同类型工具调用（如多个 getDocumentFragments）放在同一条消息中一次发出，不要分批
+
+`
+
 // ── Tool assembly ─────────────────────────────────────────────
 
 function buildMainTools(
@@ -104,6 +161,45 @@ function buildMainTools(
         createSearchDocumentsTool(ctx, segmenter, searchAgentModel),
         createAnalyzeDocumentTool(ctx, subagentModel),
         createReviewResultTool(ctx, reviewerModel),
+    ]
+
+    const toolMeta: Record<string, ToolMeta> = {}
+    const tools: any[] = []
+    for (const { tool, meta } of entries) {
+        tools.push(tool)
+        toolMeta[tool.name] = meta
+    }
+
+    return { tools, toolMeta }
+}
+
+function buildRawTools(
+    segmenter?: ModelProvider,
+    onStep?: (label: string) => void,
+    searchAgentModel?: ModelProvider,
+    fragmentModel?: ModelProvider
+): { tools: any[]; toolMeta: Record<string, ToolMeta> } {
+    const cache = new Map<string, string>()
+
+    const ctx: ToolCtx = {
+        cached: async (key, fn) => {
+            const hit = cache.get(key)
+            if (hit !== undefined) return hit
+            const val = await fn()
+            cache.set(key, val)
+            return val
+        },
+        ok: (s) => ({
+            content: [{ type: 'text' as const, text: s }],
+            details: {},
+        }),
+        tool: (fn) => fn,
+        onStep,
+    }
+
+    const entries = [
+        createSearchDocumentsTool(ctx, segmenter, searchAgentModel),
+        createGetDocumentFragmentsTool(ctx, fragmentModel),
     ]
 
     const toolMeta: Record<string, ToolMeta> = {}
@@ -182,6 +278,7 @@ function pruneContext(messages: AgentMessage[]): AgentMessage[] {
             msg.role === 'toolResult' &&
             'toolName' in msg &&
             (msg.toolName === 'analyzeDocument' ||
+                msg.toolName === 'getDocumentFragments' ||
                 msg.toolName === 'getDocStructure')
         ) {
             structIndices.push(i)
@@ -203,7 +300,9 @@ function pruneContext(messages: AgentMessage[]): AgentMessage[] {
         const compacted =
             toolName === 'analyzeDocument'
                 ? compactAnalyzeResult(c.text)
-                : compactDocText(c.text)
+                : toolName === 'getDocumentFragments'
+                  ? `[compacted] ${c.text.slice(0, 300)}...`
+                  : compactDocText(c.text)
         return {
             ...msg,
             content: [{ type: 'text' as const, text: compacted }],
@@ -471,12 +570,28 @@ function extractFinalResult(
 
     return { content, trace, review, reviewElapsedMs }
 }
-// --- search model -----
+// ── Mode ─────────────────────────────────────────────────────
+
+type Mode = 'default' | 'raw'
 
 function useMode(
+    mode: Mode,
     onStep?: (label: string) => void,
     opts?: Option
 ): { systemPrompt: string; tools: any[]; toolMeta: Record<string, ToolMeta> } {
+    if (mode === 'raw') {
+        const toolsInfo = buildRawTools(
+            opts?.segmenter,
+            onStep,
+            opts?.searchAgentModel,
+            opts?.subagentModel
+        )
+        return {
+            systemPrompt: RAW_MODE_PROMPT,
+            ...toolsInfo,
+        }
+    }
+    // default mode
     const toolsInfo = buildMainTools(
         opts?.segmenter,
         onStep,
@@ -511,6 +626,7 @@ type Option = {
         toolName: string,
         summary: string
     ) => void
+    mode?: Mode
 }
 
 async function librarian(
@@ -518,7 +634,8 @@ async function librarian(
     onStep?: (label: string) => void,
     opts?: Option
 ): Promise<LibrarianResult> {
-    const { systemPrompt, tools, toolMeta } = useMode()
+    const mode = opts?.mode ?? 'default'
+    const { systemPrompt, tools, toolMeta } = useMode(mode, onStep, opts)
     const agent = createLibrarianAgent(systemPrompt, tools, opts)
     const toolTimings = installAgentInstrumentation(
         agent,
@@ -537,5 +654,5 @@ async function librarian(
     return extractFinalResult(agent.state.messages, toolTimings, toolMeta)
 }
 
-export type { LibrarianResult, TraceStep }
+export type { LibrarianResult, Mode, TraceStep }
 export { librarian }

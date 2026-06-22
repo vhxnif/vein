@@ -27,6 +27,7 @@ searchRouter.post('/', async (c) => {
     const body = await c.req.json()
     const query = body.q as string
     if (!query) return c.json({ error: 'Missing query' }, 400)
+    const mode = (body.mode as 'default' | 'raw') ?? 'default'
 
     const startedAt = performance.now()
 
@@ -57,6 +58,7 @@ searchRouter.post('/', async (c) => {
                     reviewerModel: config.reviewer,
                     searchAgentModel: config.searchAgent,
                     thinkingLevel: config.thinkingLevel,
+                    mode,
                     signal,
                     onThinkingDelta: (delta) => {
                         if (!aborted) send({ type: 'thinking_delta', delta })

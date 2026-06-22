@@ -63,6 +63,11 @@ export function register(program: Command) {
             'disable interactive prompt, output JSON'
         )
         .option('-t, --trace', 'show retrieval trace in output')
+        .option(
+            '-m, --mode <mode>',
+            'retrieval mode: default (analyze+review) or raw (extract raw fragments, main agent summarizes)',
+            'default'
+        )
         .action(
             async (
                 queryArg?: string,
@@ -70,6 +75,7 @@ export function register(program: Command) {
                     noInteractive?: boolean
                     interactive?: boolean
                     trace?: boolean
+                    mode?: string
                 }
             ) => {
                 const interactive = options?.interactive ?? true
@@ -132,6 +138,7 @@ export function register(program: Command) {
                         subagentModel: config.subagent,
                         reviewerModel: config.reviewer,
                         searchAgentModel: config.searchAgent,
+                        mode: (options?.mode as 'default' | 'raw') ?? 'default',
                         onStep: searchSpinner
                             ? (label) => searchSpinner.message(label)
                             : undefined,
