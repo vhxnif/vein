@@ -9,10 +9,10 @@ export {
     listProviders,
     setModelProvider,
 } from './ai/base'
-export type { LibrarianResult, TraceStep } from './ai/librarian'
+export type { LibrarianResult, Mode, TraceStep } from './ai/librarian'
 export { librarian } from './ai/librarian'
-export type { ReviewResult, SourceRef } from './ai/reviewer'
-export { reviewer } from './ai/reviewer'
+export type { ReviewResult, SourceRef } from './ai/sub-agents/reviewer'
+export { reviewer } from './ai/sub-agents/reviewer'
 export type { SearchOptions, SearchResult } from './ai/tools'
 export {
     resolveDocNames,
@@ -42,7 +42,10 @@ export {
     veinDir,
 } from './config/index'
 export type { ModelProvider, ProjectConfig } from './config/type'
-export type { HistoryEntry } from './service/history.service'
+export type {
+    HistoryEntry,
+    HistoryTimelineBlock,
+} from './service/history.service'
 export {
     getSearchHistoryEntry,
     listSearchHistory,

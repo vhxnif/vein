@@ -1,3 +1,4 @@
+import type { HistoryTimelineBlock } from '@vein/core'
 import {
     loadProjectConfig,
     resolveProjectRoot,
@@ -27,6 +28,7 @@ searchRouter.post('/', async (c) => {
     const body = await c.req.json()
     const query = body.q as string
     if (!query) return c.json({ error: 'Missing query' }, 400)
+    const mode = (body.mode as 'default' | 'raw') ?? 'default'
 
     const startedAt = performance.now()
 
@@ -50,6 +52,9 @@ searchRouter.post('/', async (c) => {
             }
             signal.addEventListener('abort', onAbort, { once: true })
 
+            // Capture timeline blocks for history
+            const timeline: HistoryTimelineBlock[] = []
+
             try {
                 const result = await searchDocuments(query, {
                     segmenter: config.segmenter,
@@ -57,30 +62,61 @@ searchRouter.post('/', async (c) => {
                     reviewerModel: config.reviewer,
                     searchAgentModel: config.searchAgent,
                     thinkingLevel: config.thinkingLevel,
+                    mode,
                     signal,
                     onThinkingDelta: (delta) => {
-                        if (!aborted) send({ type: 'thinking_delta', delta })
+                        if (!aborted) {
+                            send({ type: 'thinking_delta', delta })
+                            const last = timeline[timeline.length - 1]
+                            if (last && last.type === 'thinking') {
+                                last.text += delta
+                            } else {
+                                timeline.push({
+                                    type: 'thinking',
+                                    text: delta,
+                                })
+                            }
+                        }
                     },
                     onTextDelta: (delta) => {
                         if (!aborted) send({ type: 'text_delta', delta })
                     },
                     onToolCallStart: (toolCallId, toolName, label) => {
-                        if (!aborted)
+                        if (!aborted) {
                             send({
                                 type: 'tool_call_start',
                                 toolCallId,
                                 toolName,
                                 label,
                             })
+                            timeline.push({
+                                type: 'tool',
+                                name: toolName,
+                                label,
+                            })
+                        }
                     },
                     onToolCallEnd: (toolCallId, toolName, summary) => {
-                        if (!aborted)
+                        if (!aborted) {
                             send({
                                 type: 'tool_call_end',
                                 toolCallId,
                                 toolName,
                                 summary,
                             })
+                            // Find the last matching tool block and add summary
+                            for (let i = timeline.length - 1; i >= 0; i--) {
+                                const b = timeline[i]!
+                                if (
+                                    b.type === 'tool' &&
+                                    b.name === toolName &&
+                                    !b.summary
+                                ) {
+                                    b.summary = summary
+                                    break
+                                }
+                            }
+                        }
                     },
                 })
 
@@ -90,11 +126,16 @@ searchRouter.post('/', async (c) => {
 
                 // Save to history (best-effort)
                 if (root) {
-                    saveSearchHistory(root, query, result, elapsedMs).catch(
-                        () => {
-                            /* ignore */
-                        }
-                    )
+                    saveSearchHistory(
+                        root,
+                        query,
+                        result,
+                        elapsedMs,
+                        mode,
+                        timeline
+                    ).catch(() => {
+                        /* ignore */
+                    })
                 }
 
                 send({

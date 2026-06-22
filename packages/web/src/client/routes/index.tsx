@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useEffect, useRef, useState } from 'react'
-import { Markdown } from '../components/Markdown'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { annotateNodeRefs, Markdown } from '../components/Markdown'
 import { RunCat } from '../components/RunCat'
 import { useProject } from '../lib/project'
 import { type TimelineBlock, useSearch } from '../lib/search-context'
@@ -79,6 +79,7 @@ function HomePage() {
         useSearch()
 
     const [input, setInput] = useState(query)
+    const [mode, setMode] = useState<'default' | 'raw'>('default')
     const contentEndRef = useRef<HTMLDivElement>(null)
 
     // Auto-scroll to latest content as streaming progresses
@@ -96,7 +97,7 @@ function HomePage() {
     const handleSearch = () => {
         const q = input.trim()
         if (!q || searching) return
-        runSearch(q)
+        runSearch(q, mode)
     }
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -116,12 +117,29 @@ function HomePage() {
 
     const hasProcessContent = processBlocks.length > 0
 
+    // Build shortId → fullDocId lookup from result.docNames
+    const docIdMap = useMemo(() => {
+        const m = new Map<string, string>()
+        if (result?.docNames) {
+            for (const fullId of Object.keys(result.docNames)) {
+                m.set(fullId.slice(0, 8), fullId)
+            }
+        }
+        return m
+    }, [result?.docNames])
+
+    // Annotate node references in content for hover tooltips
+    const annotatedContent = useMemo(() => {
+        if (!result?.content) return ''
+        return annotateNodeRefs(result.content, docIdMap)
+    }, [result?.content, docIdMap])
+
     return (
         <div className="max-w-[780px] mx-auto px-8 py-16">
             {/* Project indicator */}
             {project ? (
                 <div className="text-center mb-12">
-                    <h1 className="font-serif text-[22pt] font-medium leading-tight text-near-black">
+                    <h1 className="font-serif text-[22pt] font-medium leading-tight text-ink">
                         {project}
                     </h1>
                     <p className="mt-1.5 font-sans text-[9pt] text-stone">
@@ -135,7 +153,7 @@ function HomePage() {
             )}
 
             {/* Search bar */}
-            <div className="mb-4">
+            <div className="mb-3">
                 <input
                     type="text"
                     value={input}
@@ -150,6 +168,35 @@ function HomePage() {
                 />
             </div>
 
+            {/* Mode selector */}
+            <div className="mb-6 flex items-center gap-2">
+                <span className="font-sans text-[8pt] text-stone">Mode:</span>
+                <button
+                    type="button"
+                    disabled={searching}
+                    onClick={() => setMode('default')}
+                    className={`px-3 py-1 rounded-full font-sans text-[8pt] font-medium transition-colors ${
+                        mode === 'default'
+                            ? 'bg-ink text-ivory border border-ink'
+                            : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
+                    }`}
+                >
+                    Analyze+Review
+                </button>
+                <button
+                    type="button"
+                    disabled={searching}
+                    onClick={() => setMode('raw')}
+                    className={`px-3 py-1 rounded-full font-sans text-[8pt] font-medium transition-colors ${
+                        mode === 'raw'
+                            ? 'bg-ink text-ivory border border-ink'
+                            : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
+                    }`}
+                >
+                    Raw Fragments
+                </button>
+            </div>
+
             {/* Searching state with no content yet */}
             {searching && timeline.length === 0 && (
                 <div className="mb-8 flex items-center gap-3">
@@ -158,7 +205,7 @@ function HomePage() {
                         Searching...
                     </span>
                     <span className="font-mono text-[8pt] text-stone tabular-nums ml-auto">
-                        {elapsed}s
+                        {elapsed.toFixed(1)}s
                     </span>
                 </div>
             )}
@@ -184,7 +231,7 @@ function HomePage() {
                                   : 'Streaming...'}
                         </span>
                         <span className="font-mono text-[8pt] text-stone tabular-nums ml-auto">
-                            {elapsed}s
+                            {elapsed.toFixed(1)}s
                         </span>
                     </div>
                 </div>
@@ -229,7 +276,9 @@ function HomePage() {
 
                     {/* Final answer */}
                     <div style={{ animation: 'fadeIn 300ms ease' }}>
-                        <Markdown>{result.content}</Markdown>
+                        <Markdown docIdMap={docIdMap}>
+                            {annotatedContent}
+                        </Markdown>
                     </div>
 
                     {/* Review */}

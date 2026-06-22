@@ -2,6 +2,56 @@ import type { ModelProvider } from '../config'
 import * as store from '../store'
 import { segmentText } from '../utils/segment'
 import type { LibrarianResult, TraceStep } from './librarian'
+import { ellipsis } from './sub-agents/utils'
+import type { ToolMeta } from './types'
+
+// ── Tool metadata ─────────────────────────────────────────────
+
+export const SEARCH_DOCS_BY_KEYWORD_META: ToolMeta = {
+    stepLabel: (a) => `Searching: "${ellipsis(String(a.query ?? ''), 36)}"...`,
+    resultLabel: (text) => {
+        try {
+            const parsed = JSON.parse(text) as Array<{ snippet?: string }>
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                const snippets = parsed
+                    .map((d) => d.snippet ?? '')
+                    .filter(Boolean)
+                if (snippets.length > 0) {
+                    const preview = snippets
+                        .slice(0, 3)
+                        .map((s) => ellipsis(s, 40))
+                        .join(', ')
+                    return `Found ${parsed.length} result${parsed.length > 1 ? 's' : ''}: ${preview}${snippets.length > 3 ? '...' : ''}`
+                }
+                return `Found ${parsed.length} results`
+            }
+        } catch {
+            // ignore
+        }
+        return undefined
+    },
+    resultSummary: (raw) => {
+        try {
+            const parsed = JSON.parse(raw) as Array<{ snippet?: string }>
+            if (Array.isArray(parsed)) {
+                const snippets = parsed
+                    .map((d) => d.snippet ?? '')
+                    .filter(Boolean)
+                const head = snippets
+                    .slice(0, 3)
+                    .map((s) => ellipsis(s, 40))
+                    .join(', ')
+                return `${parsed.length} docs: ${head}${snippets.length > 3 ? '…' : ''}`
+            }
+        } catch {
+            // ignore
+        }
+        return raw.slice(0, 200)
+    },
+    logDetail: (a) => `"${String(a.query ?? '')}"`,
+}
+
+// ── Functions ─────────────────────────────────────────────────
 
 /**
  * Shared business logic: segment + FTS search (OR semantics) + enrich metadata.
@@ -92,6 +142,8 @@ type SearchOptions = {
         toolName: string,
         summary: string
     ) => void
+    /** Retrieval mode: 'default' uses analyze+review pipeline, 'raw' extracts raw fragments for the main agent to summarize. */
+    mode?: 'default' | 'raw'
 }
 
 type SearchResult = LibrarianResult & {
@@ -118,6 +170,7 @@ async function searchDocuments(
         onTextDelta: opts?.onTextDelta,
         onToolCallStart: opts?.onToolCallStart,
         onToolCallEnd: opts?.onToolCallEnd,
+        mode: opts?.mode,
     })
     const docNames = await resolveDocNames(result.trace)
     return { ...result, docNames }

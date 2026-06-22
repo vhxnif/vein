@@ -1,9 +1,11 @@
+/** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
 import { getModel, Type } from '@earendil-works/pi-ai'
-import { logger } from '../config'
-import type { ModelProvider } from '../config/type'
-import { getNodeDetails } from '../store'
-import type { BaseDocNode } from '../tree/type'
-import { call, getModelProvider, type ToolDef } from './base'
+import { logger } from '../../config'
+import type { ModelProvider } from '../../config/type'
+import { getNodeDetails } from '../../store'
+import type { BaseDocNode } from '../../tree/type'
+import { call, getModelProvider, type ToolDef } from '../base'
+import type { ToolCtx, ToolMeta } from '../types'
 
 const prompt = `你是一个文档检索结果审查员。你的任务是审查 Librarian 返回的检索结果，判断其是否满足用户的需求。
 
@@ -69,17 +71,68 @@ pass (4/5)   ← pass/partial/fail，及 1-5 评分
 - 如果数据源原文与查询主题无关，说明 Librarian 选错了文档，verdict 应为 fail
 - **严格按输出格式填写，不要添加任何额外内容**`
 
-type ReviewResult = {
+export type ReviewResult = {
     verdict: 'pass' | 'partial' | 'fail'
     score: number
     reason: string
     suggestion: string
 }
 
-type SourceRef = {
+export type SourceRef = {
     docId: string
     nodeId: string
 }
+
+// ── Tool metadata ──────────────────────────────────────────────
+
+export const GET_REVIEW_SOURCE_META: ToolMeta = {
+    stepLabel: (a) => {
+        const nid = normalizeNodeId(String(a.nodeId ?? ''))
+        return `Verifying: ${a.docId ?? '?'}/${nid}...`
+    },
+    resultLabel: (text) => `${text.length} chars`,
+    resultSummary: (raw) => `${raw.length} chars`,
+    logDetail: (a) => {
+        const nid = normalizeNodeId(String(a.nodeId ?? ''))
+        return `${a.docId ?? '?'}/${nid}`
+    },
+}
+
+export const REVIEW_RESULT_META: ToolMeta = {
+    stepLabel: () => 'Reviewing results...',
+    resultLabel: (text) => {
+        try {
+            const parsed = JSON.parse(text) as {
+                verdict?: string
+                score?: number
+            }
+            if (parsed.verdict) {
+                return `Review: ${parsed.verdict} (${parsed.score ?? '?'}/5)`
+            }
+        } catch {
+            // ignore
+        }
+        return undefined
+    },
+    resultSummary: (raw) => {
+        try {
+            const parsed = JSON.parse(raw) as {
+                verdict?: string
+                score?: number
+                reason?: string
+            }
+            if (typeof parsed === 'object' && parsed !== null) {
+                return `${parsed.verdict ?? '?'} (${parsed.score ?? '?'}/5): ${(parsed.reason ?? '').slice(0, 80)}`
+            }
+            return JSON.stringify(parsed).slice(0, 200)
+        } catch {
+            return raw.slice(0, 200)
+        }
+    },
+    logDetail: (a) => `"${String(a.query ?? '').slice(0, 60)}"`,
+}
+
+// ── Internals ─────────────────────────────────────────────────
 
 function parseReviewResult(text: string): ReviewResult {
     const verdictMatch = text.match(
@@ -142,7 +195,78 @@ function buildReviewTools(): ToolDef[] {
     ]
 }
 
-async function reviewer(
+export const MAX_REVIEW_CALLS = 3
+
+/**
+ * Creates the main agent's "reviewResult" tool that wraps the
+ * Reviewer sub-agent with call budget enforcement.
+ */
+export function createReviewResultTool(
+    ctx: ToolCtx,
+    modelOverride?: ModelProvider
+): { tool: any; meta: ToolMeta } {
+    let reviewCount = 0
+    const { ok, tool, onStep } = ctx
+    const toolDef = {
+        name: 'reviewResult',
+        description:
+            '审查检索结果是否满足用户需求。完成检索后、回复用户前必须调用。' +
+            '不通过时增量调整，不要从头搜索！' +
+            `最多调用 ${MAX_REVIEW_CALLS} 次（含首次），超限会被系统拒绝。`,
+        parameters: Type.Object({
+            query: Type.String({ description: '用户原始查询' }),
+            result: Type.String({ description: '准备返回给用户的检索结果' }),
+            sources: Type.String({
+                description:
+                    '引用的数据源地址 JSON 字符串，必填，格式：\'[{"docId":"abc","nodeId":"0001"}]\'。' +
+                    '必须从各文档子 Agent 分析的「## 数据来源」中收集全部 nodeId。空或缺省会导致审查失败。',
+            }),
+        }),
+        execute: tool(async (_, p) => {
+            const { query, result, sources } = p as {
+                query: string
+                result: string
+                sources?: string
+            }
+            reviewCount++
+            if (reviewCount > MAX_REVIEW_CALLS) {
+                const reason = `reviewResult 已达最大调用次数 ${MAX_REVIEW_CALLS}，请直接输出最终答案`
+                logger.warn({
+                    reviewCount,
+                    content: 'Review call budget exceeded, blocking',
+                })
+                return ok(
+                    JSON.stringify({
+                        verdict: 'fail',
+                        score: 1,
+                        reason,
+                        suggestion: '',
+                    })
+                )
+            }
+            let parsed: SourceRef[] | undefined
+            if (sources) {
+                try {
+                    parsed = JSON.parse(sources) as SourceRef[]
+                } catch {
+                    // ignore invalid sources
+                }
+            }
+            const review = await reviewer(
+                query,
+                result,
+                parsed,
+                onStep,
+                modelOverride,
+                reviewCount
+            )
+            return ok(JSON.stringify(review))
+        }),
+    }
+    return { tool: toolDef, meta: REVIEW_RESULT_META }
+}
+
+export async function reviewer(
     query: string,
     librarianResponse: string,
     sources?: SourceRef[],
@@ -214,6 +338,3 @@ async function reviewer(
     onStep?.(`Review: ${result.verdict} (${result.score}/5)`)
     return result
 }
-
-export type { ReviewResult, SourceRef }
-export { reviewer }

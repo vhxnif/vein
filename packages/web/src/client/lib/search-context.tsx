@@ -36,7 +36,7 @@ export interface SearchState {
 }
 
 interface SearchContextType extends SearchState {
-    runSearch: (q: string) => void
+    runSearch: (q: string, mode?: 'default' | 'raw') => void
     /** Clear current search state */
     clearSearch: () => void
 }
@@ -79,141 +79,146 @@ export function SearchProvider({ children }: { children: ReactNode }) {
         setState(initialState)
     }, [])
 
-    const runSearch = useCallback(async (q: string) => {
-        if (abortRef.current) {
-            abortRef.current.abort()
-        }
-        abortRef.current = new AbortController()
-        const signal = abortRef.current.signal
+    const runSearch = useCallback(
+        async (q: string, mode?: 'default' | 'raw') => {
+            if (abortRef.current) {
+                abortRef.current.abort()
+            }
+            abortRef.current = new AbortController()
+            const signal = abortRef.current.signal
 
-        if (timerRef.current) clearInterval(timerRef.current)
+            if (timerRef.current) clearInterval(timerRef.current)
 
-        setState((prev) => ({
-            ...prev,
-            query: q,
-            searching: true,
-            result: null,
-            error: null,
-            elapsed: 0,
-            timeline: [],
-        }))
+            setState((prev) => ({
+                ...prev,
+                query: q,
+                searching: true,
+                result: null,
+                error: null,
+                elapsed: 0,
+                timeline: [],
+            }))
 
-        const startTime = Date.now()
-        timerRef.current = setInterval(() => {
-            setState((prev) => {
-                if (!prev.searching) return prev
-                return {
+            const startTime = Date.now()
+            timerRef.current = setInterval(() => {
+                setState((prev) => {
+                    if (!prev.searching) return prev
+                    return {
+                        ...prev,
+                        elapsed:
+                            Math.round((Date.now() - startTime) / 100) / 10,
+                    }
+                })
+            }, 100)
+
+            try {
+                const res = await searchQuery(
+                    q,
+                    {
+                        mode,
+                        onThinkingDelta: (delta) => {
+                            setState((prev) => {
+                                if (!prev.searching) return prev
+                                const timeline = [...prev.timeline]
+                                const last = timeline[timeline.length - 1]
+                                if (last && last.type === 'thinking') {
+                                    timeline[timeline.length - 1] = {
+                                        ...last,
+                                        text: last.text + delta,
+                                    }
+                                } else {
+                                    timeline.push({
+                                        type: 'thinking',
+                                        id: crypto.randomUUID(),
+                                        text: delta,
+                                    })
+                                }
+                                return { ...prev, timeline }
+                            })
+                        },
+                        onTextDelta: (delta) => {
+                            setState((prev) => {
+                                if (!prev.searching) return prev
+                                const timeline = [...prev.timeline]
+                                const last = timeline[timeline.length - 1]
+                                if (last && last.type === 'text') {
+                                    timeline[timeline.length - 1] = {
+                                        ...last,
+                                        text: last.text + delta,
+                                    }
+                                } else {
+                                    timeline.push({
+                                        type: 'text',
+                                        id: crypto.randomUUID(),
+                                        text: delta,
+                                    })
+                                }
+                                return { ...prev, timeline }
+                            })
+                        },
+                        onToolCallStart: (toolCallId, toolName, label) => {
+                            setState((prev) => {
+                                if (!prev.searching) return prev
+                                return {
+                                    ...prev,
+                                    timeline: [
+                                        ...prev.timeline,
+                                        {
+                                            type: 'tool' as const,
+                                            id: toolCallId,
+                                            name: toolName,
+                                            label,
+                                            status: 'running' as const,
+                                        },
+                                    ],
+                                }
+                            })
+                        },
+                        onToolCallEnd: (toolCallId, _toolName, summary) => {
+                            setState((prev) => {
+                                if (!prev.searching) return prev
+                                return {
+                                    ...prev,
+                                    timeline: prev.timeline.map((block) =>
+                                        block.type === 'tool' &&
+                                        block.id === toolCallId
+                                            ? {
+                                                  ...block,
+                                                  status: 'done' as const,
+                                                  summary,
+                                              }
+                                            : block
+                                    ),
+                                }
+                            })
+                        },
+                    },
+                    signal
+                )
+                setState((prev) => ({
                     ...prev,
-                    elapsed: Math.round((Date.now() - startTime) / 100) / 10,
+                    searching: false,
+                    result: res,
+                }))
+            } catch (err) {
+                if (err instanceof DOMException && err.name === 'AbortError') {
+                    return
                 }
-            })
-        }, 100)
-
-        try {
-            const res = await searchQuery(
-                q,
-                {
-                    onThinkingDelta: (delta) => {
-                        setState((prev) => {
-                            if (!prev.searching) return prev
-                            const timeline = [...prev.timeline]
-                            const last = timeline[timeline.length - 1]
-                            if (last && last.type === 'thinking') {
-                                timeline[timeline.length - 1] = {
-                                    ...last,
-                                    text: last.text + delta,
-                                }
-                            } else {
-                                timeline.push({
-                                    type: 'thinking',
-                                    id: crypto.randomUUID(),
-                                    text: delta,
-                                })
-                            }
-                            return { ...prev, timeline }
-                        })
-                    },
-                    onTextDelta: (delta) => {
-                        setState((prev) => {
-                            if (!prev.searching) return prev
-                            const timeline = [...prev.timeline]
-                            const last = timeline[timeline.length - 1]
-                            if (last && last.type === 'text') {
-                                timeline[timeline.length - 1] = {
-                                    ...last,
-                                    text: last.text + delta,
-                                }
-                            } else {
-                                timeline.push({
-                                    type: 'text',
-                                    id: crypto.randomUUID(),
-                                    text: delta,
-                                })
-                            }
-                            return { ...prev, timeline }
-                        })
-                    },
-                    onToolCallStart: (toolCallId, toolName, label) => {
-                        setState((prev) => {
-                            if (!prev.searching) return prev
-                            return {
-                                ...prev,
-                                timeline: [
-                                    ...prev.timeline,
-                                    {
-                                        type: 'tool' as const,
-                                        id: toolCallId,
-                                        name: toolName,
-                                        label,
-                                        status: 'running' as const,
-                                    },
-                                ],
-                            }
-                        })
-                    },
-                    onToolCallEnd: (toolCallId, _toolName, summary) => {
-                        setState((prev) => {
-                            if (!prev.searching) return prev
-                            return {
-                                ...prev,
-                                timeline: prev.timeline.map((block) =>
-                                    block.type === 'tool' &&
-                                    block.id === toolCallId
-                                        ? {
-                                              ...block,
-                                              status: 'done' as const,
-                                              summary,
-                                          }
-                                        : block
-                                ),
-                            }
-                        })
-                    },
-                },
-                signal
-            )
-            setState((prev) => ({
-                ...prev,
-                searching: false,
-                result: res,
-            }))
-        } catch (err) {
-            if (err instanceof DOMException && err.name === 'AbortError') {
-                return
+                setState((prev) => ({
+                    ...prev,
+                    searching: false,
+                    error: err instanceof Error ? err.message : 'Search failed',
+                }))
+            } finally {
+                if (timerRef.current) {
+                    clearInterval(timerRef.current)
+                    timerRef.current = null
+                }
+                abortRef.current = null
             }
-            setState((prev) => ({
-                ...prev,
-                searching: false,
-                error: err instanceof Error ? err.message : 'Search failed',
-            }))
-        } finally {
-            if (timerRef.current) {
-                clearInterval(timerRef.current)
-                timerRef.current = null
-            }
-            abortRef.current = null
-        }
-    }, [])
+        },
+        []
+    )
 
     return (
         <SearchContext.Provider value={{ ...state, runSearch, clearSearch }}>

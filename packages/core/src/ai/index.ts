@@ -6,7 +6,7 @@ export {
     listProviders,
     setModelProvider,
 } from './base'
-export type { LibrarianResult, TraceStep } from './librarian'
+export type { LibrarianResult, Mode, TraceStep } from './librarian'
 export { librarian } from './librarian'
-export type { ReviewResult } from './reviewer'
-export { reviewer } from './reviewer'
+export type { ReviewResult, SourceRef } from './sub-agents/reviewer'
+export { reviewer } from './sub-agents/reviewer'

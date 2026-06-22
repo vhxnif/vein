@@ -1,5 +1,9 @@
 import { intro, note, outro, spinner, text } from '@clack/prompts'
-import type { LibrarianResult, SearchResult } from '@vein/core'
+import type {
+    HistoryTimelineBlock,
+    LibrarianResult,
+    SearchResult,
+} from '@vein/core'
 import {
     logger,
     resolveProjectRoot,
@@ -63,6 +67,11 @@ export function register(program: Command) {
             'disable interactive prompt, output JSON'
         )
         .option('-t, --trace', 'show retrieval trace in output')
+        .option(
+            '-m, --mode <mode>',
+            'retrieval mode: default (analyze+review) or raw (extract raw fragments, main agent summarizes)',
+            'default'
+        )
         .action(
             async (
                 queryArg?: string,
@@ -70,6 +79,7 @@ export function register(program: Command) {
                     noInteractive?: boolean
                     interactive?: boolean
                     trace?: boolean
+                    mode?: string
                 }
             ) => {
                 const interactive = options?.interactive ?? true
@@ -132,6 +142,7 @@ export function register(program: Command) {
                         subagentModel: config.subagent,
                         reviewerModel: config.reviewer,
                         searchAgentModel: config.searchAgent,
+                        mode: (options?.mode as 'default' | 'raw') ?? 'default',
                         onStep: searchSpinner
                             ? (label) => searchSpinner.message(label)
                             : undefined,
@@ -152,12 +163,23 @@ export function register(program: Command) {
                 const elapsed = formatDuration(elapsedMs)
 
                 const projectRoot = resolveProjectRoot()
+                const mode = (options?.mode as 'default' | 'raw') ?? 'default'
                 if (projectRoot) {
+                    const timeline: HistoryTimelineBlock[] = result.trace.map(
+                        (s) => ({
+                            type: 'tool' as const,
+                            name: s.tool,
+                            label: s.tool,
+                            summary: s.resultSummary,
+                        })
+                    )
                     saveSearchHistory(
                         projectRoot,
                         query,
                         result,
-                        elapsedMs
+                        elapsedMs,
+                        mode,
+                        timeline
                     ).catch((err) =>
                         log.warn({
                             err,

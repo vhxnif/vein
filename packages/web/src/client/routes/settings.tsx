@@ -154,7 +154,7 @@ function SettingsPage() {
 
     return (
         <div className="max-w-[560px] mx-auto px-8 py-16">
-            <h1 className="font-serif text-[20pt] font-medium leading-tight text-near-black mb-10">
+            <h1 className="font-serif text-[20pt] font-medium leading-tight text-ink mb-10">
                 Settings
             </h1>
 
