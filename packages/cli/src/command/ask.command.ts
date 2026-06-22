@@ -1,5 +1,9 @@
 import { intro, note, outro, spinner, text } from '@clack/prompts'
-import type { LibrarianResult, SearchResult } from '@vein/core'
+import type {
+    HistoryTimelineBlock,
+    LibrarianResult,
+    SearchResult,
+} from '@vein/core'
 import {
     logger,
     resolveProjectRoot,
@@ -159,12 +163,23 @@ export function register(program: Command) {
                 const elapsed = formatDuration(elapsedMs)
 
                 const projectRoot = resolveProjectRoot()
+                const mode = (options?.mode as 'default' | 'raw') ?? 'default'
                 if (projectRoot) {
+                    const timeline: HistoryTimelineBlock[] = result.trace.map(
+                        (s) => ({
+                            type: 'tool' as const,
+                            name: s.tool,
+                            label: s.tool,
+                            summary: s.resultSummary,
+                        })
+                    )
                     saveSearchHistory(
                         projectRoot,
                         query,
                         result,
-                        elapsedMs
+                        elapsedMs,
+                        mode,
+                        timeline
                     ).catch((err) =>
                         log.warn({
                             err,

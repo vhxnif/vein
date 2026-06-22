@@ -5,15 +5,21 @@ import { logger, veinDir } from '../config'
 
 const log = logger.child({ module: 'history' })
 
+export type HistoryTimelineBlock =
+    | { type: 'thinking'; text: string }
+    | { type: 'tool'; name: string; label: string; summary?: string }
+
 export type HistoryEntry = {
     id: string
     query: string
     answer: string
+    mode: string
     verdict?: string
     score?: number
     elapsedMs: number
     steps: number
     trace?: unknown[]
+    timeline?: HistoryTimelineBlock[]
 }
 
 function historyDir(root: string): string {
@@ -28,7 +34,9 @@ export async function saveSearchHistory(
     root: string,
     query: string,
     result: LibrarianResult,
-    elapsedMs: number
+    elapsedMs: number,
+    mode?: string,
+    timeline?: HistoryTimelineBlock[]
 ): Promise<string> {
     const now = new Date()
     const id = `${now.toISOString().slice(0, 10)}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
@@ -39,11 +47,13 @@ export async function saveSearchHistory(
         id,
         query,
         answer: result.content || '',
+        mode: mode ?? 'default',
         verdict: result.review?.verdict,
         score: result.review?.score,
         elapsedMs,
         steps: result.trace.length,
         trace: result.trace,
+        timeline,
     }
 
     await writeFile(

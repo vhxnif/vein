@@ -55,15 +55,25 @@ export interface DocInfo {
     ftsSummary?: string
 }
 
+export interface HistoryTimelineBlock {
+    type: 'thinking' | 'tool'
+    text?: string
+    name?: string
+    label?: string
+    summary?: string
+}
+
 export interface HistoryEntry {
     id: string
     query: string
     answer: string
+    mode: string
     verdict?: string
     score?: number
     elapsedMs: number
     steps: number
     trace?: unknown[]
+    timeline?: HistoryTimelineBlock[]
 }
 
 export interface NodeInfo {

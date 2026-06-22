@@ -42,7 +42,10 @@ export {
     veinDir,
 } from './config/index'
 export type { ModelProvider, ProjectConfig } from './config/type'
-export type { HistoryEntry } from './service/history.service'
+export type {
+    HistoryEntry,
+    HistoryTimelineBlock,
+} from './service/history.service'
 export {
     getSearchHistoryEntry,
     listSearchHistory,

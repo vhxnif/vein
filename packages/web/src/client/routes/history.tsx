@@ -2,7 +2,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { annotateNodeRefs, Markdown } from '../components/Markdown'
-import type { HistoryEntry } from '../lib/api'
+import type { HistoryEntry, HistoryTimelineBlock } from '../lib/api'
 import { fetchHistory, fetchHistoryEntry } from '../lib/api'
 import { useProject } from '../lib/project'
 
@@ -228,7 +228,11 @@ function HistoryRow({
     showDate: boolean
 }) {
     const date = entry.id.slice(0, 10)
-    const time = entry.id.slice(11, 19) ?? ''
+    const rawTime = entry.id.slice(11, 19) ?? ''
+    const time =
+        rawTime.length === 6
+            ? `${rawTime.slice(0, 2)}:${rawTime.slice(2, 4)}:${rawTime.slice(4, 6)}`
+            : rawTime
 
     return (
         <div className="border-b border-cream/30">
@@ -250,6 +254,15 @@ function HistoryRow({
                             {date} {time}
                         </span>
                     )}
+                    <span
+                        className={`px-2 py-0.5 rounded-full font-sans text-[7.5pt] font-medium ${
+                            entry.mode === 'raw'
+                                ? 'bg-cream text-stone'
+                                : 'bg-ink/10 text-ink'
+                        }`}
+                    >
+                        {entry.mode === 'raw' ? 'Raw' : 'Review'}
+                    </span>
                     {entry.verdict && (
                         <span
                             className={
@@ -273,6 +286,35 @@ function HistoryRow({
         </div>
     )
 }
+
+// ── Timeline block renderer (reused from search page) ──────
+
+function TimelineBlockView({ block }: { block: HistoryTimelineBlock }) {
+    if (block.type === 'thinking') {
+        return (
+            <div className="my-2 italic text-stone/70">
+                <Markdown>{block.text ?? ''}</Markdown>
+            </div>
+        )
+    }
+
+    if (block.type === 'tool') {
+        return (
+            <div className="my-1.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[8pt] font-mono max-w-full border-cream bg-ivory text-stone">
+                <span className="truncate">{block.label ?? block.name}</span>
+                {block.summary && (
+                    <span className="text-stone/60 truncate">
+                        → {block.summary}
+                    </span>
+                )}
+            </div>
+        )
+    }
+
+    return null
+}
+
+// ── Expanded entry ─────────────────────────────────────────
 
 function ExpandedEntry({ id }: { id: string }) {
     const { data: entry, isLoading } = useQuery({
@@ -314,12 +356,37 @@ function ExpandedEntry({ id }: { id: string }) {
 
     if (!entry) return null
 
+    const hasTimeline = entry.timeline && entry.timeline.length > 0
+    const toolBlocks = entry.timeline?.filter((b) => b.type === 'tool') ?? []
+    const hasThinking = entry.timeline?.some((b) => b.type === 'thinking')
+
     return (
         <div className="px-3 pb-4">
+            {/* Reasoning process (timeline) */}
+            {hasTimeline && (
+                <details className="mt-3 mb-2">
+                    <summary className="font-sans text-[7.5pt] font-semibold text-stone uppercase tracking-wide cursor-pointer select-none hover:text-ink transition-colors">
+                        Reasoning process ({toolBlocks.length} tools
+                        {hasThinking && ', thinking'})
+                    </summary>
+                    <div className="mt-3 pl-4 border-l-2 border-cream space-y-1">
+                        {entry.timeline!.map((block, i) => (
+                            <TimelineBlockView
+                                // biome-ignore lint/suspicious/noArrayIndexKey: static content, order never changes
+                                key={i}
+                                block={block}
+                            />
+                        ))}
+                    </div>
+                </details>
+            )}
+
+            {/* Final answer */}
             <div className="mt-2">
                 <Markdown docIdMap={docIdMap}>{annotatedAnswer}</Markdown>
             </div>
 
+            {/* Review */}
             {entry.verdict && (
                 <div className="mt-3 pt-3 border-t border-cream/50">
                     <p className="font-sans text-[8pt] text-olive">
@@ -330,6 +397,7 @@ function ExpandedEntry({ id }: { id: string }) {
                 </div>
             )}
 
+            {/* Trace (fallback when no timeline, or as additional detail) */}
             {entry.trace && entry.trace.length > 0 && (
                 <details className="mt-2">
                     <summary className="font-sans text-[8pt] text-ink cursor-pointer">
