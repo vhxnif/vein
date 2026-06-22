@@ -205,7 +205,7 @@ function HomePage() {
                         Searching...
                     </span>
                     <span className="font-mono text-[8pt] text-stone tabular-nums ml-auto">
-                        {elapsed}s
+                        {elapsed.toFixed(1)}s
                     </span>
                 </div>
             )}
@@ -231,7 +231,7 @@ function HomePage() {
                                   : 'Streaming...'}
                         </span>
                         <span className="font-mono text-[8pt] text-stone tabular-nums ml-auto">
-                            {elapsed}s
+                            {elapsed.toFixed(1)}s
                         </span>
                     </div>
                 </div>
