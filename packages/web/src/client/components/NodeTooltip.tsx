@@ -129,9 +129,15 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
                                     </blockquote>
                                 ),
                                 code: ({ children, className, ...rest }) => {
-                                    const inline = (rest as { inline?: boolean }).inline
+                                    const inline = (
+                                        rest as { inline?: boolean }
+                                    ).inline
                                     if (!inline) {
-                                        return <code className={className}>{children}</code>
+                                        return (
+                                            <code className={className}>
+                                                {children}
+                                            </code>
+                                        )
                                     }
                                     return (
                                         <code className="font-mono text-[8pt] bg-ivory px-1 py-0.5 rounded text-ink">
@@ -162,7 +168,9 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
                                 em: ({ children }) => (
                                     <em className="italic">{children}</em>
                                 ),
-                                hr: () => <hr className="border-cream/30 my-2" />,
+                                hr: () => (
+                                    <hr className="border-cream/30 my-2" />
+                                ),
                             }}
                         >
                             {node.text}
@@ -173,4 +181,3 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
         </div>
     )
 }
-
