@@ -112,7 +112,7 @@ function HistoryPage() {
 
     return (
         <div className="max-w-[780px] mx-auto px-8 py-16">
-            <h1 className="font-serif text-[20pt] font-medium leading-tight text-near-black mb-8">
+            <h1 className="font-serif text-[20pt] font-medium leading-tight text-ink mb-8">
                 History
             </h1>
 
@@ -257,7 +257,7 @@ function HistoryRow({
                     <span
                         className={`px-2 py-0.5 rounded-full font-sans text-[7.5pt] font-medium ${
                             entry.mode === 'raw'
-                                ? 'bg-cream text-stone'
+                                ? 'border border-ink/30 bg-transparent text-stone'
                                 : 'bg-ink/10 text-ink'
                         }`}
                     >

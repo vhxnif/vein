@@ -238,8 +238,8 @@ body::before {
 }
 
 .btn-secondary {
-    background: var(--warm-sand);
-    color: var(--near-black);
+    background: transparent;
+    color: var(--stone);
     border-radius: 8pt;
     padding: 6pt 16pt;
     font-family: var(--sans);
@@ -247,15 +247,16 @@ body::before {
     font-weight: 500;
     box-shadow: 0 0 0 1pt var(--border-cream);
     cursor: pointer;
-    transition: background 150ms ease;
+    transition: all 150ms ease;
 }
 .btn-secondary:hover {
-    background: var(--border-cream);
+    color: var(--near-black);
+    box-shadow: 0 0 0 1pt var(--ink-blue);
 }
 
 .btn-ghost {
     background: transparent;
-    color: var(--olive);
+    color: var(--stone);
     border-radius: 8pt;
     padding: 6pt 16pt;
     font-family: var(--sans);
@@ -265,7 +266,7 @@ body::before {
     transition: color 150ms ease;
 }
 .btn-ghost:hover {
-    color: var(--near-black);
+    color: var(--ink-blue);
 }
 
 .btn-danger {

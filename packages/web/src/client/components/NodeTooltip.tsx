@@ -56,12 +56,12 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
         <div
             ref={tooltipRef}
             className="fixed z-50 w-[420px] max-h-[280px] overflow-y-auto kami-scrollbar
-                       bg-ivory ring-warm rounded-[8pt] shadow-lg p-4"
+                       bg-parchment border border-ink/20 rounded-[8pt] shadow-lg p-4"
             style={{ top: `${top}px`, left: `${left}px` }}
         >
             {loading && (
-                <div className="flex items-center gap-2 font-sans text-[8.5pt] text-stone">
-                    <span className="inline-block w-3 h-3 border-2 border-stone/30 border-t-stone rounded-full animate-spin" />
+                <div className="flex items-center gap-2 font-sans text-[8.5pt] text-ink">
+                    <span className="inline-block w-3 h-3 border-2 border-ink/30 border-t-ink rounded-full animate-spin" />
                     Loading source...
                 </div>
             )}
@@ -73,8 +73,8 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
             {node && !loading && (
                 <>
                     {/* Header */}
-                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-cream">
-                        <span className="font-mono text-[7pt] bg-cream px-1.5 py-0.5 rounded text-stone shrink-0">
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-ink/15">
+                        <span className="font-mono text-[7pt] bg-ink/10 px-1.5 py-0.5 rounded text-ink shrink-0">
                             {nodeId}
                         </span>
                         <span className="font-serif text-[10pt] font-medium text-near-black leading-snug">

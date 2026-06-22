@@ -139,7 +139,7 @@ function HomePage() {
             {/* Project indicator */}
             {project ? (
                 <div className="text-center mb-12">
-                    <h1 className="font-serif text-[22pt] font-medium leading-tight text-near-black">
+                    <h1 className="font-serif text-[22pt] font-medium leading-tight text-ink">
                         {project}
                     </h1>
                     <p className="mt-1.5 font-sans text-[9pt] text-stone">
@@ -177,8 +177,8 @@ function HomePage() {
                     onClick={() => setMode('default')}
                     className={`px-3 py-1 rounded-full font-sans text-[8pt] font-medium transition-colors ${
                         mode === 'default'
-                            ? 'bg-ink text-ivory'
-                            : 'bg-cream text-stone hover:bg-warm'
+                            ? 'bg-ink text-ivory border border-ink'
+                            : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
                     }`}
                 >
                     Analyze+Review
@@ -189,8 +189,8 @@ function HomePage() {
                     onClick={() => setMode('raw')}
                     className={`px-3 py-1 rounded-full font-sans text-[8pt] font-medium transition-colors ${
                         mode === 'raw'
-                            ? 'bg-ink text-ivory'
-                            : 'bg-cream text-stone hover:bg-warm'
+                            ? 'bg-ink text-ivory border border-ink'
+                            : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
                     }`}
                 >
                     Raw Fragments

@@ -261,7 +261,7 @@ function NodeRefSpan({
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
         >
-            <span className="cursor-pointer border-b border-dashed border-ink/40 text-ink hover:border-ink hover:text-near-black transition-colors">
+            <span className="cursor-pointer border-b border-dashed border-ink/30 text-ink rounded-sm px-0.5 hover:bg-ink/8 hover:border-ink transition-colors">
                 {children}
             </span>
             {showTooltip && (

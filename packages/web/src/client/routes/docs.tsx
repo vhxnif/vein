@@ -143,7 +143,7 @@ function DocsList() {
         <>
             <div className="flex items-end justify-between mb-8">
                 <div>
-                    <h1 className="font-serif text-[20pt] font-medium leading-tight text-near-black">
+                    <h1 className="font-serif text-[20pt] font-medium leading-tight text-ink">
                         Documents
                     </h1>
                     <p className="font-sans text-[9pt] text-stone mt-1">
@@ -205,7 +205,7 @@ function DocsList() {
                             <button
                                 type="button"
                                 className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-[4pt]
-                                           text-stone/40 hover:text-error hover:bg-error/10
+                                           text-ink/40 hover:text-error hover:bg-error/10
                                            opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all
                                            focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ink"
                                 aria-label={`Delete ${doc.title}`}
