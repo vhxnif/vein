@@ -239,7 +239,8 @@ function sanitizeAnswer(content: string): string {
 // ── Agent construction ────────────────────────────────────────
 
 function createLibrarianAgent(
-    onStep: ((label: string) => void) | undefined,
+    systemPrompt: string,
+    tools: any[],
     opts?: {
         segmenter?: ModelProvider
         subagentModel?: ModelProvider
@@ -247,7 +248,7 @@ function createLibrarianAgent(
         searchAgentModel?: ModelProvider
         thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
     }
-): { agent: Agent; toolMeta: Record<string, ToolMeta> } {
+): Agent {
     const provider = getModelProvider()
     const model = getModel(provider.provider as never, provider.model)
 
@@ -257,17 +258,10 @@ function createLibrarianAgent(
     })
 
     let mainToolCallCount = 0
-    const { tools, toolMeta } = buildMainTools(
-        opts?.segmenter,
-        onStep,
-        opts?.subagentModel,
-        opts?.reviewerModel,
-        opts?.searchAgentModel
-    )
 
     const agent = new Agent({
         initialState: {
-            systemPrompt: PROMPT,
+            systemPrompt,
             model,
             thinkingLevel: opts?.thinkingLevel ?? 'off',
             tools,
@@ -289,8 +283,7 @@ function createLibrarianAgent(
             return undefined
         },
     })
-
-    return { agent, toolMeta }
+    return agent
 }
 
 // ── Event instrumentation (merged subscriber) ─────────────────
@@ -478,34 +471,55 @@ function extractFinalResult(
 
     return { content, trace, review, reviewElapsedMs }
 }
+// --- search model -----
+
+function useMode(
+    onStep?: (label: string) => void,
+    opts?: Option
+): { systemPrompt: string; tools: any[]; toolMeta: Record<string, ToolMeta> } {
+    const toolsInfo = buildMainTools(
+        opts?.segmenter,
+        onStep,
+        opts?.subagentModel,
+        opts?.reviewerModel,
+        opts?.searchAgentModel
+    )
+    return {
+        systemPrompt: PROMPT,
+        ...toolsInfo,
+    }
+}
 
 // ── Main entry ────────────────────────────────────────────────
+//
+type Option = {
+    segmenter?: ModelProvider
+    subagentModel?: ModelProvider
+    reviewerModel?: ModelProvider
+    searchAgentModel?: ModelProvider
+    signal?: AbortSignal
+    thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+    onThinkingDelta?: (delta: string) => void
+    onTextDelta?: (delta: string) => void
+    onToolCallStart?: (
+        toolCallId: string,
+        toolName: string,
+        label: string
+    ) => void
+    onToolCallEnd?: (
+        toolCallId: string,
+        toolName: string,
+        summary: string
+    ) => void
+}
 
 async function librarian(
     msg: string,
     onStep?: (label: string) => void,
-    opts?: {
-        segmenter?: ModelProvider
-        subagentModel?: ModelProvider
-        reviewerModel?: ModelProvider
-        searchAgentModel?: ModelProvider
-        signal?: AbortSignal
-        thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
-        onThinkingDelta?: (delta: string) => void
-        onTextDelta?: (delta: string) => void
-        onToolCallStart?: (
-            toolCallId: string,
-            toolName: string,
-            label: string
-        ) => void
-        onToolCallEnd?: (
-            toolCallId: string,
-            toolName: string,
-            summary: string
-        ) => void
-    }
+    opts?: Option
 ): Promise<LibrarianResult> {
-    const { agent, toolMeta } = createLibrarianAgent(onStep, opts)
+    const { systemPrompt, tools, toolMeta } = useMode()
+    const agent = createLibrarianAgent(systemPrompt, tools, opts)
     const toolTimings = installAgentInstrumentation(
         agent,
         toolMeta,
