@@ -279,6 +279,265 @@ async function getFullTree<T>(docId?: string): Promise<TreeNode<T>[]> {
     return allRoots
 }
 
+/**
+ * Batch version of getFullTree: fetches full tree structures for multiple
+ * docIds in 3 SQL queries (roots, all subtree nodes, parent relationships)
+ * and reconstructs trees per docId in memory.
+ */
+async function getFullTrees<T>(
+    docIds: string[]
+): Promise<Map<string, TreeNode<T>[]>> {
+    const result = new Map<string, TreeNode<T>[]>()
+    if (docIds.length === 0) return result
+
+    const client = getRawClient()
+    const docPlaceholders = docIds.map(() => '?').join(', ')
+
+    // 1. Find root nodes for all docIds
+    const rootResult = await client.execute({
+        sql: `SELECT n.id, n.doc_id FROM nodes n
+              WHERE n.doc_id IN (${docPlaceholders})
+              AND NOT EXISTS (
+                  SELECT 1 FROM tree_closure tc
+                  WHERE tc.descendant_id = n.id AND tc.depth = 1
+              )`,
+        args: docIds,
+    })
+
+    const rootRows = rootResult.rows as unknown as {
+        id: string
+        doc_id: string
+    }[]
+
+    // Map docId → root node IDs; seed empty arrays for all requested docIds
+    const docRoots = new Map<string, string[]>()
+    for (const docId of docIds) {
+        docRoots.set(docId, [])
+        result.set(docId, [])
+    }
+    const allRootIds: string[] = []
+    for (const row of rootRows) {
+        docRoots.get(row.doc_id)?.push(row.id)
+        allRootIds.push(row.id)
+    }
+
+    if (allRootIds.length === 0) return result
+
+    // 2. Get all subtree nodes for all roots (depth≥0 includes roots themselves)
+    const rootPlaceholders = allRootIds.map(() => '?').join(', ')
+    const nodeResult = await client.execute({
+        sql: `SELECT n.id, n.data, n.doc_id FROM nodes n
+              JOIN tree_closure tc ON n.id = tc.descendant_id
+              WHERE tc.ancestor_id IN (${rootPlaceholders})
+              ORDER BY n.id`,
+        args: allRootIds,
+    })
+
+    const nodeRows = nodeResult.rows as unknown as {
+        id: string
+        data: string
+        doc_id: string
+    }[]
+
+    if (nodeRows.length === 0) return result
+
+    // 3. Get direct parent relationships (depth=1) for all subtree nodes
+    const allNodeIds = nodeRows.map((r) => r.id)
+    const parentMap = new Map<string, string>()
+    if (allNodeIds.length > 1) {
+        const nodePlaceholders = allNodeIds.map(() => '?').join(', ')
+        const parentResult = await client.execute({
+            sql: `SELECT descendant_id, ancestor_id FROM tree_closure
+                  WHERE depth = 1 AND descendant_id IN (${nodePlaceholders})`,
+            args: allNodeIds,
+        })
+        for (const row of parentResult.rows as unknown as {
+            descendant_id: string
+            ancestor_id: string
+        }[]) {
+            parentMap.set(row.descendant_id, row.ancestor_id)
+        }
+    }
+
+    // 4. Reconstruct trees per docId
+    for (const [docId] of docRoots) {
+        const nodeMap = new Map<string, TreeNode<T>>()
+        for (const row of nodeRows) {
+            if (row.doc_id === docId) {
+                nodeMap.set(row.id, jsonToTreeNode<T>(row))
+            }
+        }
+        if (nodeMap.size === 0) continue
+
+        const roots: TreeNode<T>[] = []
+        for (const [id, node] of nodeMap) {
+            const parentId = parentMap.get(id)
+            if (parentId === undefined || !nodeMap.has(parentId)) {
+                roots.push(node)
+            } else {
+                const parent = nodeMap.get(parentId)!
+                parent.nodes.push(node)
+            }
+        }
+        result.set(docId, roots)
+    }
+
+    return result
+}
+
+/**
+ * Lightweight batch outline: returns compacted text outlines for multiple
+ * docIds using json_extract to avoid transferring the bulky `text` field.
+ * Still uses tree_closure for correct hierarchy, but skips summary data.
+ */
+async function getDocOutlines(docIds: string[]): Promise<Map<string, string>> {
+    const result = new Map<string, string>()
+    if (docIds.length === 0) return result
+
+    const client = getRawClient()
+    const docPlaceholders = docIds.map(() => '?').join(', ')
+
+    // 1. Find root nodes for all docIds
+    const rootResult = await client.execute({
+        sql: `SELECT n.id, n.doc_id FROM nodes n
+              WHERE n.doc_id IN (${docPlaceholders})
+              AND NOT EXISTS (
+                  SELECT 1 FROM tree_closure tc
+                  WHERE tc.descendant_id = n.id AND tc.depth = 1
+              )`,
+        args: docIds,
+    })
+
+    const rootRows = rootResult.rows as unknown as {
+        id: string
+        doc_id: string
+    }[]
+
+    const allRootIds: string[] = []
+    const docRootMap = new Map<string, string[]>()
+    for (const docId of docIds) {
+        docRootMap.set(docId, [])
+        result.set(docId, '')
+    }
+    for (const row of rootRows) {
+        allRootIds.push(row.id)
+        docRootMap.get(row.doc_id)?.push(row.id)
+    }
+
+    if (allRootIds.length === 0) return result
+
+    // 2. Get subtree nodes with only title/prefixSummary (json_extract avoids
+    //    pulling the large `text` field from the data JSON blob).
+    const rootPlaceholders = allRootIds.map(() => '?').join(', ')
+    const nodeResult = await client.execute({
+        sql: `SELECT n.id,
+                     json_extract(n.data, '$.title') AS title,
+                     json_extract(n.data, '$.prefixSummary') AS pref_summary,
+                     n.doc_id
+              FROM nodes n
+              JOIN tree_closure tc ON n.id = tc.descendant_id
+              WHERE tc.ancestor_id IN (${rootPlaceholders})
+              ORDER BY n.id`,
+        args: allRootIds,
+    })
+
+    const nodeRows = nodeResult.rows as unknown as {
+        id: string
+        title: string | null
+        pref_summary: string | null
+        doc_id: string
+    }[]
+
+    if (nodeRows.length === 0) return result
+
+    // 3. Get direct parent relationships (depth=1)
+    const allNodeIds = nodeRows.map((r) => r.id)
+    const parentMap = new Map<string, string>()
+    if (allNodeIds.length > 1) {
+        const nodePlaceholders = allNodeIds.map(() => '?').join(', ')
+        const parentResult = await client.execute({
+            sql: `SELECT descendant_id, ancestor_id FROM tree_closure
+                  WHERE depth = 1 AND descendant_id IN (${nodePlaceholders})`,
+            args: allNodeIds,
+        })
+        for (const row of parentResult.rows as unknown as {
+            descendant_id: string
+            ancestor_id: string
+        }[]) {
+            parentMap.set(row.descendant_id, row.ancestor_id)
+        }
+    }
+
+    // 4. Build indented outline text per docId
+    for (const [docId] of docRootMap) {
+        // Group nodes for this docId
+        const docNodes = new Map<
+            string,
+            { id: string; title: string; prefSummary: string | null }
+        >()
+        for (const row of nodeRows) {
+            if (row.doc_id === docId) {
+                docNodes.set(row.id, {
+                    id: row.id,
+                    title: row.title ?? '',
+                    prefSummary: row.pref_summary,
+                })
+            }
+        }
+        if (docNodes.size === 0) continue
+
+        // Reconstruct tree shape (same logic as getFullTrees)
+        const childrenMap = new Map<string, string[]>()
+        const roots: string[] = []
+        for (const [nid] of docNodes) {
+            const parentId = parentMap.get(nid)
+            if (parentId === undefined || !docNodes.has(parentId)) {
+                roots.push(nid)
+            } else {
+                const siblings = childrenMap.get(parentId) ?? []
+                siblings.push(nid)
+                childrenMap.set(parentId, siblings)
+            }
+        }
+
+        // Render indented outline
+        const lines: string[] = []
+        const render = (nodeId: string, depth: number) => {
+            const node = docNodes.get(nodeId)
+            if (!node) return
+            const pad = '  '.repeat(depth)
+            const idNum = nodeId.split('_')[0]
+            const children = childrenMap.get(nodeId)
+            if (children && children.length > 0) {
+                lines.push(`${pad}${idNum} ${node.title}`)
+                lines.push(`${pad}  (目录)`)
+                if (node.prefSummary) {
+                    lines.push(`${pad}  ${node.prefSummary}`)
+                }
+                for (const childId of children) {
+                    render(childId, depth + 1)
+                }
+            } else {
+                lines.push(`${pad}${idNum} ${node.title}`)
+                // Note: we intentionally skip leaf summaries to keep it compact
+            }
+        }
+        for (const rootId of roots) {
+            render(rootId, 0)
+        }
+
+        // Apply same compacting filter as compactDocText
+        const compacted = lines
+            .filter(
+                (line) => /^\s*\d+\s+\S/.test(line) || line.includes('(目录)')
+            )
+            .join('\n')
+        result.set(docId, compacted)
+    }
+
+    return result
+}
+
 async function getNodeDetails<T>(nodeId: string): Promise<T | undefined> {
     const row = await db
         .select()
@@ -655,9 +914,11 @@ export {
     getDoc,
     getDocCount,
     getDocFtsSummary,
+    getDocOutlines,
     getDocsPaginated,
     getDocumentDetail,
     getFullTree,
+    getFullTrees,
     getNodeDetails,
     getSiblings,
     getSubTree,

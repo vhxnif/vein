@@ -3,17 +3,15 @@ import { Agent } from '@earendil-works/pi-agent-core'
 import { getModel, Type } from '@earendil-works/pi-ai'
 import { logger } from '../../config'
 import type { ModelProvider } from '../../config/type'
-import { getFullTree } from '../../store'
-import type { BaseDocNode } from '../../tree/type'
-import { getModelProvider } from '../base'
-import { SEARCH_DOCS_BY_KEYWORD_META, searchDocsByKeyword } from '../tools'
-import type { ToolCtx, ToolMeta } from '../types'
 import {
-    compactDocText,
-    ellipsis,
-    extractResultText,
-    renderDocStructure,
-} from './utils'
+    getDocOutlines,
+    getNodeDetails,
+    searchDocsByKeyword,
+} from '../../store'
+import { getModelProvider } from '../base'
+import { SEARCH_DOCS_BY_KEYWORD_META } from '../tools'
+import type { ToolCtx, ToolMeta } from '../types'
+import { ellipsis, extractResultText } from './utils'
 
 const slog = logger.child({ module: 'search-screener' })
 
@@ -100,15 +98,21 @@ export const SEARCH_SCREENER_PROMPT = `你是一个文档搜索筛选员。根�
 
 ## 约束
 
-- 最多 5 次搜索
+- 最多 3 次搜索
 - 最多返回 10 篇文档
 - 只返回 snippet/outline 表明与查询相关的文档
 - 相关性标注：high=大纲中有专门章节，medium=部分涉及，low=仅边缘提及
 - 空结果时返回 []
 `
 
-function makeSearchDocsByKeyword(ctx: ToolCtx, segmenter?: ModelProvider): any {
+function makeSearchDocsByKeyword(
+    ctx: ToolCtx,
+    _segmenter?: ModelProvider
+): any {
     const { cached, ok, tool } = ctx
+    // Cache compacted outlines by docId across search rounds within the
+    // same sub-agent invocation (avoids re-fetching the same doc tree).
+    const outlineCache = new Map<string, string>()
     return {
         name: 'searchDocsByKeyword',
         description:
@@ -141,36 +145,56 @@ function makeSearchDocsByKeyword(ctx: ToolCtx, segmenter?: ModelProvider): any {
             }
             const key = `searchDocsByKeyword:${query}:${limit ?? 10}:${offset ?? 0}`
             const result = await cached(key, async () => {
-                const raw = await searchDocsByKeyword(
+                // Direct FTS5 search — no LLM segmentation (sub-agent already
+                // provides space-separated keywords; unicode61 bigram tokenizer
+                // handles Chinese matching natively via OR semantics).
+                const maxLimit = Math.min(limit ?? 10, 20)
+                const results = await searchDocsByKeyword(
                     query,
-                    segmenter,
-                    Math.min(limit ?? 10, 20),
+                    maxLimit,
                     offset ?? 0
                 )
-                // Enrich each result with a compact document outline
-                // (nodeId + title only, no summaries) for better screening
-                const parsed = JSON.parse(raw) as Array<{
-                    docId: string
-                    snippet: string
-                    rank: number
-                }>
-                if (!Array.isArray(parsed) || parsed.length === 0) {
-                    return raw
+                if (results.length === 0) {
+                    return '[]'
                 }
-                const enriched = await Promise.all(
-                    parsed.map(async (doc) => {
+                // Enrich with snippet from root node (summary / prefixSummary)
+                const withSnippets = await Promise.all(
+                    results.map(async (r) => {
+                        let snippet = ''
                         try {
-                            const tree = await getFullTree<BaseDocNode>(
-                                doc.docId
-                            )
-                            const full = renderDocStructure(tree)
-                            const outline = compactDocText(full)
-                            return { ...doc, outline }
+                            const rootNode = await getNodeDetails<{
+                                summary?: string
+                                prefixSummary?: string
+                            }>(`0000_${r.docId}`)
+                            snippet =
+                                rootNode?.summary ??
+                                rootNode?.prefixSummary ??
+                                ''
                         } catch {
-                            return { ...doc, outline: '' }
+                            // best-effort: snippet is optional for filtering
+                        }
+                        return {
+                            docId: r.docId,
+                            snippet,
+                            rank: r.rank,
                         }
                     })
                 )
+                // Lightweight batch outline: uses json_extract to skip heavy
+                // `text` fields; fetches only titles + hierarchy from tree_closure.
+                const uncachedIds = withSnippets
+                    .map((d) => d.docId)
+                    .filter((id) => !outlineCache.has(id))
+                if (uncachedIds.length > 0) {
+                    const outlines = await getDocOutlines(uncachedIds)
+                    for (const [docId, outline] of outlines) {
+                        outlineCache.set(docId, outline)
+                    }
+                }
+                const enriched = withSnippets.map((doc) => ({
+                    ...doc,
+                    outline: outlineCache.get(doc.docId) ?? '',
+                }))
                 return JSON.stringify(enriched)
             })
             return ok(result)
@@ -209,7 +233,7 @@ async function searchAndScreen(
         tool: (fn) => fn,
     }
 
-    const MAX_STEPS = 6
+    const MAX_STEPS = 4
     let stepCount = 0
 
     const agent = new Agent({
