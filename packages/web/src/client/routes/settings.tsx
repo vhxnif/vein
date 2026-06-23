@@ -363,7 +363,7 @@ function ModelRow({
             { value: '', label: 'Select...' },
             ...modelList.map((m) => ({
                 value: m.id,
-                label: `${m.id} (${m.name})`,
+                label: m.name,
             })),
         ],
         [modelList]
