@@ -250,20 +250,6 @@ function HistoryRow({
                     {entry.query}
                 </span>
                 <span className="font-sans text-[8pt] text-olive flex items-center gap-3 flex-shrink-0">
-                    {showDate && (
-                        <span className="text-stone">
-                            {date} {time}
-                        </span>
-                    )}
-                    <span
-                        className={`px-2 py-0.5 rounded-full font-sans text-[7.5pt] font-medium ${
-                            entry.mode === 'raw'
-                                ? 'border border-ink/30 bg-transparent text-stone'
-                                : 'bg-ink/10 text-ink'
-                        }`}
-                    >
-                        {entry.mode === 'raw' ? 'Raw' : 'Review'}
-                    </span>
                     {entry.verdict && (
                         <span
                             className={
@@ -275,6 +261,20 @@ function HistoryRow({
                             }
                         >
                             {entry.verdict} {entry.score}/5
+                        </span>
+                    )}
+                    <span
+                        className={`px-2 py-0.5 rounded-full font-sans text-[7.5pt] font-medium ${
+                            entry.mode === 'quick'
+                                ? 'border border-ink/30 bg-transparent text-stone'
+                                : 'bg-ink/10 text-ink'
+                        }`}
+                    >
+                        {entry.mode === 'quick' ? 'Quick' : 'Review'}
+                    </span>
+                    {showDate && (
+                        <span className="text-stone">
+                            {date} {time}
                         </span>
                     )}
                     <span>{(entry.elapsedMs / 1000).toFixed(1)}s</span>

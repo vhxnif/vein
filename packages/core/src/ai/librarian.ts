@@ -6,7 +6,6 @@ import { logger } from '../config'
 import type { ModelProvider } from '../config/type'
 import { getModelProvider } from './base'
 import { createAnalyzeDocumentTool } from './sub-agents/doc-analyzer'
-import { createGetDocumentFragmentsTool } from './sub-agents/fragment-extractor'
 import type { ReviewResult } from './sub-agents/reviewer'
 import { createReviewResultTool } from './sub-agents/reviewer'
 import { createSearchDocumentsTool } from './sub-agents/search-screener'
@@ -76,93 +75,51 @@ const PROMPT = `你是一个文档检索 Librarian。通过搜索子 Agent 定�
 
 `
 
-// ── Raw-mode Prompt ──────────────────────────────────────────
+// ── Quick-mode Prompt ──────────────────────────────────────────
 
-const RAW_MODE_PROMPT = `你是一个文档检索 Librarian。通过搜索子 Agent 定位文档，将片段提取委托给文档片段提取子 Agent，最后汇总并给出深度分析报告。
+const QUICK_MODE_PROMPT = `你是一个文档检索 Librarian。通过搜索子 Agent 定位文档，将深度分析委托给文档分析子 Agent，最后汇总整理。
 
 ## 工具
 
 | 步骤 | 工具 | 返回 |
 |------|------|------|
 | 1 | searchDocuments(userQuery) | [{docId, relevance, reason}] — 子 Agent 已筛选的文档列表 |
-| 2 | getDocumentFragments(docId, userQuery) | 子 Agent 提取的相关原始片段（Markdown，含 nodeId 出处） |
+| 2 | analyzeDocument(docId, userQuery) | 子 Agent 深度分析结果（Markdown 格式） |
 
 ## 流程
 
 1. 调用 searchDocuments(userQuery) 搜索相关文档（子 Agent 内部处理关键词提取和重搜）
-   - 如果返回空列表 []，直接输出"文档库中未找到相关内容"并停止
-2. 对返回的文档调用 getDocumentFragments，同一条消息中一次性批量并发调用（系统最多同时 10 个）
-   - 返回的文档已经过初筛，应全部提取
-   - **去重**：已提取过的文档不要重复提取，即使新搜索又命中了同一篇
-3. 整理所有文档的片段，按以下结构形成**深度分析报告**：
-
-   **按文档逐一列出**，每篇必须包含以下完整结构：
-
-   - **文档标题**（加粗，取自子 Agent 返回的「## 文档信息」中的标题）
-   - **相关性**：明确标注 high / medium / low / none，并简要说明判断依据（1句话）
-     - high：文档核心主题直接回答用户问题，多个片段密切相关
-     - medium：文档部分内容涉及用户问题，但不是核心主题
-     - low：仅边缘提及，信息量不足以支撑回答
-     - none：文档内容与用户问题完全无关
-   - **概述**：该文档中与查询相关的核心内容概述（2-3句）；若涉及时序（日期、版本、阶段），必须明确指出关键时间点或时间范围
-   - **关键发现**：从原文片段中提炼的关键信息点，以列表形式呈现；涉及时序的必须标注时间/版本；每个发现都应关联 nodeId 出处
-   - **详细分析**：结合原文的深度分析段落，不是简单堆砌片段，而是理解后组织成连贯的分析文字；每条关键信息必须使用 **[docId前8位:nodeId]** 标注出处
-
-   输出前自我审视：
-   - 是否覆盖了用户问题的所有方面？如有明显遗漏，可再次调用 searchDocuments 补搜（传入调整后的 userQuery），然后补提取遗漏文档
-   - 所有引用是否正确标注了 **[docId前8位:nodeId]** 格式？
-
-   - 对 relevance 为 low 的可压缩为简洁概述（仅标题 + 相关性 + 一句概述），none 的忽略
+   - 如果返回空列表 []，直接输出"文档库中未找到相关内容"并停止，不要继续搜索
+2. 对返回的文档调用 analyzeDocument，同一条消息中一次性批量并发调用（系统最多同时 10 个）
+   - 返回的文档已经过初筛，应全部分析
+   - **去重**：已分析过的文档不要重复分析，即使新搜索又命中了同一篇
+3. 整理所有文档的分析结果，形成最终答案
+   - 按文档逐一列出，每篇包含：文档标题、相关性、子 Agent 的「详细分析」原文
+   - 不要用自己的话重新概括子 Agent 的分析——直接引用子 Agent 返回的内容
+   - 对 relevance 为 low 的可压缩，none 的忽略
    - 所有文档相关性均为 "none" 时，直接输出"文档库中未找到相关内容"并停止
-   - **时序排序**：如果文档/片段之间存在时序关系（如版本演进、日期先后、事件因果），必须按时序排列；无法判断时序时按相关性 rank 降序排列
+   - **时序排序**：如果文档/分析结果之间存在时序关系（如版本演进、日期先后、事件因果），必须按时序排列；无法判断时序时按相关性 rank 降序排列
+   - 如有明显遗漏，可再次调用 searchDocuments 补搜（传入调整后的 userQuery），然后补分析遗漏文档
+   - 系统硬性约束：主 Agent 工具调用总数上限 40 次，超限将被强制终止并基于现有结果输出
 
 ## 输出格式
 
-最终答案必须直接输出内容，按文档逐一列出。格式如下：
-
-**文档A标题**
-
-相关性：high — 该文档是XX的核心设计文档，全面覆盖了用户问及的XX方案
-
-概述：本文档描述了XX系统的架构设计，其中第X章详细说明了XX流程。该设计基于2024年Q2版本。
-
-关键发现：
-- XX模块采用微服务架构，服务间通过 gRPC 通信（**[a1b2c3d4:0001]**）
-- 数据持久层使用分库分表策略，支持水平扩展（**[a1b2c3d4:0003]**）
-- 2024-06 引入了缓存层优化读性能（**[a1b2c3d4:0005]**）
-
-详细分析：
-原文指出……（**[a1b2c3d4:0001]**），进一步说明……（**[a1b2c3d4:0003]**）。从时序来看，缓存层的引入发生在……之后，二者之间存在……的关系。
-
-**文档B标题**
-
-相关性：medium — 涉及部分XX内容但非核心主题，主要为XX提供背景参考
-
-概述：……
-
-关键发现：
-- ……
-
-详细分析：
-……
-
-绝对禁止以下形式：
+最终答案必须直接输出内容，绝对禁止以下形式：
 - 禁止任何标题前缀（如"XX相关文档检索结果"、"检索结果"、"检索总结"）
 - 禁止任何过渡性语句（如"以下是..."、"根据检索结果..."）
 - 禁止开头打招呼（如"您好"、"你好"）
 - 禁止结尾总结（如"综上所述"、"以上结果供您参考"）
-- **禁止暴露内部流程细节**（如"搜索了X轮""重试了X次""提取了X篇"等），用户不需要感知检索过程
+- **禁止暴露内部流程细节**（如"搜索了X轮""重试了X次""分析了X篇"等），用户不需要感知检索过程
+- 直接输出正文内容，按文档逐一列出即可
 - 未找到相关内容时，只输出"文档库中未找到相关内容"，不要附加任何解释、原因或过程描述
 
 ## 约束
 
-- 最终答案必须使用 **[docId前8位:nodeId]** 格式（**方括号是必须的，否则引用不会被识别**）标注所有原文引用。docId前8位 来自子 Agent 返回的「## 文档信息」中的文档ID前8个字符
+- 最终答案必须使用 **[docId前8位:nodeId]** 格式（**方括号是必须的，否则引用不会被识别**）标注所有原文引用。docId前8位 来自子 Agent 返回的「## 数据来源」或「## 文档信息」中的文档ID前8个字符
   正确示例：详见 **[a1b2c3d4:0001]** 和 **[a1b2c3d4:0003]** 的原文
   错误示例：a1b2c3d4:0001（缺少方括号，不会被识别为引用）
-- nodeId 取片段中冒号前的纯数字前缀
 - 已获取的信息不要重复获取
-- **批量并发**：同类型工具调用（如多个 getDocumentFragments）放在同一条消息中一次发出，不要分批
-- 你是分析员，不是片段搬运工——必须理解片段含义后，组织成有深度的结构化分析，而非简单罗列原文
+- **批量并发**：同类型工具调用（如多个 analyzeDocument）放在同一条消息中一次发出，不要分批
 
 `
 
@@ -209,11 +166,11 @@ function buildMainTools(
     return { tools, toolMeta }
 }
 
-function buildRawTools(
+function buildQuickTools(
     segmenter?: ModelProvider,
     onStep?: (label: string) => void,
     searchAgentModel?: ModelProvider,
-    fragmentModel?: ModelProvider
+    subagentModel?: ModelProvider
 ): { tools: any[]; toolMeta: Record<string, ToolMeta> } {
     const cache = new Map<string, string>()
 
@@ -235,7 +192,7 @@ function buildRawTools(
 
     const entries = [
         createSearchDocumentsTool(ctx, segmenter, searchAgentModel),
-        createGetDocumentFragmentsTool(ctx, fragmentModel),
+        createAnalyzeDocumentTool(ctx, subagentModel),
     ]
 
     const toolMeta: Record<string, ToolMeta> = {}
@@ -314,7 +271,6 @@ function pruneContext(messages: AgentMessage[]): AgentMessage[] {
             msg.role === 'toolResult' &&
             'toolName' in msg &&
             (msg.toolName === 'analyzeDocument' ||
-                msg.toolName === 'getDocumentFragments' ||
                 msg.toolName === 'getDocStructure')
         ) {
             structIndices.push(i)
@@ -336,9 +292,7 @@ function pruneContext(messages: AgentMessage[]): AgentMessage[] {
         const compacted =
             toolName === 'analyzeDocument'
                 ? compactAnalyzeResult(c.text)
-                : toolName === 'getDocumentFragments'
-                  ? `[compacted] ${c.text.slice(0, 300)}...`
-                  : compactDocText(c.text)
+                : compactDocText(c.text)
         return {
             ...msg,
             content: [{ type: 'text' as const, text: compacted }],
@@ -608,22 +562,22 @@ function extractFinalResult(
 }
 // ── Mode ─────────────────────────────────────────────────────
 
-type Mode = 'default' | 'raw'
+type Mode = 'default' | 'quick'
 
 function useMode(
     mode: Mode,
     onStep?: (label: string) => void,
     opts?: Option
 ): { systemPrompt: string; tools: any[]; toolMeta: Record<string, ToolMeta> } {
-    if (mode === 'raw') {
-        const toolsInfo = buildRawTools(
+    if (mode === 'quick') {
+        const toolsInfo = buildQuickTools(
             opts?.segmenter,
             onStep,
             opts?.searchAgentModel,
             opts?.subagentModel
         )
         return {
-            systemPrompt: RAW_MODE_PROMPT,
+            systemPrompt: QUICK_MODE_PROMPT,
             ...toolsInfo,
         }
     }

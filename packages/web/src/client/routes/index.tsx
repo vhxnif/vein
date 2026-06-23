@@ -14,11 +14,19 @@ export const Route = createFileRoute('/')({
 
 function HomePage() {
     const { project } = useProject()
-    const { query, searching, result, error, elapsed, timeline, runSearch } =
-        useSearch()
+    const {
+        query,
+        searching,
+        result,
+        error,
+        elapsed,
+        mode,
+        timeline,
+        runSearch,
+        setMode,
+    } = useSearch()
 
     const [input, setInput] = useState(query)
-    const [mode, setMode] = useState<'default' | 'raw'>('default')
     const contentEndRef = useRef<HTMLDivElement>(null)
 
     // Auto-scroll to latest content as streaming progresses
@@ -120,19 +128,19 @@ function HomePage() {
                             : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
                     }`}
                 >
-                    Analyze+Review
+                    Review
                 </button>
                 <button
                     type="button"
                     disabled={searching}
-                    onClick={() => setMode('raw')}
+                    onClick={() => setMode('quick')}
                     className={`px-3 py-1 rounded-full font-sans text-[8pt] font-medium transition-colors ${
-                        mode === 'raw'
+                        mode === 'quick'
                             ? 'bg-ink text-ivory border border-ink'
                             : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
                     }`}
                 >
-                    Raw Fragments
+                    Quick
                 </button>
             </div>
 

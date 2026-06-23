@@ -69,7 +69,7 @@ export function register(program: Command) {
         .option('-t, --trace', 'show retrieval trace in output')
         .option(
             '-m, --mode <mode>',
-            'retrieval mode: default (analyze+review) or raw (extract raw fragments, main agent summarizes)',
+            'retrieval mode: default (analyze+review) or quick (skip review, faster)',
             'default'
         )
         .action(
@@ -142,7 +142,8 @@ export function register(program: Command) {
                         subagentModel: config.subagent,
                         reviewerModel: config.reviewer,
                         searchAgentModel: config.searchAgent,
-                        mode: (options?.mode as 'default' | 'raw') ?? 'default',
+                        mode:
+                            (options?.mode as 'default' | 'quick') ?? 'default',
                         onStep: searchSpinner
                             ? (label) => searchSpinner.message(label)
                             : undefined,
@@ -163,7 +164,7 @@ export function register(program: Command) {
                 const elapsed = formatDuration(elapsedMs)
 
                 const projectRoot = resolveProjectRoot()
-                const mode = (options?.mode as 'default' | 'raw') ?? 'default'
+                const mode = (options?.mode as 'default' | 'quick') ?? 'default'
                 if (projectRoot) {
                     const timeline: HistoryTimelineBlock[] = result.trace.map(
                         (s) => ({
