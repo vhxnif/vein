@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ModelInfo } from '../lib/api'
 import {
     fetchConfig,
@@ -8,11 +8,21 @@ import {
     fetchProviders,
     saveConfig,
 } from '../lib/api'
+import { SelectField } from '../components/SelectField'
 import { useProject } from '../lib/project'
 
 export const Route = createFileRoute('/settings')({
     component: SettingsPage,
 })
+
+const THINKING_OPTIONS = [
+    { value: '', label: 'off (default)' },
+    { value: 'minimal', label: 'minimal' },
+    { value: 'low', label: 'low' },
+    { value: 'medium', label: 'medium' },
+    { value: 'high', label: 'high' },
+    { value: 'xhigh', label: 'xhigh' },
+]
 
 function SettingsPage() {
     const { project, projects } = useProject()
@@ -256,23 +266,12 @@ function SettingsPage() {
                     >
                         Reasoning level
                     </label>
-                    <select
+                    <SelectField
                         id="thinkingLevel"
                         value={thinkingLevel}
-                        onChange={(e) =>
-                            setThinkingLevel(e.currentTarget.value)
-                        }
-                        className="w-full bg-ivory border border-cream rounded-[6pt]
-                                   px-3 py-2 font-sans text-[9pt] text-near-black
-                                   outline-none focus:border-ink focus-visible:ring-2 focus-visible:ring-ink transition-colors"
-                    >
-                        <option value="">off (default)</option>
-                        <option value="minimal">minimal</option>
-                        <option value="low">low</option>
-                        <option value="medium">medium</option>
-                        <option value="high">high</option>
-                        <option value="xhigh">xhigh</option>
-                    </select>
+                        onChange={setThinkingLevel}
+                        options={THINKING_OPTIONS}
+                    />
                     <p className="font-sans text-[7.5pt] text-stone mt-1">
                         Enables the model to show its reasoning process. Higher
                         levels use more tokens.
@@ -351,6 +350,25 @@ function ModelRow({
     const providerList = providers ?? []
     const modelList: ModelInfo[] = models ?? []
 
+    const providerOptions = useMemo(
+        () => [
+            { value: '', label: optional ? '(use main)' : 'Select...' },
+            ...providerList.map((p) => ({ value: p, label: p })),
+        ],
+        [providerList, optional]
+    )
+
+    const modelOptions = useMemo(
+        () => [
+            { value: '', label: 'Select...' },
+            ...modelList.map((m) => ({
+                value: m.id,
+                label: `${m.id} (${m.name})`,
+            })),
+        ],
+        [modelList]
+    )
+
     return (
         <div className="mb-5">
             <div className="flex items-center gap-3 mb-1">
@@ -364,38 +382,19 @@ function ModelRow({
                 )}
             </div>
             <div className="flex gap-3">
-                <select
+                <SelectField
                     value={provider}
-                    onChange={(e) => onProviderChange(e.currentTarget.value)}
-                    className="flex-1 bg-ivory border border-cream rounded-[6pt]
-                               px-3 py-2 font-sans text-[9pt] text-near-black
-                               outline-none focus:border-ink focus-visible:ring-2 focus-visible:ring-ink transition-colors"
-                >
-                    <option value="">
-                        {optional ? '(use main)' : 'Select...'}
-                    </option>
-                    {providerList.map((p) => (
-                        <option key={p} value={p}>
-                            {p}
-                        </option>
-                    ))}
-                </select>
-                <select
+                    onChange={onProviderChange}
+                    options={providerOptions}
+                    className="flex-1"
+                />
+                <SelectField
                     value={model}
-                    onChange={(e) => onModelChange(e.currentTarget.value)}
+                    onChange={onModelChange}
+                    options={modelOptions}
                     disabled={!provider}
-                    className="flex-1 bg-ivory border border-cream rounded-[6pt]
-                               px-3 py-2 font-sans text-[9pt] text-near-black
-                               outline-none focus:border-ink focus-visible:ring-2 focus-visible:ring-ink transition-colors
-                               disabled:opacity-50"
-                >
-                    <option value="">Select...</option>
-                    {modelList.map((m) => (
-                        <option key={m.id} value={m.id}>
-                            {m.id} ({m.name})
-                        </option>
-                    ))}
-                </select>
+                    className="flex-1"
+                />
             </div>
         </div>
     )
