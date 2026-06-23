@@ -347,6 +347,7 @@ function ExpandedEntry({ id }: { id: string }) {
                                 // biome-ignore lint/suspicious/noArrayIndexKey: static content, order never changes
                                 key={i}
                                 block={block}
+                                docIdMap={docIdMap}
                             />
                         ))}
                     </div>

@@ -215,6 +215,7 @@ function HomePage() {
                                     <TimelineBlockView
                                         key={block.id}
                                         block={block}
+                                        docIdMap={docIdMap}
                                     />
                                 ))}
                             </div>
