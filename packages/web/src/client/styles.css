@@ -285,6 +285,135 @@ body::before {
     color: #fff;
 }
 
+/* ── SelectField (custom dropdown replacing native <select>) ── */
+
+/* Trigger button */
+.select-trigger {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    background-color: var(--ivory);
+    border: 1px solid var(--border-cream);
+    border-radius: 6pt;
+    padding: 6pt 10pt;
+    font-family: var(--sans);
+    font-size: 9pt;
+    color: var(--near-black);
+    outline: none;
+    cursor: pointer;
+    transition: border-color 150ms ease;
+    text-align: left;
+    position: relative;
+}
+
+.select-trigger:hover {
+    border-color: var(--ink-light);
+}
+
+.select-trigger:focus-visible {
+    border-color: var(--ink-light);
+}
+
+.select-trigger[aria-expanded="true"] {
+    border-color: var(--ink-light);
+}
+
+.select-trigger:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background-color: var(--sand);
+    border-color: var(--border-cream);
+}
+
+/* Chevron icon inside trigger */
+.select-chevron {
+    position: absolute;
+    right: 8pt;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: var(--stone);
+    transition: transform 150ms ease;
+}
+
+.select-trigger[aria-expanded="true"] .select-chevron {
+    transform: translateY(-50%) rotate(180deg);
+}
+
+/* Dropdown panel */
+.select-dropdown {
+    position: absolute;
+    top: calc(100% + 4pt);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: var(--ivory);
+    border-radius: 8pt;
+    box-shadow:
+        0 0 0 1pt var(--border-cream),
+        0 4pt 24pt rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    animation: fadeIn 120ms ease;
+    max-height: 220pt;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-cream) transparent;
+}
+
+.select-dropdown::-webkit-scrollbar {
+    width: 4px;
+}
+
+.select-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.select-dropdown::-webkit-scrollbar-thumb {
+    background: var(--border-cream);
+    border-radius: 2px;
+}
+
+.select-dropdown::-webkit-scrollbar-thumb:hover {
+    background: var(--stone);
+}
+
+/* Dropdown items */
+.select-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 5pt 10pt;
+    font-family: var(--sans);
+    font-size: 9pt;
+    color: var(--olive);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition:
+        background-color 100ms ease,
+        color 100ms ease;
+    outline: none;
+}
+
+.select-item:hover {
+    background: var(--sand);
+}
+
+.select-item:focus-visible {
+    background: var(--sand);
+    outline: none;
+}
+
+.select-item[aria-selected="true"] {
+    color: var(--ink-blue);
+    font-weight: 500;
+}
+
+/* Placeholder / empty state item */
+.select-item-placeholder {
+    color: var(--stone);
+}
+
 /* Tags */
 .tag-calm {
     background: var(--tint-008);

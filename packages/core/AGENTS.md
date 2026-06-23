@@ -1,95 +1,8 @@
 # @vein/core
 
-All business logic, no UI/CLI dependency. CLI and Web import only from `@vein/core` single entry.
+All business logic, single export entry. CLI and Web import only from `@vein/core`.
 
-## Architecture Boundaries
-
-```
-src/
-├── ai/          Agent orchestration: librarian, reviewer, tools
-├── config/      Project config, logger, global registry
-├── service/     importBatch, history
-├── store/       DB schema, client, CRUD, migrations
-├── tree/        Markdown → document tree parser
-├── utils/       Common helpers, Chinese segmentation
-└── index.ts     Single export entry
-```
-
-- **All DB operations in `store/`** — nowhere else
-- **Single export** — `package.json` `"exports": { ".": "./src/index.ts" }` (no sub-paths)
-- **No dependency on CLI or Web**
-
-## AI Agent Architecture
-
-### Directory Layout
-
-```
-ai/
-├── types.ts              ToolCtx, ToolMeta — cross-cutting types
-├── base.ts               call(), getModel(), createSummarizer()
-├── tools.ts              searchDocsByKeyword() + its ToolMeta
-├── librarian.ts          Main orchestrator (Agent + instrumentation)
-├── index.ts              Barrel exports
-└── sub-agents/
-    ├── doc-analyzer.ts   Document Analyzer: analyzeDocument() + createAnalyzeDocumentTool()
-    ├── search-screener.ts  Search Screener: searchAndScreen() + createSearchDocumentsTool()
-    ├── reviewer.ts       Reviewer: reviewer() + createReviewResultTool()
-    └── utils.ts          Shared: Semaphore, ellipsis, extractResultText(), renderDocStructure()
-```
-
-### Sub-Agent Tiers
-
-| Tier | Agent | Budget | Tools | Log Module |
-|------|-------|:---:|-------|------------|
-| 1 | SearchScreener | ≤6 | `searchDocsByKeyword` (embeds `outline`) | `search-screener` |
-| 2 | Document Analyzer | ≤10 | `getDocStructure`, `getDocNodeDetails` | `doc-analyzer` |
-| 3 | Reviewer | — | `getReviewSource` | `ai` |
-
-- Main Librarian returns `LibrarianResult { content, trace, review? }`
-- `analyzeDocument` concurrency: `Semaphore(MAX_PARALLEL_ANALYZE=10)` (in `doc-analyzer.ts`)
-- Review retries up to 2x on partial/fail verdict
-
-### ToolMeta Pattern
-
-Each `create*Tool()` returns `{ tool, meta }` where `meta: ToolMeta` bundles per-tool formatting:
-
-```ts
-type ToolMeta = {
-    stepLabel: (args) => string           // "Analyzing document abc123..."
-    resultLabel: (text) => string | undefined  // "Analysis: high · 5.2KB"
-    resultSummary: (raw) => string        // "high: document covers X and Y"
-    logDetail: (args) => string           // "doc=abc123"
-}
-```
-
-`buildMainTools()` collects metas into `Record<string, ToolMeta>` and threads it through:
-`createLibrarianAgent()` → `installAgentInstrumentation()` → `extractFinalResult()`.
-
-No separate registry file. Adding a tool: define its ToolMeta alongside the `create*Tool()` function,
-return both, and it automatically participates in all instrumentation.
-
-**Tool ownership**: `tools.ts` owns metadata for `searchDocsByKeyword`. Sub-agent files own
-metadata for tools they create (`analyzeDocument`, `searchDocuments`, `reviewResult`, etc.).
-
-### Instrumentation (Single Subscriber)
-
-`installAgentInstrumentation()` merges what were 3 separate `agent.subscribe()` calls into one
-handler that processes `tool_execution_start`, `tool_execution_end`, and `message_update` events.
-Returns `toolTimings: Map<string, number>` for trace extraction.
-
-### Main Librarian Pipeline
-
-```ts
-librarian(msg, onStep, opts):
-    { agent, toolMeta } = createLibrarianAgent(onStep, opts)
-    toolTimings = installAgentInstrumentation(agent, toolMeta, onStep, opts)
-    cleanup = wireAbort(agent, opts?.signal)
-    await agent.prompt(msg)
-    cleanup()
-    return extractFinalResult(agent.state.messages, toolTimings, toolMeta)
-```
-
-### Adding a New Model Config Field — Checklist
+## Adding a New Model Config Field — Checklist
 
 Must touch 6 locations:
 
@@ -100,6 +13,24 @@ Must touch 6 locations:
 5. `web/routes/search.ts` — same as above
 6. `librarian.ts` — `buildMainTools()` and `librarian()` opts, thread to target tool
 
+## Agent Architecture
+
+### Budget & Concurrency
+
+| Tier | Agent | Budget |
+|------|-------|:---:|
+| 1 | SearchScreener | ≤6 |
+| 2 | Document Analyzer | ≤10 |
+| 3 | Reviewer | — |
+
+- `analyzeDocument` concurrency: `Semaphore(MAX_PARALLEL_ANALYZE=10)`
+- Review retries up to 2x on partial/fail verdict
+- Budget enforced via `beforeToolCall` hook with `{ block: true }` — prompt-level limits are unreliable
+
+### ToolMeta Pattern
+
+Each `create*Tool()` returns `{ tool, meta }` where `meta: ToolMeta` bundles per-tool formatting (step label, result summary, log detail). No separate registry — meta lives alongside the `create*Tool()` in the same file. **Ownership**: `tools.ts` owns meta for `searchDocsByKeyword`; sub-agent files own meta for their tools. If a tool moves files, its meta moves with it.
+
 ### Agent Event Ordering Quirk
 
 `beforeToolCall` is async — the Agent framework may dispatch `tool_execution_start` before it resolves. First tool start log shows `stepCount: 0` instead of `1`. Budget enforcement (synchronous inside `beforeToolCall`) is unaffected. This is framework behavior, consistent across all sub-agents.
@@ -108,62 +39,50 @@ Must touch 6 locations:
 
 ### DeepSeek Model
 
-- **Structured templates suppress reasoning**: Sub-agent success comes from explicit Markdown section headers (`## 相关性`, `## 概述`...). The model fills sections directly without preamble. Pure negative constraints ("return JSON") cause 6600+ char reasoning chains.
-- **Pure prompt cannot fully eliminate DeepSeek reasoning**: Even with "first char must be `{`", ~1600 chars of preamble remain. Full elimination needs `complete()` with `reasoning: 'low'` or `response_format: json_object`.
+- **Structured templates suppress reasoning**: Explicit Markdown section headers (`## 相关性`, `## 概述`...) make the model fill sections directly. Pure negative constraints ("return JSON") cause 6600+ char reasoning chains. Full elimination needs `complete()` with `reasoning: 'low'` or `response_format: json_object`.
 - **Agent API vs `call()`**: Both use `complete()` underneath. Output format differences come solely from prompt structure.
 
 ### Agent Hardening
 
-- **Main Agent budget MUST be enforced in code**: Prompt-level limits ("max 40 steps / 3 reviews") are unreliable. Use `beforeToolCall` hook with `{ block: true, reason: '...' }`.
-- **`analyzeDocument` MUST use memoization**: Cache by `(docId, userQuery)` via `cached(key, fn)`. Prompt-level "don't re-analyze" is unreliable.
-- **`analyzeDocument` MUST be try/catch**'d: Sub-agent failure without fallback kills the entire librarian session. Catch and return `## 相关性\n\nnone` placeholder.
-- **`reviewResult` sources must extract pure nodeId**: Sub-agent returns `0001: section title`. Reviewer's `getReviewSource` needs `0001`. Use `normalizeNodeId()` to extract the first token before `:` or `_`.
-- **Preserve `## 数据来源` during context pruning**: `pruneContext` that keeps only relevance + summary loses nodeId citations → final answer missing citations, reviewer missing sources. `compactAnalyzeResult` must also extract `## 数据来源` node list.
+- **Budget MUST be enforced in `beforeToolCall`**: Prompt-level limits ("max 40 steps / 3 reviews") are unreliable. Hook with `{ block: true, reason: '...' }`.
+- **`analyzeDocument` MUST be memoized**: Cache by `(docId, userQuery)` via `cached(key, fn)`. Prompt-level dedup is unreliable.
+- **`analyzeDocument` MUST be try/catch'd**: Failure without fallback kills the session. Catch and return `## 相关性\n\nnone`.
+- **`reviewResult` sources must extract pure nodeId**: Sub-agent returns `0001: section title`. Use `normalizeNodeId()` to extract the numeric prefix before `:` or `_`.
+- **Preserve `## 数据来源` during context pruning**: `compactAnalyzeResult` must extract the node list — pruning only relevance + summary drops citations and breaks reviewer.
 
 ### Prompt Authoring
 
-- **Don't leak internal constraints**: Model may verbatim repeat prompt text in output. Use abstract descriptions + `sanitizeAnswer()` post-processing.
-- **Soft limits become hard limits**: "Suggest ≤5 docs" causes rigid 5+5 batching → extra LLM round-trip. Use "select all possibly-relevant docs in one batch, do not split".
-- **Example keywords must be self-consistent**: "ref reactive 区别" contradicts "禁止将意图词作为关键词" in the same prompt. Use "ref reactive".
+- **Don't leak internal constraints**: Model may verbatim repeat prompt text. Use abstract descriptions + `sanitizeAnswer()`.
+- **Soft limits become hard limits**: "Suggest ≤5 docs" causes rigid batching. Use "select all possibly-relevant docs in one batch".
+- **Example keywords must be self-consistent**: Contradictory examples confuse the model.
 
 ### Code Patterns
 
 - **`compactDocText` regex**: Use `/^\s*\d+\s+\S/` instead of hardcoded `/^\s*\d{4}\s/` — nodeId format may change.
-- **`extractResultText(result)`**: Always use this helper (from `sub-agents/utils.ts`) to extract text from tool results instead of inline `.filter().map().join()` chains.
-- **Tool metadata ownership**: `tools.ts` functions own their metadata in `tools.ts`. Sub-agent tools own theirs in the sub-agent file. Never mix — if a tool moves files, its meta moves with it.
-- **Cross-cutting types (`ToolCtx`, `ToolMeta`)**: These live in `ai/types.ts` (not `sub-agents/`) because `librarian.ts`, `tools.ts`, and sub-agents all depend on them.
+- **Cross-cutting types**: `ToolCtx`, `ToolMeta` live in `ai/types.ts` (not `sub-agents/`) — used by librarian, tools, and all sub-agents.
 
 ### Template Literal Trap
 
-In `librarian.ts` `PROMPT` (backtick template literal), code examples with backticks (e.g. `` `ref reactive` ``) prematurely close the template. Use guillemets (「」) or other symbols for code examples inside prompt strings.
+In backtick template literals, code examples with backticks (`` `ref reactive` ``) prematurely close the template. Use guillemets (「」) for code examples inside prompt strings.
 
 ## Safety Rails
 
 ### NEVER
 
 - Export sub-paths from `@vein/core` (only `"."` in exports)
-- Put SQL outside `store/`
-- Skip `BEGIN/COMMIT` for multi-table mutations (docs + docs_fts, insertTree + deleteTree)
-- Log full LLM prompts, messages, responses, or complete document trees
 - Use `INSERT OR REPLACE` on FTS5 tables — always `DELETE` then `INSERT`
-- Rely on prompt-level constraints for Agent budget or deduplication — always enforce in code
+- Put SQL outside `store/`
 
 ### ALWAYS
 
-- Use `logger.child({ module: 'xxx' })` for module-scoped logging
-- Use `resolveProjectRoot()` for all project path resolution
-- Wrap `analyzeDocument` in try/catch with placeholder fallback
 - Use `cached()` for sub-agent memoization
-- Run `beforeToolCall` hook for hard budget limits on Agents
-- Extend `config/type.ts` when adding new model configuration fields
+- Extend `config/type.ts` when adding new model config fields
 
 ## Logging
 
-- Output: file only `~/.config/vein/logs/vein-YYYY-MM-DD.log` (JSON per line, `sync: true`)
-- Create: `logger.child({ module: 'xxx' })` from `import { logger } from '@vein/core'`
-- Use structured objects — `log.info({ docId, content: 'description' })`; avoid variable interpolation in `msg`
-- `sessionId` (`crypto.randomUUID().slice(0, 8)`) ties all logs for one ask session
-- Never log full LLM prompt/messages/response; log summaries only (`resultSummary` + `resultLen`)
+- Output: file only `~/.config/vein/logs/vein-YYYY-MM-DD.log` (JSON per line)
+- `sessionId` = `crypto.randomUUID().slice(0, 8)` ties all logs for one session
+- Never log full LLM prompt/messages/response; log summaries only
 
 ## Compact Instructions
 

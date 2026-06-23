@@ -142,8 +142,8 @@ type SearchOptions = {
         toolName: string,
         summary: string
     ) => void
-    /** Retrieval mode: 'default' uses analyze+review pipeline, 'raw' extracts raw fragments for the main agent to summarize. */
-    mode?: 'default' | 'raw'
+    /** Retrieval mode: 'default' uses analyze+review pipeline, 'quick' skips review for faster results. */
+    mode?: 'default' | 'quick'
 }
 
 type SearchResult = LibrarianResult & {

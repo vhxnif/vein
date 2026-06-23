@@ -23,10 +23,11 @@ export function annotateNodeRefs(
     // Build a set of known valid short doc IDs (first 8 hex chars)
     const validIds = new Set(docIdMap?.keys())
 
-    // Pass 1: bracketed form [XXXXXXXX:YYYY] — always safe, no false positives
+    // Pass 1: bracketed form [XXXXX...:YYYY] — display short (8 hex), link with full docId for lookup
     content = content.replace(
-        /\[([a-f0-9]{8}):(\d{2,5})\]/g,
-        '[$1:$2](node://$1/$2)'
+        /\[([a-f0-9]{8,}):(\d{2,5})\]/g,
+        (_, docId: string, nodeId: string) =>
+            `[${docId.slice(0, 8)}:${nodeId}](node://${docId}/${nodeId})`
     )
 
     // Pass 2: bare form XXXXXXXXX:YYYY — only when docId is in the whitelist,
@@ -38,7 +39,11 @@ export function annotateNodeRefs(
             `(?<!\\(|\\[)\\b(${idPattern}):(\\d{2,5})\\b(?!\\])`,
             'g'
         )
-        content = content.replace(bareRe, '[$1:$2](node://$1/$2)')
+        content = content.replace(
+            bareRe,
+            (_, docId: string, nodeId: string) =>
+                `[${docId.slice(0, 8)}:${nodeId}](node://${docId}/${nodeId})`
+        )
     }
 
     return content
@@ -138,7 +143,7 @@ export function Markdown({ children, docIdMap }: MarkdownProps) {
                         // Treat empty-href links matching the node ref pattern as citations.
                         if (!href || href === '') {
                             const text = extractTextContent(children)
-                            const m = text?.match(/^([a-f0-9]{8}):(\d{2,5})$/)
+                            const m = text?.match(/^([a-f0-9]{8,}):(\d{2,5})$/)
                             if (m?.[1] && m?.[2]) {
                                 const shortDocId = m[1]
                                 const nodeId = m[2]

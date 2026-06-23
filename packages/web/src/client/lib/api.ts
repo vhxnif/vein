@@ -387,7 +387,7 @@ export interface SearchStreamCallbacks {
 
 export async function searchQuery(
     q: string,
-    options?: SearchStreamCallbacks & { mode?: 'default' | 'raw' },
+    options?: SearchStreamCallbacks & { mode?: 'default' | 'quick' },
     signal?: AbortSignal
 ): Promise<SearchResult> {
     const res = await fetch(u('/projects/current/search'), {

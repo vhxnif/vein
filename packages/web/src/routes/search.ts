@@ -28,7 +28,7 @@ searchRouter.post('/', async (c) => {
     const body = await c.req.json()
     const query = body.q as string
     if (!query) return c.json({ error: 'Missing query' }, 400)
-    const mode = (body.mode as 'default' | 'raw') ?? 'default'
+    const mode = (body.mode as 'default' | 'quick') ?? 'default'
 
     const startedAt = performance.now()
 

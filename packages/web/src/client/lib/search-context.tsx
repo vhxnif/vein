@@ -27,6 +27,7 @@ export type TimelineBlock =
 
 export interface SearchState {
     query: string
+    mode: 'default' | 'quick'
     searching: boolean
     result: SearchResult | null
     error: string | null
@@ -36,13 +37,15 @@ export interface SearchState {
 }
 
 interface SearchContextType extends SearchState {
-    runSearch: (q: string, mode?: 'default' | 'raw') => void
+    runSearch: (q: string, mode?: 'default' | 'quick') => void
+    setMode: (mode: 'default' | 'quick') => void
     /** Clear current search state */
     clearSearch: () => void
 }
 
 const initialState: SearchState = {
     query: '',
+    mode: 'default',
     searching: false,
     result: null,
     error: null,
@@ -53,6 +56,9 @@ const initialState: SearchState = {
 const SearchContext = createContext<SearchContextType>({
     ...initialState,
     runSearch: () => {
+        /* no-op */
+    },
+    setMode: () => {
         /* no-op */
     },
     clearSearch: () => {
@@ -80,7 +86,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
     }, [])
 
     const runSearch = useCallback(
-        async (q: string, mode?: 'default' | 'raw') => {
+        async (q: string, mode?: 'default' | 'quick') => {
             if (abortRef.current) {
                 abortRef.current.abort()
             }
@@ -92,6 +98,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
             setState((prev) => ({
                 ...prev,
                 query: q,
+                mode: mode ?? prev.mode,
                 searching: true,
                 result: null,
                 error: null,
@@ -220,8 +227,14 @@ export function SearchProvider({ children }: { children: ReactNode }) {
         []
     )
 
+    const setMode = useCallback((mode: 'default' | 'quick') => {
+        setState((prev) => ({ ...prev, mode }))
+    }, [])
+
     return (
-        <SearchContext.Provider value={{ ...state, runSearch, clearSearch }}>
+        <SearchContext.Provider
+            value={{ ...state, runSearch, setMode, clearSearch }}
+        >
             {children}
         </SearchContext.Provider>
     )

@@ -2,7 +2,8 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { annotateNodeRefs, Markdown } from '../components/Markdown'
-import type { HistoryEntry, HistoryTimelineBlock } from '../lib/api'
+import { TimelineBlockView } from '../components/TimelineBlockView'
+import type { HistoryEntry } from '../lib/api'
 import { fetchHistory, fetchHistoryEntry } from '../lib/api'
 import { useProject } from '../lib/project'
 
@@ -249,20 +250,6 @@ function HistoryRow({
                     {entry.query}
                 </span>
                 <span className="font-sans text-[8pt] text-olive flex items-center gap-3 flex-shrink-0">
-                    {showDate && (
-                        <span className="text-stone">
-                            {date} {time}
-                        </span>
-                    )}
-                    <span
-                        className={`px-2 py-0.5 rounded-full font-sans text-[7.5pt] font-medium ${
-                            entry.mode === 'raw'
-                                ? 'border border-ink/30 bg-transparent text-stone'
-                                : 'bg-ink/10 text-ink'
-                        }`}
-                    >
-                        {entry.mode === 'raw' ? 'Raw' : 'Review'}
-                    </span>
                     {entry.verdict && (
                         <span
                             className={
@@ -276,6 +263,20 @@ function HistoryRow({
                             {entry.verdict} {entry.score}/5
                         </span>
                     )}
+                    <span
+                        className={`px-2 py-0.5 rounded-full font-sans text-[7.5pt] font-medium ${
+                            entry.mode === 'quick'
+                                ? 'border border-ink/30 bg-transparent text-stone'
+                                : 'bg-ink/10 text-ink'
+                        }`}
+                    >
+                        {entry.mode === 'quick' ? 'Quick' : 'Review'}
+                    </span>
+                    {showDate && (
+                        <span className="text-stone">
+                            {date} {time}
+                        </span>
+                    )}
                     <span>{(entry.elapsedMs / 1000).toFixed(1)}s</span>
                     <span className="text-[10pt]">
                         {expandedId === entry.id ? '▾' : '▸'}
@@ -286,35 +287,6 @@ function HistoryRow({
         </div>
     )
 }
-
-// ── Timeline block renderer (reused from search page) ──────
-
-function TimelineBlockView({ block }: { block: HistoryTimelineBlock }) {
-    if (block.type === 'thinking') {
-        return (
-            <div className="my-2 italic text-stone/70">
-                <Markdown>{block.text ?? ''}</Markdown>
-            </div>
-        )
-    }
-
-    if (block.type === 'tool') {
-        return (
-            <div className="my-1.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[8pt] font-mono max-w-full border-cream bg-ivory text-stone">
-                <span className="truncate">{block.label ?? block.name}</span>
-                {block.summary && (
-                    <span className="text-stone/60 truncate">
-                        → {block.summary}
-                    </span>
-                )}
-            </div>
-        )
-    }
-
-    return null
-}
-
-// ── Expanded entry ─────────────────────────────────────────
 
 function ExpandedEntry({ id }: { id: string }) {
     const { data: entry, isLoading } = useQuery({
@@ -375,6 +347,7 @@ function ExpandedEntry({ id }: { id: string }) {
                                 // biome-ignore lint/suspicious/noArrayIndexKey: static content, order never changes
                                 key={i}
                                 block={block}
+                                docIdMap={docIdMap}
                             />
                         ))}
                     </div>
