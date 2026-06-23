@@ -64,9 +64,8 @@ export function SelectField({
     // Scroll focused item into view
     useEffect(() => {
         if (!open || focusIdx < 0 || !listRef.current) return
-        const items = listRef.current.querySelectorAll<HTMLElement>(
-            '[role="option"]'
-        )
+        const items =
+            listRef.current.querySelectorAll<HTMLElement>('[role="option"]')
         const el = items[focusIdx]
         if (el) {
             el.scrollIntoView({ block: 'nearest' })
@@ -143,9 +142,7 @@ export function SelectField({
                     if (disabled) return
                     setOpen((v) => !v)
                     if (!open) {
-                        const idx = options.findIndex(
-                            (o) => o.value === value
-                        )
+                        const idx = options.findIndex((o) => o.value === value)
                         setFocusIdx(idx >= 0 ? idx : 0)
                     }
                 }}
@@ -164,11 +161,7 @@ export function SelectField({
                     }, 150)
                 }}
             >
-                <span
-                    className={
-                        value ? 'text-near-black' : 'text-stone'
-                    }
-                >
+                <span className={value ? 'text-near-black' : 'text-stone'}>
                     {selectedLabel}
                 </span>
                 <ChevronIcon />
@@ -191,8 +184,7 @@ export function SelectField({
                             role="option"
                             aria-selected={opt.value === value}
                             className={`select-item ${
-                                opt.value === '' &&
-                                (!value || value === '')
+                                opt.value === '' && (!value || value === '')
                                     ? 'select-item-placeholder'
                                     : ''
                             }`}
@@ -219,12 +211,7 @@ export function SelectField({
 function ChevronIcon() {
     return (
         <span className="select-chevron" aria-hidden="true">
-            <svg
-                width="10"
-                height="6"
-                viewBox="0 0 10 6"
-                fill="none"
-            >
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
                 <path
                     d="M1 1L5 5L9 1"
                     stroke="currentColor"

@@ -349,7 +349,9 @@ body::before {
     z-index: 50;
     background: var(--ivory);
     border-radius: 8pt;
-    box-shadow: 0 0 0 1pt var(--border-cream), 0 4pt 24pt rgba(0, 0, 0, 0.08);
+    box-shadow:
+        0 0 0 1pt var(--border-cream),
+        0 4pt 24pt rgba(0, 0, 0, 0.08);
     overflow: hidden;
     animation: fadeIn 120ms ease;
     max-height: 220pt;
@@ -387,7 +389,9 @@ body::before {
     background: transparent;
     border: none;
     cursor: pointer;
-    transition: background-color 100ms ease, color 100ms ease;
+    transition:
+        background-color 100ms ease,
+        color 100ms ease;
     outline: none;
 }
 

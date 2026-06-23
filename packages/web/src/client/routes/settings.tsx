@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
+import { SelectField } from '../components/SelectField'
 import type { ModelInfo } from '../lib/api'
 import {
     fetchConfig,
@@ -8,7 +9,6 @@ import {
     fetchProviders,
     saveConfig,
 } from '../lib/api'
-import { SelectField } from '../components/SelectField'
 import { useProject } from '../lib/project'
 
 export const Route = createFileRoute('/settings')({

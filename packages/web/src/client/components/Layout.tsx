@@ -174,7 +174,7 @@ function ProjectSelector() {
                            text-stone hover:text-ink hover:bg-sand
                            focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2
                            transition-colors"
-                title={project || 'Select project'}
+                aria-label={project || 'Select project'}
                 onClick={() => setOpen((v) => !v)}
                 aria-expanded={open}
                 aria-haspopup="true"
@@ -275,7 +275,6 @@ function SidebarIcon({
                        text-stone hover:text-ink hover:bg-sand
                        focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2
                        transition-colors"
-            title={label}
             aria-label={label}
         >
             {children}

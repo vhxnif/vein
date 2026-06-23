@@ -2,74 +2,13 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { annotateNodeRefs, Markdown } from '../components/Markdown'
 import { RunCat } from '../components/RunCat'
+import { TimelineBlockView } from '../components/TimelineBlockView'
 import { useProject } from '../lib/project'
-import { type TimelineBlock, useSearch } from '../lib/search-context'
+import { useSearch } from '../lib/search-context'
 
 export const Route = createFileRoute('/')({
     component: HomePage,
 })
-
-// ── Braille spinner (classic single-char) ────────────────────
-
-const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-
-function BrailleSpinner({ size = 'text-[10pt]' }: { size?: string }) {
-    const [frame, setFrame] = useState(0)
-
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setFrame((f) => (f + 1) % BRAILLE_FRAMES.length)
-        }, 120)
-        return () => clearInterval(timer)
-    }, [])
-
-    return (
-        <span
-            className={`inline-flex flex-shrink-0 leading-none ${size}`}
-            aria-hidden="true"
-        >
-            {BRAILLE_FRAMES[frame]}
-        </span>
-    )
-}
-
-// ── Single timeline block renderer ────────────────────────────
-
-function TimelineBlockView({ block }: { block: TimelineBlock }) {
-    if (block.type === 'thinking') {
-        return (
-            <div className="my-2 italic text-stone/70">
-                <Markdown>{block.text}</Markdown>
-            </div>
-        )
-    }
-
-    if (block.type === 'tool') {
-        return (
-            <div
-                className={`my-1.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[8pt] font-mono max-w-full ${
-                    block.status === 'running'
-                        ? 'border-olive/30 bg-olive/5 text-olive'
-                        : 'border-cream bg-ivory text-stone'
-                }`}
-            >
-                {block.status === 'running' && <BrailleSpinner />}
-                <span className="truncate">{block.label}</span>
-                {block.status === 'done' && block.summary && (
-                    <span className="text-stone/60 truncate">
-                        → {block.summary}
-                    </span>
-                )}
-            </div>
-        )
-    }
-
-    if (block.type === 'text') {
-        return <Markdown>{block.text}</Markdown>
-    }
-
-    return null
-}
 
 // ── Home page ────────────────────────────────────────────────
 

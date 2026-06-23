@@ -2,7 +2,8 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { annotateNodeRefs, Markdown } from '../components/Markdown'
-import type { HistoryEntry, HistoryTimelineBlock } from '../lib/api'
+import { TimelineBlockView } from '../components/TimelineBlockView'
+import type { HistoryEntry } from '../lib/api'
 import { fetchHistory, fetchHistoryEntry } from '../lib/api'
 import { useProject } from '../lib/project'
 
@@ -286,35 +287,6 @@ function HistoryRow({
         </div>
     )
 }
-
-// ── Timeline block renderer (reused from search page) ──────
-
-function TimelineBlockView({ block }: { block: HistoryTimelineBlock }) {
-    if (block.type === 'thinking') {
-        return (
-            <div className="my-2 italic text-stone/70">
-                <Markdown>{block.text ?? ''}</Markdown>
-            </div>
-        )
-    }
-
-    if (block.type === 'tool') {
-        return (
-            <div className="my-1.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[8pt] font-mono max-w-full border-cream bg-ivory text-stone">
-                <span className="truncate">{block.label ?? block.name}</span>
-                {block.summary && (
-                    <span className="text-stone/60 truncate">
-                        → {block.summary}
-                    </span>
-                )}
-            </div>
-        )
-    }
-
-    return null
-}
-
-// ── Expanded entry ─────────────────────────────────────────
 
 function ExpandedEntry({ id }: { id: string }) {
     const { data: entry, isLoading } = useQuery({

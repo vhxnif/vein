@@ -209,7 +209,6 @@ function DocsList() {
                                            opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all
                                            focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ink"
                                 aria-label={`Delete ${doc.title}`}
-                                title="Delete"
                                 onClick={(e) => {
                                     e.stopPropagation()
                                     e.preventDefault()

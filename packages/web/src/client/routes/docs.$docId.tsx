@@ -241,7 +241,6 @@ function DocDetailPage() {
                         aria-label={
                             showDetail ? 'Hide details' : 'Show details'
                         }
-                        title={showDetail ? 'Hide details' : 'Show details'}
                     >
                         <svg
                             width="12"

@@ -40,6 +40,8 @@ Backend build uses `--external better-sqlite3`. Bun macOS/Linux can load it dire
 - Inline business logic in routes or components — delegate to `@vein/core`
 - Use hardcoded hex colors (`bg-[#xxx]`, `text-[#xxx]`) — use Kami design tokens only (enforced by CI grep)
 - Use `focus:` pseudo-class — use `focus-visible:` for keyboard-only focus ring
+- Use ring/box-shadow/outline on form controls (inputs, selects) — border color change only, matching hover
+- Use native `<select>` elements — always use `<SelectField>` component instead
 - Mix `--tint` (cool blue-gray) with warm parchment backgrounds — use warm sand tones
 
 ### ALWAYS
@@ -81,7 +83,11 @@ When migrating from hex to tokens with sed, process variants with opacity suffix
 
 ### Keyboard Accessibility
 
-Always `focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2` — not `focus:`. The `focus-visible:` variant only shows the ring on keyboard (Tab) navigation, not mouse clicks. Apply to: sidebar icons, outline tree buttons, settings `<select>`.
+**Interactive chrome** (sidebar icons, tree buttons, menu items):
+Always `focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2` — not `focus:`. The `focus-visible:` variant only shows the ring on keyboard (Tab) navigation, not mouse clicks.
+
+**Form controls** (inputs, SelectField trigger):
+Focus must match hover exactly — border color change only, **no ring, no box-shadow, no outline**. Pattern: `border-cream` default → `border-ink-light` hover/focus/expanded. This keeps the form clean and avoids the "thick highlight" problem. Applies to: text inputs, `SelectField` trigger, search bar.
 
 ## UI Conventions
 
@@ -101,6 +107,33 @@ Always `focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-
 - **Responsive**: ≥768px sidebar + 780px centered content; <768px bottom tab bar + full width
 - **Dark mode**: `prefers-color-scheme`, warm dark tokens
 
+### Form Components
+
+**`SelectField`** (`components/SelectField.tsx`) — custom dropdown replacing all native `<select>`. Never use raw `<select>` in the web UI.
+
+| State | Trigger border | Dropdown panel |
+|-------|---------------|----------------|
+| Default | `border-cream` | — |
+| Hover / Focus / Expanded | `border-ink-light` | — |
+| Disabled | `border-cream`, `bg-sand`, opacity 0.45 | — |
+
+- Trigger: `bg-ivory`, `rounded-[6pt]`, sans 9pt, custom chevron (rotates 180° on expand)
+- Dropdown: `bg-ivory`, `rounded-[8pt]`, `ring-warm` + whisper shadow, `max-h-[220pt]` with thin scrollbar (`border-cream` thumb)
+- Items: `hover:bg-sand`, selected = `text-ink` + `●` prefix
+- Keyboard: ↑↓ move focus, Enter/Space select, Escape close; click-outside auto-close
+- Accepts `id` prop for `<label htmlFor>` a11y association
+
+### Tool Call Blocks
+
+Streaming tool blocks in the ask page use a unified clean style regardless of status:
+
+| Status | Border | Background | Text |
+|--------|--------|------------|------|
+| `running` | `border-cream` | `bg-ivory` | `text-stone` |
+| `done` | `border-ink/30` | `bg-ivory` | `text-stone` |
+
+Key principle: running and done share the same clean ivory background — never use tinted backgrounds (olive, sand) for in-progress state. The only differentiator is border: `cream` while running → `ink/30` accent when done.
+
 ### Chinese UI Text Audit Checklist
 
 When localizing (Chinese → English), verify: page titles, section headers (`大纲`→`Outline`), metadata labels (`章节`→`sections`), model labels (`主模型`→`Main Model`), empty state copy, placeholder hints.
@@ -109,8 +142,8 @@ When localizing (Chinese → English), verify: page titles, section headers (`�
 
 Preserve:
 
-1. NEVER/ALWAYS rules — keep list intact
-2. Design constraint table (hover consistency, Kami tokens)
+1. NEVER/ALWAYS rules — keep list intact (especially no native `<select>`, no ring on form controls)
+2. Design constraint table (hover consistency, Kami tokens, keyboard accessibility split)
 3. Mobile adaptation patterns (infinite scroll, page size calculation)
-4. Component patterns (delete button, keyboard accessibility)
+4. Component patterns (delete button, SelectField, Tool Call Blocks)
 5. CI hex color enforcement note

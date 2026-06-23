@@ -477,7 +477,7 @@ function MinimizedBar({
                         type="button"
                         className="flex-shrink-0 p-1 text-stone hover:text-ink transition-colors"
                         onClick={onExpand}
-                        title="Expand details"
+                        aria-label="Expand details"
                     >
                         <svg
                             width="14"
@@ -500,7 +500,7 @@ function MinimizedBar({
                             type="button"
                             className="flex-shrink-0 p-1 text-stone hover:text-ink transition-colors"
                             onClick={onClose}
-                            title="Close"
+                            aria-label="Close"
                         >
                             <svg
                                 width="14"
@@ -666,7 +666,7 @@ function UploadingView({
                             type="button"
                             className="btn-ghost text-[8.5pt]"
                             onClick={onAbort}
-                            title="Close import"
+                            aria-label="Close import"
                         >
                             Close
                         </button>
@@ -675,7 +675,7 @@ function UploadingView({
                         type="button"
                         className="btn-ghost text-[8.5pt]"
                         onClick={onMinimize}
-                        title="Minimize to background"
+                        aria-label="Minimize to background"
                     >
                         Minimize
                     </button>
