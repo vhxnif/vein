@@ -10,6 +10,7 @@ import {
     useLocation,
 } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { deleteDocument, fetchDocuments } from '../lib/api'
 import { useImport } from '../lib/import-context'
 import { useProject } from '../lib/project'
@@ -111,10 +112,16 @@ function DocsList() {
         return () => observer.disconnect()
     }, [isMobile, loadMore])
 
+    const [deleteTarget, setDeleteTarget] = useState<{
+        id: string
+        title: string
+    } | null>(null)
+
     const deleteMutation = useMutation({
         mutationFn: (id: string) => deleteDocument(id),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['documents'] })
+            setDeleteTarget(null)
         },
     })
 
@@ -212,8 +219,10 @@ function DocsList() {
                                 onClick={(e) => {
                                     e.stopPropagation()
                                     e.preventDefault()
-                                    if (confirm(`Delete "${doc.title}"?`))
-                                        deleteMutation.mutate(doc.id)
+                                    setDeleteTarget({
+                                        id: doc.id,
+                                        title: doc.title,
+                                    })
                                 }}
                                 disabled={deleteMutation.isPending}
                             >
@@ -284,6 +293,18 @@ function DocsList() {
                     </button>
                 </div>
             )}
+
+            <ConfirmDialog
+                open={deleteTarget !== null}
+                title="Delete Document"
+                message={`Are you sure you want to delete "${deleteTarget?.title ?? ''}"? This action cannot be undone.`}
+                confirmLabel="Delete"
+                onConfirm={() => {
+                    if (deleteTarget) deleteMutation.mutate(deleteTarget.id)
+                }}
+                onCancel={() => setDeleteTarget(null)}
+                loading={deleteMutation.isPending}
+            />
         </>
     )
 }
