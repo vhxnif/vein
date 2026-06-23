@@ -23,9 +23,9 @@ export function annotateNodeRefs(
     // Build a set of known valid short doc IDs (first 8 hex chars)
     const validIds = new Set(docIdMap?.keys())
 
-    // Pass 1: bracketed form [XXXXXXXX:YYYY] — always safe, no false positives
+    // Pass 1: bracketed form [XXXXX...:YYYY] — docId may be short (8 hex) or full length; always safe, no false positives
     content = content.replace(
-        /\[([a-f0-9]{8}):(\d{2,5})\]/g,
+        /\[([a-f0-9]{8,}):(\d{2,5})\]/g,
         '[$1:$2](node://$1/$2)'
     )
 
@@ -138,7 +138,7 @@ export function Markdown({ children, docIdMap }: MarkdownProps) {
                         // Treat empty-href links matching the node ref pattern as citations.
                         if (!href || href === '') {
                             const text = extractTextContent(children)
-                            const m = text?.match(/^([a-f0-9]{8}):(\d{2,5})$/)
+                            const m = text?.match(/^([a-f0-9]{8,}):(\d{2,5})$/) 
                             if (m?.[1] && m?.[2]) {
                                 const shortDocId = m[1]
                                 const nodeId = m[2]
