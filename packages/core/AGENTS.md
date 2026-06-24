@@ -2,7 +2,17 @@
 
 All business logic, single export entry. CLI and Web import only from `@vein/core`.
 
-## Adding a New Model Config Field — Checklist
+## Build And Test
+
+`bun run check && bun run lint`
+
+## Architecture Boundaries
+
+SQL lives in `store/` only. Never export sub-paths from `@vein/core` (only `"."` in exports).
+
+## Coding Conventions
+
+### New Model Config Field — Checklist
 
 Must touch 6 locations:
 
@@ -13,8 +23,6 @@ Must touch 6 locations:
 5. `web/routes/search.ts` — same as above
 6. `librarian.ts` — `buildMainTools()` and `librarian()` opts, thread to target tool
 
-## Agent Architecture
-
 ### Budget & Concurrency
 
 | Tier | Agent | Budget |
@@ -24,7 +32,7 @@ Must touch 6 locations:
 | 3 | Reviewer | — |
 
 - `analyzeDocument` concurrency: `Semaphore(MAX_PARALLEL_ANALYZE=10)`
-- Review retries up to 2x on partial/fail verdict
+- Review retries up to 2× on partial/fail verdict
 - Budget enforced via `beforeToolCall` hook with `{ block: true }` — prompt-level limits are unreliable
 
 ### ToolMeta Pattern
@@ -33,7 +41,7 @@ Each `create*Tool()` returns `{ tool, meta }` where `meta: ToolMeta` bundles per
 
 ### Agent Event Ordering Quirk
 
-`beforeToolCall` is async — the Agent framework may dispatch `tool_execution_start` before it resolves. First tool start log shows `stepCount: 0` instead of `1`. Budget enforcement (synchronous inside `beforeToolCall`) is unaffected. This is framework behavior, consistent across all sub-agents.
+`beforeToolCall` is async — the Agent framework may dispatch `tool_execution_start` before it resolves. First tool start log shows `stepCount: 0`. Budget enforcement (synchronous inside `beforeToolCall`) is unaffected.
 
 ## Traps & Non-Obvious Behaviors
 
@@ -44,11 +52,11 @@ Each `create*Tool()` returns `{ tool, meta }` where `meta: ToolMeta` bundles per
 
 ### Agent Hardening
 
-- **Budget MUST be enforced in `beforeToolCall`**: Prompt-level limits ("max 40 steps / 3 reviews") are unreliable. Hook with `{ block: true, reason: '...' }`.
-- **`analyzeDocument` MUST be memoized**: Cache by `(docId, userQuery)` via `cached(key, fn)`. Prompt-level dedup is unreliable.
-- **`analyzeDocument` MUST be try/catch'd**: Failure without fallback kills the session. Catch and return `## 相关性\n\nnone`.
-- **`reviewResult` sources must extract pure nodeId**: Sub-agent returns `0001: section title`. Use `normalizeNodeId()` to extract the numeric prefix before `:` or `_`.
-- **Preserve `## 数据来源` during context pruning**: `compactAnalyzeResult` must extract the node list — pruning only relevance + summary drops citations and breaks reviewer.
+- **Budget MUST be in `beforeToolCall` hook** with `{ block: true, reason: '...' }` — prompt-level limits are unreliable.
+- **`analyzeDocument` MUST be memoized**: cache by `(docId, userQuery)` via `cached(key, fn)`.
+- **`analyzeDocument` MUST be try/catch'd**: failure without fallback kills the session. Catch and return `## 相关性\n\nnone`.
+- **`reviewResult` sources**: sub-agent returns `0001: section title`. Use `normalizeNodeId()` to extract numeric prefix before `:` or `_`.
+- **`compactAnalyzeResult` must preserve `## 数据来源`**: pruning relevance + summary drops citations.
 
 ### Prompt Authoring
 
@@ -58,38 +66,38 @@ Each `create*Tool()` returns `{ tool, meta }` where `meta: ToolMeta` bundles per
 
 ### Code Patterns
 
-- **`compactDocText` regex**: Use `/^\s*\d+\s+\S/` instead of hardcoded `/^\s*\d{4}\s/` — nodeId format may change.
-- **Cross-cutting types**: `ToolCtx`, `ToolMeta` live in `ai/types.ts` (not `sub-agents/`) — used by librarian, tools, and all sub-agents.
+- **`compactDocText` regex**: `/^\s*\d+\s\S/` (not hardcoded `/^\s*\d{4}\s/`) — nodeId format may change.
+- **Cross-cutting types**: `ToolCtx`, `ToolMeta` in `ai/types.ts` — used by librarian, tools, and all sub-agents.
 
 ### Template Literal Trap
 
-In backtick template literals, code examples with backticks (`` `ref reactive` ``) prematurely close the template. Use guillemets (「」) for code examples inside prompt strings.
+Backtick template literals with code examples containing backticks (`` `ref reactive` ``) prematurely close the template. Use guillemets (「」) for code examples inside prompt strings.
 
 ## Safety Rails
 
 ### NEVER
 
 - Export sub-paths from `@vein/core` (only `"."` in exports)
-- Use `INSERT OR REPLACE` on FTS5 tables — always `DELETE` then `INSERT`
+- Use `INSERT OR REPLACE` on FTS5 — always `DELETE` then `INSERT`
 - Put SQL outside `store/`
 
 ### ALWAYS
 
-- Use `cached()` for sub-agent memoization
+- `cached()` for sub-agent memoization
 - Extend `config/type.ts` when adding new model config fields
 
 ## Logging
 
-- Output: file only `~/.config/vein/logs/vein-YYYY-MM-DD.log` (JSON per line)
+- Output: `~/.config/vein/logs/vein-YYYY-MM-DD.log` (JSON per line, file only)
 - `sessionId` = `crypto.randomUUID().slice(0, 8)` ties all logs for one session
-- Never log full LLM prompt/messages/response; log summaries only
+- Never log full LLM prompt/messages/response — log summaries only
 
 ## Compact Instructions
 
 Preserve:
 
 1. 6-location checklist for new model config fields
-2. NEVER/ALWAYS rules — keep list intact
+2. NEVER/ALWAYS rules — keep intact
 3. Agent traps: memoization, try/catch, nodeId extraction, context pruning
 4. DeepSeek behavior notes (structured templates, reasoning suppression)
 5. Logging constraints (file-only, no full LLM content)
