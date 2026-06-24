@@ -143,6 +143,8 @@ export function register(program: Command) {
                         subagentModel: config.subagent,
                         reviewerModel: config.reviewer,
                         searchAgentModel: config.searchAgent,
+                        maxAnalyzeResultFull: config.maxAnalyzeResultFull,
+                        maxParallelAnalyze: config.maxParallelAnalyze,
                         mode:
                             (options?.mode as 'default' | 'quick') ?? 'default',
                         onStep: searchSpinner

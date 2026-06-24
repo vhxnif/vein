@@ -92,30 +92,42 @@ export function parseAnalyzeResult(raw: string): {
 }
 
 /**
- * Extract the sources section from subagent output so we can keep nodeId
- * citations even after compacting the full detailed analysis.
+ * Extract the raw source lines from subagent output, preserving
+ * the original "- [docId:nodeId] 章节标题" format for citation integrity.
  */
-export function extractAnalyzeSources(text: string): string {
+export function extractAnalyzeSourceLines(text: string): string[] {
     const match = text.match(/##\s*数据来源\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i)
     const raw = match?.[1]?.trim() ?? ''
-    if (!raw) return ''
-    // Strip markdown list markers to produce a compact node list.
+    if (!raw) return []
     return raw
         .split('\n')
-        .map((line) => line.replace(/^\s*[-*]\s*/, '').trim())
-        .filter(Boolean)
-        .join('; ')
+        .map((line) => line.trim())
+        .filter((line) => /^[-*]\s/.test(line))
 }
 
 /**
  * Compact older analyzeDocument results to save context.
- * Keep the N most recent full; compact the rest to relevance + summary +
- * sources (nodeIds must remain available for citations and reviewer).
+ * Uses natural Markdown format (matching doc-analyzer output structure)
+ * so the main agent does not perceive compaction as data loss.
+ *
+ * Strategy:
+ * - Preserve ## 相关性 (needed for review + final answer)
+ * - Preserve ## 概述, truncate to ~100 chars (provides context)
+ * - Preserve ## 数据来源 in full (citations depend on node references)
+ * - Discard ## 关键发现 (overlaps with 概述 + 详细分析, large)
+ * - Discard ## 详细分析 (largest section, replaced by 概述)
  */
 export function compactAnalyzeResult(text: string): string {
     const { relevance, summary } = parseAnalyzeResult(text)
-    const sources = extractAnalyzeSources(text)
-    return `[compacted] relevance=${relevance} summary=${ellipsis(summary, 100)} sources=${sources ? ellipsis(sources, 200) : 'none'}`
+    const sourceLines = extractAnalyzeSourceLines(text)
+    const sections = ['## 相关性', '', relevance, '']
+    if (summary) {
+        sections.push('## 概述', '', ellipsis(summary, 100), '')
+    }
+    if (sourceLines.length > 0) {
+        sections.push('## 数据来源', '', ...sourceLines, '')
+    }
+    return sections.join('\n')
 }
 
 // ── Shared tool factories for doc-analyzer & fragment-extractor ──

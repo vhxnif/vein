@@ -5,7 +5,10 @@ import { getModel } from '@earendil-works/pi-ai'
 import { logger } from '../config/index.ts'
 import type { ModelProvider } from '../config/type.ts'
 import { getModelProvider } from './base.ts'
-import { createAnalyzeDocumentTool } from './sub-agents/doc-analyzer.ts'
+import {
+    createAnalyzeDocumentTool,
+    GET_DOC_NODE_DETAILS_META,
+} from './sub-agents/doc-analyzer.ts'
 import type { ReviewResult } from './sub-agents/reviewer.ts'
 import { createReviewResultTool } from './sub-agents/reviewer.ts'
 import { createSearchDocumentsTool } from './sub-agents/search-screener.ts'
@@ -13,13 +16,14 @@ import {
     compactAnalyzeResult,
     compactDocText,
     extractResultText,
+    makeGetDocNodeDetails,
 } from './sub-agents/utils.ts'
 import type { ToolCtx, ToolMeta } from './types.ts'
 
 const log = logger.child({ module: 'librarian' })
 
 const MAX_MAIN_TOOL_CALLS = 40
-const MAX_ANALYZE_RESULT_FULL = 5
+const DEFAULT_MAX_FULL = 15
 
 // ── Prompt ────────────────────────────────────────────────────
 
@@ -32,6 +36,7 @@ const PROMPT = `你是一个文档检索 Librarian。通过搜索子 Agent 定�
 | 1 | searchDocuments(userQuery) | [{docId, relevance, reason}] — 子 Agent 已筛选的文档列表 |
 | 2 | analyzeDocument(docId, userQuery) | 子 Agent 深度分析结果（Markdown 格式） |
 | 3 | reviewResult(query, result, sources) | 审查结果 |
+| * | getDocNodeDetails(docId, nodeId) | 节点完整原文 — 仅用于补全已被压缩的分析结果中的具体引用 |
 
 ## 流程
 
@@ -71,6 +76,7 @@ const PROMPT = `你是一个文档检索 Librarian。通过搜索子 Agent 定�
   正确示例：详见 **[a1b2c3d4e5f6a1b2:0001]** 和 **[a1b2c3d4e5f6a1b2:0003]** 的原文
   错误示例：a1b2c3d4e5f6a1b2:0001（缺少方括号，不会被识别为引用）
 - 已获取的信息不要重复获取
+- **严格去重**：每个 docId 只调用一次 analyzeDocument。如果上下文中某篇文档的分析结果篇幅较短（如只有「## 相关性」「## 概述」「## 数据来源」三个章节），这是系统正常的上下文压缩行为，所有关键信息均已保留，**不需要重新调用 analyzeDocument**。如需补充某节点的原文做引用，使用 getDocNodeDetails 精确获取该节点即可。
 - **批量并发**：同类型工具调用（如多个 analyzeDocument）放在同一条消息中一次发出，不要分批
 
 `
@@ -85,6 +91,7 @@ const QUICK_MODE_PROMPT = `你是一个文档检索 Librarian。通过搜索子 
 |------|------|------|
 | 1 | searchDocuments(userQuery) | [{docId, relevance, reason}] — 子 Agent 已筛选的文档列表 |
 | 2 | analyzeDocument(docId, userQuery) | 子 Agent 深度分析结果（Markdown 格式） |
+| * | getDocNodeDetails(docId, nodeId) | 节点完整原文 — 仅用于补全已被压缩的分析结果中的具体引用 |
 
 ## 流程
 
@@ -119,6 +126,7 @@ const QUICK_MODE_PROMPT = `你是一个文档检索 Librarian。通过搜索子 
   正确示例：详见 **[a1b2c3d4e5f6a1b2:0001]** 和 **[a1b2c3d4e5f6a1b2:0003]** 的原文
   错误示例：a1b2c3d4e5f6a1b2:0001（缺少方括号，不会被识别为引用）
 - 已获取的信息不要重复获取
+- **严格去重**：每个 docId 只调用一次 analyzeDocument。如果上下文中某篇文档的分析结果篇幅较短（如只有「## 相关性」「## 概述」「## 数据来源」三个章节），这是系统正常的上下文压缩行为，所有关键信息均已保留，**不需要重新调用 analyzeDocument**。如需补充某节点的原文做引用，使用 getDocNodeDetails 精确获取该节点即可。
 - **批量并发**：同类型工具调用（如多个 analyzeDocument）放在同一条消息中一次发出，不要分批
 
 `
@@ -130,7 +138,8 @@ function buildMainTools(
     onStep?: (label: string) => void,
     subagentModel?: ModelProvider,
     reviewerModel?: ModelProvider,
-    searchAgentModel?: ModelProvider
+    searchAgentModel?: ModelProvider,
+    maxParallelAnalyze?: number
 ): { tools: any[]; toolMeta: Record<string, ToolMeta> } {
     const cache = new Map<string, string>()
 
@@ -152,8 +161,9 @@ function buildMainTools(
 
     const entries = [
         createSearchDocumentsTool(ctx, segmenter, searchAgentModel),
-        createAnalyzeDocumentTool(ctx, subagentModel),
+        createAnalyzeDocumentTool(ctx, subagentModel, maxParallelAnalyze),
         createReviewResultTool(ctx, reviewerModel),
+        { tool: makeGetDocNodeDetails(ctx), meta: GET_DOC_NODE_DETAILS_META },
     ]
 
     const toolMeta: Record<string, ToolMeta> = {}
@@ -170,7 +180,8 @@ function buildQuickTools(
     segmenter?: ModelProvider,
     onStep?: (label: string) => void,
     searchAgentModel?: ModelProvider,
-    subagentModel?: ModelProvider
+    subagentModel?: ModelProvider,
+    maxParallelAnalyze?: number
 ): { tools: any[]; toolMeta: Record<string, ToolMeta> } {
     const cache = new Map<string, string>()
 
@@ -192,7 +203,8 @@ function buildQuickTools(
 
     const entries = [
         createSearchDocumentsTool(ctx, segmenter, searchAgentModel),
-        createAnalyzeDocumentTool(ctx, subagentModel),
+        createAnalyzeDocumentTool(ctx, subagentModel, maxParallelAnalyze),
+        { tool: makeGetDocNodeDetails(ctx), meta: GET_DOC_NODE_DETAILS_META },
     ]
 
     const toolMeta: Record<string, ToolMeta> = {}
@@ -260,8 +272,11 @@ function extractTrace(
 
 // ── Context pruning ───────────────────────────────────────────
 
-function pruneContext(messages: AgentMessage[]): AgentMessage[] {
-    const MAX_FULL = MAX_ANALYZE_RESULT_FULL
+function pruneContext(
+    messages: AgentMessage[],
+    maxFull?: number
+): AgentMessage[] {
+    const MAX_FULL = maxFull ?? DEFAULT_MAX_FULL
 
     const structIndices: number[] = []
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -336,6 +351,7 @@ function createLibrarianAgent(
         reviewerModel?: ModelProvider
         searchAgentModel?: ModelProvider
         thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+        maxAnalyzeResultFull?: number
     }
 ): Agent {
     const provider = getModelProvider()
@@ -347,6 +363,7 @@ function createLibrarianAgent(
     })
 
     let mainToolCallCount = 0
+    const maxFull = opts?.maxAnalyzeResultFull
 
     const agent = new Agent({
         initialState: {
@@ -355,7 +372,7 @@ function createLibrarianAgent(
             thinkingLevel: opts?.thinkingLevel ?? 'off',
             tools,
         },
-        transformContext: async (messages) => pruneContext(messages),
+        transformContext: async (messages) => pruneContext(messages, maxFull),
         beforeToolCall: async (context) => {
             mainToolCallCount++
             if (mainToolCallCount > MAX_MAIN_TOOL_CALLS) {
@@ -569,12 +586,14 @@ function useMode(
     onStep?: (label: string) => void,
     opts?: Option
 ): { systemPrompt: string; tools: any[]; toolMeta: Record<string, ToolMeta> } {
+    const maxParallel = opts?.maxParallelAnalyze
     if (mode === 'quick') {
         const toolsInfo = buildQuickTools(
             opts?.segmenter,
             onStep,
             opts?.searchAgentModel,
-            opts?.subagentModel
+            opts?.subagentModel,
+            maxParallel
         )
         return {
             systemPrompt: QUICK_MODE_PROMPT,
@@ -587,7 +606,8 @@ function useMode(
         onStep,
         opts?.subagentModel,
         opts?.reviewerModel,
-        opts?.searchAgentModel
+        opts?.searchAgentModel,
+        maxParallel
     )
     return {
         systemPrompt: PROMPT,
@@ -617,6 +637,10 @@ type Option = {
         summary: string
     ) => void
     mode?: Mode
+    /** Max number of full analyzeDocument results before compaction. Default: 15. */
+    maxAnalyzeResultFull?: number
+    /** Max concurrent analyzeDocument sub-agent calls. Default: 10. */
+    maxParallelAnalyze?: number
 }
 
 async function librarian(

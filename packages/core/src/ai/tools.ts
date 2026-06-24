@@ -144,6 +144,10 @@ type SearchOptions = {
     ) => void
     /** Retrieval mode: 'default' uses analyze+review pipeline, 'quick' skips review for faster results. */
     mode?: 'default' | 'quick'
+    /** Max number of full analyzeDocument results before compaction. Default: 15. */
+    maxAnalyzeResultFull?: number
+    /** Max concurrent analyzeDocument sub-agent calls. Default: 10. */
+    maxParallelAnalyze?: number
 }
 
 type SearchResult = LibrarianResult & {
@@ -166,6 +170,8 @@ async function searchDocuments(
         searchAgentModel: opts?.searchAgentModel,
         signal: opts?.signal,
         thinkingLevel: opts?.thinkingLevel,
+        maxAnalyzeResultFull: opts?.maxAnalyzeResultFull,
+        maxParallelAnalyze: opts?.maxParallelAnalyze,
         onThinkingDelta: opts?.onThinkingDelta,
         onTextDelta: opts?.onTextDelta,
         onToolCallStart: opts?.onToolCallStart,

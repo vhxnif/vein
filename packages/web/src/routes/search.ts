@@ -62,6 +62,8 @@ searchRouter.post('/', async (c) => {
                     reviewerModel: config.reviewer,
                     searchAgentModel: config.searchAgent,
                     thinkingLevel: config.thinkingLevel,
+                    maxAnalyzeResultFull: config.maxAnalyzeResultFull,
+                    maxParallelAnalyze: config.maxParallelAnalyze,
                     mode,
                     signal,
                     onThinkingDelta: (delta) => {
