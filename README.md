@@ -140,7 +140,7 @@ AI Agent 深入文档节点 ──→ 阅读原文、理解上下文
 | `vein ask [query]` | — | AI Agent 检索文档库 |
 | `vein history` | `hs` | 浏览历史问答记录 |
 | `vein browse` | `br` | 交互式浏览文档库 |
-| `vein projects` | `pr` | 管理全局项目注册表 |
+| `vein projects` | `pr` | 管理全局项目注册表（`--remove` 删除 / `--connect [path]` 连接已有项目） |
 | `vein web` | — | 启动 Web UI 服务 |
 | `vein config` | — | 交互式修改项目配置 |
 
