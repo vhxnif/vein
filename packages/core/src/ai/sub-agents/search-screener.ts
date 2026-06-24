@@ -262,16 +262,21 @@ async function searchAndScreen(
         searchDocsByKeyword: SEARCH_DOCS_BY_KEYWORD_META,
     }
     const toolStartTimes = new Map<string, number>()
+    const toolQueries = new Map<string, string>()
     agent.subscribe((event) => {
         if (event.type === 'tool_execution_start') {
             toolStartTimes.set(event.toolCallId, performance.now())
+            const args = (event.args as Record<string, unknown>) ?? {}
+            const query = String(args.query ?? '')
+            toolQueries.set(event.toolCallId, query)
             const meta = INTERNAL_META[event.toolName]
             const label = meta
-                ? meta.stepLabel((event.args as Record<string, unknown>) ?? {})
+                ? meta.stepLabel(args)
                 : `Calling ${event.toolName}...`
             onStep?.(`[Search] ${label}`)
-            slog.debug({
+            slog.info({
                 toolName: event.toolName,
+                query,
                 stepCount,
                 content: 'SearchScreener tool start',
             })
@@ -288,8 +293,9 @@ async function searchAndScreen(
             if (label) {
                 onStep?.(`  ${label}`)
             }
-            slog.debug({
+            slog.info({
                 toolName: event.toolName,
+                query: toolQueries.get(event.toolCallId) ?? '',
                 resultLen: resultText.length,
                 elapsedMs,
                 content: 'SearchScreener tool end',
