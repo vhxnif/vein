@@ -1,7 +1,7 @@
 import { Type } from '@earendil-works/pi-ai'
-import { getFullTree, getNodeDetails } from '../../store'
-import type { BaseDocNode, TreeNode } from '../../tree/type'
-import type { ToolCtx } from '../types'
+import { getFullTree, getNodeDetails } from '../../store/index.ts'
+import type { BaseDocNode, TreeNode } from '../../tree/type.ts'
+import type { ToolCtx } from '../types.ts'
 
 export class Semaphore {
     private waiters: (() => void)[] = []

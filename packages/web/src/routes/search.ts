@@ -67,7 +67,7 @@ searchRouter.post('/', async (c) => {
                     onThinkingDelta: (delta) => {
                         if (!aborted) {
                             send({ type: 'thinking_delta', delta })
-                            const last = timeline[timeline.length - 1]
+                            const last = timeline.at(-1)
                             if (last && last.type === 'thinking') {
                                 last.text += delta
                             } else {

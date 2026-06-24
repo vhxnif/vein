@@ -1,6 +1,7 @@
 import { access, constants, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { APP_NAME, logger } from './index'
+import process from 'node:process'
+import { APP_NAME, logger } from './index.ts'
 
 const configDir = path.join(process.env.HOME ?? '~', '.config', APP_NAME)
 const projectsFile = path.join(configDir, 'projects.json')

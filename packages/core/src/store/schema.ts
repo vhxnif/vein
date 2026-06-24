@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
     integer,
+    // biome-ignore lint/suspicious/noDeprecatedImports: drizzle has deprecated overload, but we use the new form primaryKey({ columns: [] })
     primaryKey,
     sqliteTable,
     text,

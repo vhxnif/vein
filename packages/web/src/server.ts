@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { logger } from '@vein/core'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { projectMiddleware } from './middleware/project'
+import { projectMiddleware } from './middleware/project.ts'
 
 const log = logger.child({ module: 'web' })
 
@@ -30,11 +30,12 @@ app.onError((err, c) => {
 app.use('*', cors())
 app.use('/api/projects/current/*', projectMiddleware)
 
-import { docsRouter } from './routes/documents'
-import { historyRouter } from './routes/history'
+import process from 'node:process'
+import { docsRouter } from './routes/documents.ts'
+import { historyRouter } from './routes/history.ts'
 // ── API routes ─────────────────────────────────────────────────
-import { modelsRouter, projectsRouter } from './routes/projects'
-import { searchRouter } from './routes/search'
+import { modelsRouter, projectsRouter } from './routes/projects.ts'
+import { searchRouter } from './routes/search.ts'
 
 app.route('/api/projects', projectsRouter)
 app.route('/api/models', modelsRouter)

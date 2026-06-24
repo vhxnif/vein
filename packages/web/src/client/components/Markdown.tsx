@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { NodeTooltip } from './NodeTooltip'
+import { NodeTooltip } from './NodeTooltip.tsx'
 
 /**
  * Annotate node references in markdown content so they become hoverable.

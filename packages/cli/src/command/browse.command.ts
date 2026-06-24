@@ -1,3 +1,4 @@
+import process from 'node:process'
 import { confirm, intro, note, outro, select } from '@clack/prompts'
 import {
     type BaseDocNode,

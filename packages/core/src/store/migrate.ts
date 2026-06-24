@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
-import { logger } from '../config'
-import { schema } from './migrations/sql'
+import { logger } from '../config/index.ts'
+import { schema } from './migrations/sql.ts'
 
 const log = logger.child({ module: 'migrate' })
 

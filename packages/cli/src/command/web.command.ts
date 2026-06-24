@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import process from 'node:process'
 import type { Command } from 'commander'
 
 export function register(program: Command) {

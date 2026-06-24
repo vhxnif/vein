@@ -6,7 +6,7 @@ import {
     useEffect,
     useState,
 } from 'react'
-import { fetchProjects } from './api'
+import { fetchProjects } from './api.ts'
 
 interface ProjectContextType {
     project: string | null

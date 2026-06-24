@@ -7,8 +7,8 @@ import {
     type Message,
     type Tool,
 } from '@earendil-works/pi-ai'
-import { logger } from '../config'
-import type { ModelProvider } from '../config/type'
+import { logger } from '../config/index.ts'
+import type { ModelProvider } from '../config/type.ts'
 
 export type ToolDef = Tool & {
     run: (args: any) => Promise<string>

@@ -1,11 +1,11 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
 import { Agent } from '@earendil-works/pi-agent-core'
 import { getModel, Type } from '@earendil-works/pi-ai'
-import { logger } from '../../config'
-import type { ModelProvider } from '../../config/type'
-import { getErrorMessage } from '../../utils/common'
-import { getModelProvider } from '../base'
-import type { ToolCtx, ToolMeta } from '../types'
+import { logger } from '../../config/index.ts'
+import type { ModelProvider } from '../../config/type.ts'
+import { getErrorMessage } from '../../utils/common.ts'
+import { getModelProvider } from '../base.ts'
+import type { ToolCtx, ToolMeta } from '../types.ts'
 import {
     ellipsis,
     extractResultText,
@@ -13,7 +13,7 @@ import {
     makeGetDocStructure,
     parseAnalyzeResult,
     Semaphore,
-} from './utils'
+} from './utils.ts'
 
 const subLog = logger.child({ module: 'doc-analyzer' })
 

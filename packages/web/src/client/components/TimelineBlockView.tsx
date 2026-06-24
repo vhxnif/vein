@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { annotateNodeRefs, Markdown } from './Markdown'
+import { annotateNodeRefs, Markdown } from './Markdown.tsx'
 
 // ── Braille spinner (classic single-char) ────────────────────
 

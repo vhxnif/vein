@@ -1,10 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { annotateNodeRefs, Markdown } from '../components/Markdown'
-import { RunCat } from '../components/RunCat'
-import { TimelineBlockView } from '../components/TimelineBlockView'
-import { useProject } from '../lib/project'
-import { useSearch } from '../lib/search-context'
+import { annotateNodeRefs, Markdown } from '../components/Markdown.tsx'
+import { RunCat } from '../components/RunCat.tsx'
+import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
+import { useProject } from '../lib/project.tsx'
+import { useSearch } from '../lib/search-context.tsx'
 
 export const Route = createFileRoute('/')({
     component: HomePage,
@@ -58,7 +58,7 @@ function HomePage() {
     // For the completed collapsed view: split timeline into
     // "process" (everything except the last text block) and
     // "finalText" (the last text block, if any).
-    const lastBlock = timeline[timeline.length - 1]
+    const lastBlock = timeline.at(-1)
     const lastIsText = lastBlock?.type === 'text'
     const processBlocks = lastIsText ? timeline.slice(0, -1) : timeline
 

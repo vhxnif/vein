@@ -1,5 +1,6 @@
 import { access, constants } from 'node:fs/promises'
 import path from 'node:path'
+import process from 'node:process'
 import { confirm, intro, note, outro } from '@clack/prompts'
 import {
     getProjectRoot,

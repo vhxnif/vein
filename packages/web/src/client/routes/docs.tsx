@@ -10,10 +10,10 @@ import {
     useLocation,
 } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ConfirmDialog } from '../components/ConfirmDialog'
-import { deleteDocument, fetchDocuments } from '../lib/api'
-import { useImport } from '../lib/import-context'
-import { useProject } from '../lib/project'
+import { ConfirmDialog } from '../components/ConfirmDialog.tsx'
+import { deleteDocument, fetchDocuments } from '../lib/api.ts'
+import { useImport } from '../lib/import-context.tsx'
+import { useProject } from '../lib/project.tsx'
 
 export const Route = createFileRoute('/docs')({
     component: DocsLayout,

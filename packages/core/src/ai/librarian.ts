@@ -2,19 +2,19 @@
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import { Agent } from '@earendil-works/pi-agent-core'
 import { getModel } from '@earendil-works/pi-ai'
-import { logger } from '../config'
-import type { ModelProvider } from '../config/type'
-import { getModelProvider } from './base'
-import { createAnalyzeDocumentTool } from './sub-agents/doc-analyzer'
-import type { ReviewResult } from './sub-agents/reviewer'
-import { createReviewResultTool } from './sub-agents/reviewer'
-import { createSearchDocumentsTool } from './sub-agents/search-screener'
+import { logger } from '../config/index.ts'
+import type { ModelProvider } from '../config/type.ts'
+import { getModelProvider } from './base.ts'
+import { createAnalyzeDocumentTool } from './sub-agents/doc-analyzer.ts'
+import type { ReviewResult } from './sub-agents/reviewer.ts'
+import { createReviewResultTool } from './sub-agents/reviewer.ts'
+import { createSearchDocumentsTool } from './sub-agents/search-screener.ts'
 import {
     compactAnalyzeResult,
     compactDocText,
     extractResultText,
-} from './sub-agents/utils'
-import type { ToolCtx, ToolMeta } from './types'
+} from './sub-agents/utils.ts'
+import type { ToolCtx, ToolMeta } from './types.ts'
 
 const log = logger.child({ module: 'librarian' })
 

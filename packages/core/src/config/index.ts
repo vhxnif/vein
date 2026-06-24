@@ -2,14 +2,15 @@ import { existsSync } from 'node:fs'
 import { access, constants, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import pino from 'pino'
-import { configSchema } from '../store/migrations/config_schema'
+import { configSchema } from '../store/migrations/config_schema.ts'
 
 // ── app identity ──────────────────────────────────────────────
 
 /** Application name used for config/log directories under ~/.config/. */
 export const APP_NAME = 'vein'
 
-import type { ModelProvider, ProjectConfig } from './type'
+import process from 'node:process'
+import type { ModelProvider, ProjectConfig } from './type.ts'
 
 // ── project root override (set by --project flag) ──
 
@@ -102,7 +103,7 @@ async function initProject(
 
     const dbPath = '.vein/data.db'
     const fullDbPath = path.join(veinPath, 'data.db')
-    const { runMigrations } = await import('../store/migrate')
+    const { runMigrations } = await import('../store/migrate.ts')
     await runMigrations(fullDbPath)
 
     const config: ProjectConfig = {
@@ -137,7 +138,7 @@ export async function setupProjectModel(): Promise<ProjectConfig | undefined> {
     const config = await loadProjectConfig(root)
     if (config?.model) {
         // dynamic import to avoid circular dep with ai/base which imports logger
-        const { setModelProvider } = await import('../ai/base')
+        const { setModelProvider } = await import('../ai/base.ts')
         setModelProvider(config.model)
     }
     return config

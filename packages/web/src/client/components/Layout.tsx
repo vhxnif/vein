@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { useProject } from '../lib/project'
+import { useProject } from '../lib/project.tsx'
 
 export function Layout({ children }: { children: ReactNode }) {
     return (

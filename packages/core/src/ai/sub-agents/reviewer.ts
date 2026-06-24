@@ -1,11 +1,11 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
 import { getModel, Type } from '@earendil-works/pi-ai'
-import { logger } from '../../config'
-import type { ModelProvider } from '../../config/type'
-import { getNodeDetails } from '../../store'
-import type { BaseDocNode } from '../../tree/type'
-import { call, getModelProvider, type ToolDef } from '../base'
-import type { ToolCtx, ToolMeta } from '../types'
+import { logger } from '../../config/index.ts'
+import type { ModelProvider } from '../../config/type.ts'
+import { getNodeDetails } from '../../store/index.ts'
+import type { BaseDocNode } from '../../tree/type.ts'
+import { call, getModelProvider, type ToolDef } from '../base.ts'
+import type { ToolCtx, ToolMeta } from '../types.ts'
 
 const prompt = `你是一个文档检索结果审查员。你的任务是审查 Librarian 返回的检索结果，判断其是否满足用户的需求。
 
@@ -140,7 +140,7 @@ function parseReviewResult(text: string): ReviewResult {
     )
     const verdict = (verdictMatch?.[1]?.trim().toLowerCase() ??
         'fail') as ReviewResult['verdict']
-    const score = parseInt(verdictMatch?.[2] ?? '1', 10)
+    const score = Number.parseInt(verdictMatch?.[2] ?? '1', 10)
 
     const reasonMatch = text.match(
         /##\s*理由\s*\n+([^\n][\s\S]*?)(?=\n##\s*建议|\n*$)/i

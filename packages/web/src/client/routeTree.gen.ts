@@ -8,13 +8,13 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as DocsRouteImport } from './routes/docs'
-import { Route as DocsDocIdRouteImport } from './routes/docs.$docId'
-import { Route as HistoryRouteImport } from './routes/history'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as ProjectsRouteImport } from './routes/projects'
-import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as rootRouteImport } from './routes/__root.tsx'
+import { Route as DocsDocIdRouteImport } from './routes/docs.$docId.tsx'
+import { Route as DocsRouteImport } from './routes/docs.tsx'
+import { Route as HistoryRouteImport } from './routes/history.tsx'
+import { Route as IndexRouteImport } from './routes/index.tsx'
+import { Route as ProjectsRouteImport } from './routes/projects.tsx'
+import { Route as SettingsRouteImport } from './routes/settings.tsx'
 
 const SettingsRoute = SettingsRouteImport.update({
     id: '/settings',

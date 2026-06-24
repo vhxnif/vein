@@ -1,3 +1,4 @@
+import process from 'node:process'
 import { intro, note, outro, spinner, text } from '@clack/prompts'
 import type {
     HistoryTimelineBlock,
@@ -18,7 +19,7 @@ import {
     getErrorMessage,
     VERDICT_COLOR,
     VERDICT_ICON,
-} from '../utils/cli-helpers'
+} from '../utils/cli-helpers.ts'
 
 const log = logger.child({ module: 'ask' })
 

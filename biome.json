@@ -68,9 +68,12 @@
                 "noEmptyCharacterClassInRegex": "error",
                 "noEmptyPattern": "error",
                 "noGlobalObjectCalls": "error",
+                "noInvalidBuiltinInstantiation": "error",
                 "noInvalidConstructorSuper": "error",
+                "noNodejsModules": "off",
                 "noNonoctalDecimalEscape": "error",
                 "noPrecisionLoss": "error",
+                "noProcessGlobal": "error",
                 "noSelfAssign": "error",
                 "noSetterReturn": "error",
                 "noSwitchDeclarations": "error",
@@ -81,10 +84,10 @@
                 "noUnsafeOptionalChaining": "error",
                 "noUnusedLabels": "error",
                 "noUnusedVariables": "error",
+                "useImportExtensions": "error",
                 "useIsNan": "error",
                 "useValidForDirection": "error",
-                "useYield": "error",
-                "noInvalidBuiltinInstantiation": "error"
+                "useYield": "error"
             },
             "suspicious": {
                 "noAsyncPromiseExecutor": "error",
@@ -93,6 +96,7 @@
                 "noCompareNegZero": "error",
                 "noControlCharactersInRegex": "error",
                 "noDebugger": "error",
+                "noDeprecatedImports": "error",
                 "noDuplicateCase": "error",
                 "noDuplicateClassMembers": "error",
                 "noDuplicateObjectKeys": "error",
@@ -111,8 +115,10 @@
                 "useGetterReturn": "error"
             },
             "style": {
+                "noNonNullAssertion": "off",
+                "useAtIndex": "error",
                 "useConst": "error",
-                "noNonNullAssertion": "off"
+                "useNumberNamespace": "error"
             },
             "a11y": {
                 "noSvgWithoutTitle": "off"
