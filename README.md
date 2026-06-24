@@ -111,6 +111,8 @@ AI Agent 深入文档节点 ──→ 阅读原文、理解上下文
 
 **不是搜文档，是让 AI 替你读文档。**
 
+> 💡 推理策略参考 [PageIndex](https://github.com/VectifyAI/PageIndex) —— 按文档结构逐层递进阅读，先大纲后正文，先定位再深读，避免一次性塞入大量无关上下文。
+
 ---
 
 ## 🎯 功能特性
@@ -329,6 +331,13 @@ AI Provider 通过 `@earendil-works/pi-ai` 统一适配，支持 OpenAI / DeepSe
 | **日志** | Pino（结构化 JSON，按日滚动） |
 | **代码规范** | Biome (lint + format) |
 | **构建** | Bun build → Node.js 单文件 |
+
+---
+
+## 🙏 致谢
+
+- [Kami](https://github.com/tw93/Kami) — Web UI 设计语言：暖色羊皮纸底、墨水蓝单色强调、Serif 排版层级
+- [PageIndex](https://github.com/VectifyAI/PageIndex) — 按文档结构逐层递进推理的检索策略
 
 ---
 
