@@ -107,10 +107,10 @@ function HomePage() {
                     onChange={(e) => setInput(e.currentTarget.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Type your question..."
-                    className="w-full bg-ivory ring-warm rounded-[8pt] px-6 py-4
+                    className="w-full bg-ivory ring-warm rounded-[8pt] px-[24pt] py-[16pt]
                                font-serif text-[11pt] leading-relaxed text-near-black
                                placeholder:text-stone outline-none
-                               focus:ring-ink transition-shadow"
+                               ring-ink-focus transition-shadow"
                     disabled={searching}
                 />
             </div>
@@ -122,7 +122,7 @@ function HomePage() {
                     type="button"
                     disabled={searching}
                     onClick={() => setMode('default')}
-                    className={`px-3 py-1 rounded-full font-sans text-[8pt] font-medium transition-colors ${
+                    className={`px-[12pt] py-[4pt] rounded-full font-sans text-[8pt] font-medium transition-colors ${
                         mode === 'default'
                             ? 'bg-ink text-ivory border border-ink'
                             : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
@@ -134,7 +134,7 @@ function HomePage() {
                     type="button"
                     disabled={searching}
                     onClick={() => setMode('quick')}
-                    className={`px-3 py-1 rounded-full font-sans text-[8pt] font-medium transition-colors ${
+                    className={`px-[12pt] py-[4pt] rounded-full font-sans text-[8pt] font-medium transition-colors ${
                         mode === 'quick'
                             ? 'bg-ink text-ivory border border-ink'
                             : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'

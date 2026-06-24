@@ -178,6 +178,37 @@ body::before {
     box-shadow: 0 0 0 1pt var(--border-cream);
 }
 
+/* Ink-blue 1pt ring for selected / active borders */
+.ring-ink-border {
+    box-shadow: 0 0 0 1pt var(--ink-blue);
+}
+
+/* Project list items — interaction states via border change (matches SelectField pattern) */
+.project-item {
+    background: var(--ivory);
+    box-shadow: 0 0 0 1pt var(--border-cream);
+    color: var(--olive);
+    transition: all 150ms ease;
+}
+.project-item:hover {
+    box-shadow: 0 0 0 1pt var(--ink-blue);
+    color: var(--near-black);
+}
+.project-item:active {
+    box-shadow: 0 0 0 1pt var(--ink-blue);
+    color: var(--near-black);
+}
+.project-item.selected {
+    background: var(--ivory);
+    box-shadow: 0 0 0 1pt var(--ink-blue);
+    color: var(--ink-blue);
+}
+
+/* Focus ring for search input — ink-blue 1pt ring */
+.ring-ink-focus:focus {
+    box-shadow: 0 0 0 1pt var(--ink-blue);
+}
+
 /* Whisper shadow for featured cards */
 .whisper {
     box-shadow: 0 4pt 24pt rgba(0, 0, 0, 0.05);

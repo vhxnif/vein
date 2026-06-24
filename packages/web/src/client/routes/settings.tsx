@@ -210,7 +210,7 @@ function SettingsPage() {
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.currentTarget.value)}
-                        className="w-full bg-transparent border-b border-cream px-0 py-2
+                        className="w-full bg-transparent border-b border-cream px-0 py-[8pt]
                                    font-serif text-[10pt] text-near-black outline-none
                                    focus:border-ink transition-colors"
                     />
@@ -313,7 +313,7 @@ function SettingsPage() {
                                 Number(e.currentTarget.value)
                             )
                         }
-                        className="w-24 bg-transparent border-b border-cream px-0 py-2
+                        className="w-24 bg-transparent border-b border-cream px-0 py-[8pt]
                                    font-serif text-[10pt] text-near-black outline-none
                                    focus:border-ink transition-colors"
                     />
@@ -338,7 +338,7 @@ function SettingsPage() {
                         onChange={(e) =>
                             setMaxParallelAnalyze(Number(e.currentTarget.value))
                         }
-                        className="w-24 bg-transparent border-b border-cream px-0 py-2
+                        className="w-24 bg-transparent border-b border-cream px-0 py-[8pt]
                                    font-serif text-[10pt] text-near-black outline-none
                                    focus:border-ink transition-colors"
                     />

@@ -66,7 +66,7 @@ export function ConfirmDialog({
                     if (e.key === 'Escape' && !loading) onCancel()
                 }}
             >
-                <h3 className="font-serif text-[13pt] font-medium text-near-black mb-2">
+                <h3 className="font-serif text-[16pt] font-medium text-near-black mb-2">
                     {title}
                 </h3>
                 <p className="font-sans text-[9pt] text-olive leading-relaxed mb-6">
