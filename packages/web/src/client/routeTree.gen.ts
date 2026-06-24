@@ -9,162 +9,162 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as ProjectsRouteImport } from './routes/projects'
-import { Route as HistoryRouteImport } from './routes/history'
 import { Route as DocsRouteImport } from './routes/docs'
-import { Route as IndexRouteImport } from './routes/index'
 import { Route as DocsDocIdRouteImport } from './routes/docs.$docId'
+import { Route as HistoryRouteImport } from './routes/history'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as SettingsRouteImport } from './routes/settings'
 
 const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsRoute = ProjectsRouteImport.update({
-  id: '/projects',
-  path: '/projects',
-  getParentRoute: () => rootRouteImport,
+    id: '/projects',
+    path: '/projects',
+    getParentRoute: () => rootRouteImport,
 } as any)
 const HistoryRoute = HistoryRouteImport.update({
-  id: '/history',
-  path: '/history',
-  getParentRoute: () => rootRouteImport,
+    id: '/history',
+    path: '/history',
+    getParentRoute: () => rootRouteImport,
 } as any)
 const DocsRoute = DocsRouteImport.update({
-  id: '/docs',
-  path: '/docs',
-  getParentRoute: () => rootRouteImport,
+    id: '/docs',
+    path: '/docs',
+    getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
+    id: '/',
+    path: '/',
+    getParentRoute: () => rootRouteImport,
 } as any)
 const DocsDocIdRoute = DocsDocIdRouteImport.update({
-  id: '/$docId',
-  path: '/$docId',
-  getParentRoute: () => DocsRoute,
+    id: '/$docId',
+    path: '/$docId',
+    getParentRoute: () => DocsRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/docs': typeof DocsRouteWithChildren
-  '/history': typeof HistoryRoute
-  '/projects': typeof ProjectsRoute
-  '/settings': typeof SettingsRoute
-  '/docs/$docId': typeof DocsDocIdRoute
+    '/': typeof IndexRoute
+    '/docs': typeof DocsRouteWithChildren
+    '/history': typeof HistoryRoute
+    '/projects': typeof ProjectsRoute
+    '/settings': typeof SettingsRoute
+    '/docs/$docId': typeof DocsDocIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/docs': typeof DocsRouteWithChildren
-  '/history': typeof HistoryRoute
-  '/projects': typeof ProjectsRoute
-  '/settings': typeof SettingsRoute
-  '/docs/$docId': typeof DocsDocIdRoute
+    '/': typeof IndexRoute
+    '/docs': typeof DocsRouteWithChildren
+    '/history': typeof HistoryRoute
+    '/projects': typeof ProjectsRoute
+    '/settings': typeof SettingsRoute
+    '/docs/$docId': typeof DocsDocIdRoute
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/docs': typeof DocsRouteWithChildren
-  '/history': typeof HistoryRoute
-  '/projects': typeof ProjectsRoute
-  '/settings': typeof SettingsRoute
-  '/docs/$docId': typeof DocsDocIdRoute
+    __root__: typeof rootRouteImport
+    '/': typeof IndexRoute
+    '/docs': typeof DocsRouteWithChildren
+    '/history': typeof HistoryRoute
+    '/projects': typeof ProjectsRoute
+    '/settings': typeof SettingsRoute
+    '/docs/$docId': typeof DocsDocIdRoute
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/docs'
-    | '/history'
-    | '/projects'
-    | '/settings'
-    | '/docs/$docId'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/docs' | '/history' | '/projects' | '/settings' | '/docs/$docId'
-  id:
-    | '__root__'
-    | '/'
-    | '/docs'
-    | '/history'
-    | '/projects'
-    | '/settings'
-    | '/docs/$docId'
-  fileRoutesById: FileRoutesById
+    fileRoutesByFullPath: FileRoutesByFullPath
+    fullPaths:
+        | '/'
+        | '/docs'
+        | '/history'
+        | '/projects'
+        | '/settings'
+        | '/docs/$docId'
+    fileRoutesByTo: FileRoutesByTo
+    to: '/' | '/docs' | '/history' | '/projects' | '/settings' | '/docs/$docId'
+    id:
+        | '__root__'
+        | '/'
+        | '/docs'
+        | '/history'
+        | '/projects'
+        | '/settings'
+        | '/docs/$docId'
+    fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  DocsRoute: typeof DocsRouteWithChildren
-  HistoryRoute: typeof HistoryRoute
-  ProjectsRoute: typeof ProjectsRoute
-  SettingsRoute: typeof SettingsRoute
+    IndexRoute: typeof IndexRoute
+    DocsRoute: typeof DocsRouteWithChildren
+    HistoryRoute: typeof HistoryRoute
+    ProjectsRoute: typeof ProjectsRoute
+    SettingsRoute: typeof SettingsRoute
 }
 
 declare module '@tanstack/react-router' {
-  interface FileRoutesByPath {
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
+    interface FileRoutesByPath {
+        '/settings': {
+            id: '/settings'
+            path: '/settings'
+            fullPath: '/settings'
+            preLoaderRoute: typeof SettingsRouteImport
+            parentRoute: typeof rootRouteImport
+        }
+        '/projects': {
+            id: '/projects'
+            path: '/projects'
+            fullPath: '/projects'
+            preLoaderRoute: typeof ProjectsRouteImport
+            parentRoute: typeof rootRouteImport
+        }
+        '/history': {
+            id: '/history'
+            path: '/history'
+            fullPath: '/history'
+            preLoaderRoute: typeof HistoryRouteImport
+            parentRoute: typeof rootRouteImport
+        }
+        '/docs': {
+            id: '/docs'
+            path: '/docs'
+            fullPath: '/docs'
+            preLoaderRoute: typeof DocsRouteImport
+            parentRoute: typeof rootRouteImport
+        }
+        '/': {
+            id: '/'
+            path: '/'
+            fullPath: '/'
+            preLoaderRoute: typeof IndexRouteImport
+            parentRoute: typeof rootRouteImport
+        }
+        '/docs/$docId': {
+            id: '/docs/$docId'
+            path: '/$docId'
+            fullPath: '/docs/$docId'
+            preLoaderRoute: typeof DocsDocIdRouteImport
+            parentRoute: typeof DocsRoute
+        }
     }
-    '/projects': {
-      id: '/projects'
-      path: '/projects'
-      fullPath: '/projects'
-      preLoaderRoute: typeof ProjectsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/history': {
-      id: '/history'
-      path: '/history'
-      fullPath: '/history'
-      preLoaderRoute: typeof HistoryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/docs': {
-      id: '/docs'
-      path: '/docs'
-      fullPath: '/docs'
-      preLoaderRoute: typeof DocsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/docs/$docId': {
-      id: '/docs/$docId'
-      path: '/$docId'
-      fullPath: '/docs/$docId'
-      preLoaderRoute: typeof DocsDocIdRouteImport
-      parentRoute: typeof DocsRoute
-    }
-  }
 }
 
 interface DocsRouteChildren {
-  DocsDocIdRoute: typeof DocsDocIdRoute
+    DocsDocIdRoute: typeof DocsDocIdRoute
 }
 
 const DocsRouteChildren: DocsRouteChildren = {
-  DocsDocIdRoute: DocsDocIdRoute,
+    DocsDocIdRoute: DocsDocIdRoute,
 }
 
 const DocsRouteWithChildren = DocsRoute._addFileChildren(DocsRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  DocsRoute: DocsRouteWithChildren,
-  HistoryRoute: HistoryRoute,
-  ProjectsRoute: ProjectsRoute,
-  SettingsRoute: SettingsRoute,
+    IndexRoute: IndexRoute,
+    DocsRoute: DocsRouteWithChildren,
+    HistoryRoute: HistoryRoute,
+    ProjectsRoute: ProjectsRoute,
+    SettingsRoute: SettingsRoute,
 }
 export const routeTree = rootRouteImport
-  ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+    ._addFileChildren(rootRouteChildren)
+    ._addFileTypes<FileRouteTypes>()

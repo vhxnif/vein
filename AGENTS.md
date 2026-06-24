@@ -2,7 +2,7 @@
 
 ## Build And Test
 
-- Before commit: `bun run check && bun run lint`
+- Before commit: `bun run check && bun run lint && bun run format`
 - CLI changes: `bun run packages/cli/src/command/vein.ts ask "test query"`
 - Web changes: `bun run dev:web`, verify search + docs + history pages
 

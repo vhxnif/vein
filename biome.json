@@ -18,6 +18,9 @@
             "includes": ["**/routeTree.gen.ts"],
             "linter": {
                 "rules": {
+                    "correctness": {
+                        "useImportExtensions": "off"
+                    },
                     "suspicious": {
                         "noExplicitAny": "off"
                     }

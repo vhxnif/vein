@@ -42,7 +42,7 @@ const PROMPT = `你是一个文档检索 Librarian。通过搜索子 Agent 定�
 
 1. 调用 searchDocuments(userQuery) 搜索相关文档（子 Agent 内部处理关键词提取和重搜）
    - 如果返回空列表 []，直接输出"文档库中未找到相关内容"并停止，不要继续搜索或调用 reviewResult
-2. 对返回的文档调用 analyzeDocument，同一条消息中一次性批量并发调用（系统最多同时 10 个）
+2. 对返回的文档调用 analyzeDocument，同一条消息中一次性批量并发调用（系统最多同时 {maxParallel} 个）
    - 返回的文档已经过初筛，应全部分析
    - **去重**：已分析过的文档不要重复分析，即使新搜索又命中了同一篇
 3. 整理所有文档的分析结果，形成最终答案
@@ -97,7 +97,7 @@ const QUICK_MODE_PROMPT = `你是一个文档检索 Librarian。通过搜索子 
 
 1. 调用 searchDocuments(userQuery) 搜索相关文档（子 Agent 内部处理关键词提取和重搜）
    - 如果返回空列表 []，直接输出"文档库中未找到相关内容"并停止，不要继续搜索
-2. 对返回的文档调用 analyzeDocument，同一条消息中一次性批量并发调用（系统最多同时 10 个）
+2. 对返回的文档调用 analyzeDocument，同一条消息中一次性批量并发调用（系统最多同时 {maxParallel} 个）
    - 返回的文档已经过初筛，应全部分析
    - **去重**：已分析过的文档不要重复分析，即使新搜索又命中了同一篇
 3. 整理所有文档的分析结果，形成最终答案
@@ -586,7 +586,11 @@ function useMode(
     onStep?: (label: string) => void,
     opts?: Option
 ): { systemPrompt: string; tools: any[]; toolMeta: Record<string, ToolMeta> } {
-    const maxParallel = opts?.maxParallelAnalyze
+    const maxParallel = opts?.maxParallelAnalyze ?? 10
+    const prompt = (mode === 'quick' ? QUICK_MODE_PROMPT : PROMPT).replace(
+        /{maxParallel}/g,
+        String(maxParallel)
+    )
     if (mode === 'quick') {
         const toolsInfo = buildQuickTools(
             opts?.segmenter,
@@ -596,7 +600,7 @@ function useMode(
             maxParallel
         )
         return {
-            systemPrompt: QUICK_MODE_PROMPT,
+            systemPrompt: prompt,
             ...toolsInfo,
         }
     }
@@ -610,7 +614,7 @@ function useMode(
         maxParallel
     )
     return {
-        systemPrompt: PROMPT,
+        systemPrompt: prompt,
         ...toolsInfo,
     }
 }
