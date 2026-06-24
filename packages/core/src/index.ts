@@ -1,5 +1,5 @@
 // ── AI ──────────────────────────────────────────────────────────
-export type { ContextDef, ToolDef } from './ai/base'
+export type { ContextDef, ToolDef } from './ai/base.ts'
 export {
     call,
     createSummarizer,
@@ -8,26 +8,26 @@ export {
     listModels,
     listProviders,
     setModelProvider,
-} from './ai/base'
-export type { LibrarianResult, Mode, TraceStep } from './ai/librarian'
-export { librarian } from './ai/librarian'
-export type { ReviewResult, SourceRef } from './ai/sub-agents/reviewer'
-export { reviewer } from './ai/sub-agents/reviewer'
-export type { SearchOptions, SearchResult } from './ai/tools'
+} from './ai/base.ts'
+export type { LibrarianResult, Mode, TraceStep } from './ai/librarian.ts'
+export { librarian } from './ai/librarian.ts'
+export type { ReviewResult, SourceRef } from './ai/sub-agents/reviewer.ts'
+export { reviewer } from './ai/sub-agents/reviewer.ts'
+export type { SearchOptions, SearchResult } from './ai/tools.ts'
 export {
     resolveDocNames,
     searchDocsByKeyword,
     searchDocuments,
-} from './ai/tools'
-export { createCachedSummarizer } from './config/cached-summarizer'
+} from './ai/tools.ts'
+export { createCachedSummarizer } from './config/cached-summarizer.ts'
 // ── Global registry ─────────────────────────────────────────────
-export type { GlobalProjects } from './config/global'
+export type { GlobalProjects } from './config/global.ts'
 export {
     getProjectPath,
     loadGlobalProjects,
     registerProject,
     unregisterProject,
-} from './config/global'
+} from './config/global.ts'
 // ── Config ──────────────────────────────────────────────────────
 export {
     APP_NAME,
@@ -40,17 +40,17 @@ export {
     setProjectOverride,
     setupProjectModel,
     veinDir,
-} from './config/index'
-export type { ModelProvider, ProjectConfig } from './config/type'
+} from './config/index.ts'
+export type { ModelProvider, ProjectConfig } from './config/type.ts'
 export type {
     HistoryEntry,
     HistoryTimelineBlock,
-} from './service/history.service'
+} from './service/history.service.ts'
 export {
     getSearchHistoryEntry,
     listSearchHistory,
     saveSearchHistory,
-} from './service/history.service'
+} from './service/history.service.ts'
 // ── Service ─────────────────────────────────────────────────────
 export type {
     FailedResult,
@@ -58,12 +58,12 @@ export type {
     ImportResult,
     ResegmentResult,
     SkippedResult,
-} from './service/import.service'
+} from './service/import.service.ts'
 export {
     collectAllSummaries,
     importBatch,
     resegmentAllDocuments,
-} from './service/import.service'
+} from './service/import.service.ts'
 
 // ── Store ───────────────────────────────────────────────────────
 export {
@@ -88,13 +88,13 @@ export {
     setCachedResponse,
     updateDocFts,
     updateDocMetadata,
-} from './store/index'
-export { runMigrations } from './store/migrate'
+} from './store/index.ts'
+export { runMigrations } from './store/migrate.ts'
 
 // ── Tree ────────────────────────────────────────────────────────
-export { mdToTree, renderDocOutline } from './tree/markdown_split'
-export type { BaseDocNode, DocNode, TreeNode } from './tree/type'
+export { mdToTree, renderDocOutline } from './tree/markdown_split.ts'
+export type { BaseDocNode, DocNode, TreeNode } from './tree/type.ts'
 
 // ── Utils ───────────────────────────────────────────────────────
-export { getErrorMessage, hash, md5, uuid } from './utils/common'
-export { segmentText } from './utils/segment'
+export { getErrorMessage, hash, md5, uuid } from './utils/common.ts'
+export { segmentText } from './utils/segment.ts'

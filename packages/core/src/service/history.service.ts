@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import type { LibrarianResult } from '../ai/librarian'
-import { logger, veinDir } from '../config'
+import type { LibrarianResult } from '../ai/librarian.ts'
+import { logger, veinDir } from '../config/index.ts'
 
 const log = logger.child({ module: 'history' })
 

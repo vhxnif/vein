@@ -1,10 +1,10 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: pi-ai getModel type is strict */
 import { complete, getModel } from '@earendil-works/pi-ai'
-import { call, getModelKey } from '../ai/base'
-import { logger } from '../config'
-import type { ModelProvider } from '../config/type'
-import * as store from '../store'
-import { md5 } from './common'
+import { call, getModelKey } from '../ai/base.ts'
+import { logger } from '../config/index.ts'
+import type { ModelProvider } from '../config/type.ts'
+import * as store from '../store/index.ts'
+import { md5 } from './common.ts'
 
 const log = logger.child({ module: 'segment' })
 

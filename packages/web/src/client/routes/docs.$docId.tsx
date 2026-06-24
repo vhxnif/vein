@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useCallback, useEffect, useState } from 'react'
-import { Markdown } from '../components/Markdown'
-import { fetchDocument, fetchNode } from '../lib/api'
-import { useProject } from '../lib/project'
+import { Markdown } from '../components/Markdown.tsx'
+import { fetchDocument, fetchNode } from '../lib/api.ts'
+import { useProject } from '../lib/project.tsx'
 
 interface TreeNode {
     nodeId: string

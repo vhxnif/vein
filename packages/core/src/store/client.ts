@@ -1,8 +1,9 @@
+import process from 'node:process'
 import Database from 'better-sqlite3'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
-import { resolveProjectRoot } from '../config'
-import * as schema from './schema'
+import { resolveProjectRoot } from '../config/index.ts'
+import * as schema from './schema.ts'
 
 export type { BetterSQLite3Database }
 

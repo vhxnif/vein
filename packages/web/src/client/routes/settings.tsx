@@ -1,15 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
-import { SelectField } from '../components/SelectField'
-import type { ModelInfo } from '../lib/api'
+import { SelectField } from '../components/SelectField.tsx'
+import type { ModelInfo } from '../lib/api.ts'
 import {
     fetchConfig,
     fetchModels,
     fetchProviders,
     saveConfig,
-} from '../lib/api'
-import { useProject } from '../lib/project'
+} from '../lib/api.ts'
+import { useProject } from '../lib/project.tsx'
 
 export const Route = createFileRoute('/settings')({
     component: SettingsPage,
@@ -68,8 +68,20 @@ function SettingsPage() {
     const [reviewerModel, setReviewerModel] = useState(
         config?.reviewer?.model ?? ''
     )
+    const [searchAgentProvider, setSearchAgentProvider] = useState(
+        config?.searchAgent?.provider ?? ''
+    )
+    const [searchAgentModel, setSearchAgentModel] = useState(
+        config?.searchAgent?.model ?? ''
+    )
     const [thinkingLevel, setThinkingLevel] = useState(
         config?.thinkingLevel ?? ''
+    )
+    const [maxAnalyzeResultFull, setMaxAnalyzeResultFull] = useState(
+        config?.maxAnalyzeResultFull ?? 15
+    )
+    const [maxParallelAnalyze, setMaxParallelAnalyze] = useState(
+        config?.maxParallelAnalyze ?? 10
     )
 
     // Sync state when config loads
@@ -85,7 +97,11 @@ function SettingsPage() {
         setSubagentModel(config.subagent?.model ?? '')
         setReviewerProvider(config.reviewer?.provider ?? '')
         setReviewerModel(config.reviewer?.model ?? '')
+        setSearchAgentProvider(config.searchAgent?.provider ?? '')
+        setSearchAgentModel(config.searchAgent?.model ?? '')
         setThinkingLevel(config.thinkingLevel ?? '')
+        setMaxAnalyzeResultFull(config.maxAnalyzeResultFull ?? 15)
+        setMaxParallelAnalyze(config.maxParallelAnalyze ?? 10)
     }
 
     const saveMutation = useMutation({
@@ -105,7 +121,16 @@ function SettingsPage() {
                 reviewer: reviewerProvider
                     ? { provider: reviewerProvider, model: reviewerModel }
                     : undefined,
+                searchAgent: searchAgentProvider
+                    ? { provider: searchAgentProvider, model: searchAgentModel }
+                    : undefined,
                 thinkingLevel: thinkingLevel || undefined,
+                maxAnalyzeResultFull:
+                    maxAnalyzeResultFull === 15
+                        ? undefined
+                        : maxAnalyzeResultFull,
+                maxParallelAnalyze:
+                    maxParallelAnalyze === 10 ? undefined : maxParallelAnalyze,
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['config'] })
@@ -252,6 +277,76 @@ function SettingsPage() {
                     onModelChange={setReviewerModel}
                     optional
                 />
+                <ModelRow
+                    label="Search Screener"
+                    provider={searchAgentProvider}
+                    model={searchAgentModel}
+                    onProviderChange={(p) => {
+                        setSearchAgentProvider(p)
+                        setSearchAgentModel('')
+                    }}
+                    onModelChange={setSearchAgentModel}
+                    optional
+                />
+            </section>
+
+            {/* Analysis */}
+            <section className="mb-10">
+                <h3 className="font-serif text-[12pt] font-medium text-olive mb-4">
+                    Analysis
+                </h3>
+                <div className="space-y-1 mb-5">
+                    <label
+                        htmlFor="maxAnalyzeResultFull"
+                        className="block font-sans text-[8.5pt] text-stone"
+                    >
+                        Max full results kept uncompressed
+                    </label>
+                    <input
+                        id="maxAnalyzeResultFull"
+                        type="number"
+                        min={1}
+                        max={50}
+                        value={maxAnalyzeResultFull}
+                        onChange={(e) =>
+                            setMaxAnalyzeResultFull(
+                                Number(e.currentTarget.value)
+                            )
+                        }
+                        className="w-24 bg-transparent border-b border-cream px-0 py-2
+                                   font-serif text-[10pt] text-near-black outline-none
+                                   focus:border-ink transition-colors"
+                    />
+                    <p className="font-sans text-[7.5pt] text-stone mt-1">
+                        Number of full analyzeDocument results retained before
+                        older results are compacted to summaries (1–50).
+                    </p>
+                </div>
+                <div className="space-y-1">
+                    <label
+                        htmlFor="maxParallelAnalyze"
+                        className="block font-sans text-[8.5pt] text-stone"
+                    >
+                        Max parallel analyze calls
+                    </label>
+                    <input
+                        id="maxParallelAnalyze"
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={maxParallelAnalyze}
+                        onChange={(e) =>
+                            setMaxParallelAnalyze(Number(e.currentTarget.value))
+                        }
+                        className="w-24 bg-transparent border-b border-cream px-0 py-2
+                                   font-serif text-[10pt] text-near-black outline-none
+                                   focus:border-ink transition-colors"
+                    />
+                    <p className="font-sans text-[7.5pt] text-stone mt-1">
+                        Max concurrent analyzeDocument sub-agent calls (1–30).
+                        Lower values reduce API rate-limit pressure.
+                    </p>
+                </div>
             </section>
 
             {/* Thinking */}

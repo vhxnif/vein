@@ -1,4 +1,4 @@
-import { autocomplete, intro, note, outro, select } from '@clack/prompts'
+import { autocomplete, intro, note, outro, select, text } from '@clack/prompts'
 import type { ModelProvider, ProjectConfig } from '@vein/core'
 import {
     listModels,
@@ -23,6 +23,8 @@ function display(c: ProjectConfig): string {
         `Reviewer:   ${formatMd(c.reviewer)}`,
         `Search:     ${formatMd(c.searchAgent)}`,
         `Thinking:  ${c.thinkingLevel ?? 'off'}`,
+        `Max Full:  ${c.maxAnalyzeResultFull ?? 15} (docs)`,
+        `Parallel:  ${c.maxParallelAnalyze ?? 10}`,
     ].join('\n')
 }
 
@@ -129,6 +131,16 @@ export function register(program: Command) {
                             label: 'Thinking Level',
                             hint: config.thinkingLevel ?? 'off',
                         },
+                        {
+                            value: 'maxAnalyzeResultFull',
+                            label: 'Max Full Results',
+                            hint: `${config.maxAnalyzeResultFull ?? 15} docs kept uncompressed`,
+                        },
+                        {
+                            value: 'maxParallelAnalyze',
+                            label: 'Max Parallel Analyze',
+                            hint: `${config.maxParallelAnalyze ?? 10} concurrent calls`,
+                        },
                         { value: 'done', label: 'Done — save and exit' },
                     ],
                 })
@@ -209,6 +221,46 @@ export function register(program: Command) {
                                     level === 'off'
                                         ? undefined
                                         : (level as ProjectConfig['thinkingLevel']),
+                            }
+                        }
+                        break
+                    }
+                    case 'maxAnalyzeResultFull': {
+                        const raw = await text({
+                            message: `Max full analyze results (current: ${config.maxAnalyzeResultFull ?? 15})`,
+                            placeholder: '15',
+                            validate: (v) => {
+                                if (!v) return
+                                const n = Number(v)
+                                if (!Number.isInteger(n) || n < 1 || n > 50)
+                                    return 'Must be an integer between 1 and 50'
+                            },
+                        })
+                        if (typeof raw === 'string') {
+                            const n = Number(raw)
+                            config = {
+                                ...config,
+                                maxAnalyzeResultFull: n === 15 ? undefined : n,
+                            }
+                        }
+                        break
+                    }
+                    case 'maxParallelAnalyze': {
+                        const raw = await text({
+                            message: `Max parallel analyze calls (current: ${config.maxParallelAnalyze ?? 10})`,
+                            placeholder: '10',
+                            validate: (v) => {
+                                if (!v) return
+                                const n = Number(v)
+                                if (!Number.isInteger(n) || n < 1 || n > 30)
+                                    return 'Must be an integer between 1 and 30'
+                            },
+                        })
+                        if (typeof raw === 'string') {
+                            const n = Number(raw)
+                            config = {
+                                ...config,
+                                maxParallelAnalyze: n === 10 ? undefined : n,
                             }
                         }
                         break

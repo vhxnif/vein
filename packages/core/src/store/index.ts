@@ -1,8 +1,8 @@
 import { count, eq, sql } from 'drizzle-orm'
-import { logger } from '../config'
-import type { TreeNode } from '../tree/type'
-import { db, getRawClient } from './client'
-import { docs, modelCache, nodes } from './schema'
+import { logger } from '../config/index.ts'
+import type { TreeNode } from '../tree/type.ts'
+import { db, getRawClient } from './client.ts'
+import { docs, modelCache, nodes } from './schema.ts'
 
 const log = logger.child({ module: 'store' })
 

@@ -1,8 +1,8 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router'
-import { Layout } from '../components/Layout'
-import { ImportProvider } from '../lib/import-context'
-import { ProjectProvider } from '../lib/project'
-import { SearchProvider } from '../lib/search-context'
+import { Layout } from '../components/Layout.tsx'
+import { ImportProvider } from '../lib/import-context.tsx'
+import { ProjectProvider } from '../lib/project.tsx'
+import { SearchProvider } from '../lib/search-context.tsx'
 
 export const Route = createRootRoute({
     component: () => (

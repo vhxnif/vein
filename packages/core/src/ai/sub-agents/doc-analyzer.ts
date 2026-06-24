@@ -1,11 +1,11 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
 import { Agent } from '@earendil-works/pi-agent-core'
 import { getModel, Type } from '@earendil-works/pi-ai'
-import { logger } from '../../config'
-import type { ModelProvider } from '../../config/type'
-import { getErrorMessage } from '../../utils/common'
-import { getModelProvider } from '../base'
-import type { ToolCtx, ToolMeta } from '../types'
+import { logger } from '../../config/index.ts'
+import type { ModelProvider } from '../../config/type.ts'
+import { getErrorMessage } from '../../utils/common.ts'
+import { getModelProvider } from '../base.ts'
+import type { ToolCtx, ToolMeta } from '../types.ts'
 import {
     ellipsis,
     extractResultText,
@@ -13,7 +13,7 @@ import {
     makeGetDocStructure,
     parseAnalyzeResult,
     Semaphore,
-} from './utils'
+} from './utils.ts'
 
 const subLog = logger.child({ module: 'doc-analyzer' })
 
@@ -136,7 +136,9 @@ high / medium / low / none
  * query. The subagent has its own tool set (getDocStructure,
  * getDocNodeDetails) and returns a structured Markdown analysis.
  */
-export const MAX_PARALLEL_ANALYZE = 10
+export const DEFAULT_MAX_PARALLEL_ANALYZE = 10
+
+export const MAX_PARALLEL_ANALYZE = DEFAULT_MAX_PARALLEL_ANALYZE
 
 /**
  * Creates the main agent's "analyzeDocument" tool that wraps the
@@ -144,16 +146,18 @@ export const MAX_PARALLEL_ANALYZE = 10
  */
 export function createAnalyzeDocumentTool(
     ctx: ToolCtx,
-    modelOverride?: ModelProvider
+    modelOverride?: ModelProvider,
+    maxParallel?: number
 ): { tool: any; meta: ToolMeta } {
-    const sem = new Semaphore(MAX_PARALLEL_ANALYZE)
+    const sem = new Semaphore(maxParallel ?? DEFAULT_MAX_PARALLEL_ANALYZE)
     const { cached, ok, tool } = ctx
+    const maxConc = maxParallel ?? DEFAULT_MAX_PARALLEL_ANALYZE
     const toolDef = {
         name: 'analyzeDocument',
         description:
             '委托子 Agent 深度分析单篇文档中与用户查询相关的内容。' +
             '返回 Markdown 格式分析（## 相关性 / ## 概述 / ## 关键发现 / ## 数据来源 / ## 详细分析）。' +
-            `最多同时运行 ${MAX_PARALLEL_ANALYZE} 个，超出排队等待。`,
+            `最多同时运行 ${maxConc} 个，超出排队等待。`,
         parameters: Type.Object({
             docId: Type.String({ description: '文章Id' }),
             userQuery: Type.String({

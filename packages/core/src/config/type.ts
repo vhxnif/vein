@@ -21,4 +21,8 @@ export type ProjectConfig = {
     searchAgent?: ModelProvider
     /** Optional thinking/reasoning level for the main agent. Defaults to 'off' (no thinking). Set to 'high' or 'xhigh' to enable. */
     thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+    /** Max number of full analyzeDocument results kept in context before compaction. Default: 15. */
+    maxAnalyzeResultFull?: number
+    /** Max concurrent analyzeDocument sub-agent calls. Default: 10. */
+    maxParallelAnalyze?: number
 }

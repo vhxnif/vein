@@ -1,11 +1,11 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { annotateNodeRefs, Markdown } from '../components/Markdown'
-import { TimelineBlockView } from '../components/TimelineBlockView'
-import type { HistoryEntry } from '../lib/api'
-import { fetchHistory, fetchHistoryEntry } from '../lib/api'
-import { useProject } from '../lib/project'
+import { annotateNodeRefs, Markdown } from '../components/Markdown.tsx'
+import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
+import type { HistoryEntry } from '../lib/api.ts'
+import { fetchHistory, fetchHistoryEntry } from '../lib/api.ts'
+import { useProject } from '../lib/project.tsx'
 
 export const Route = createFileRoute('/history')({
     component: HistoryPage,

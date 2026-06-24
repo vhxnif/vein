@@ -151,5 +151,19 @@ export const configSchema = {
                 },
             },
         },
+        maxAnalyzeResultFull: {
+            type: 'number',
+            description:
+                'Max number of full analyzeDocument results kept in context before compaction. Increase for projects with many relevant docs per query. Default: 15.',
+            minimum: 1,
+            maximum: 50,
+        },
+        maxParallelAnalyze: {
+            type: 'number',
+            description:
+                'Max concurrent analyzeDocument sub-agent calls. Adjust based on API rate limits. Default: 10.',
+            minimum: 1,
+            maximum: 30,
+        },
     },
 }

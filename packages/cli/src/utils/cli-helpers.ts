@@ -1,3 +1,4 @@
+import process from 'node:process'
 import type { ModelProvider } from '@vein/core'
 import { getErrorMessage } from '@vein/core'
 

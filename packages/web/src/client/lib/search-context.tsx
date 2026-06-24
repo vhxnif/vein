@@ -6,8 +6,8 @@ import {
     useRef,
     useState,
 } from 'react'
-import type { SearchResult } from './api'
-import { searchQuery } from './api'
+import type { SearchResult } from './api.ts'
+import { searchQuery } from './api.ts'
 
 // ── Timeline types ──────────────────────────────────────────
 
@@ -127,7 +127,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
                             setState((prev) => {
                                 if (!prev.searching) return prev
                                 const timeline = [...prev.timeline]
-                                const last = timeline[timeline.length - 1]
+                                const last = timeline.at(-1)
                                 if (last && last.type === 'thinking') {
                                     timeline[timeline.length - 1] = {
                                         ...last,
@@ -147,7 +147,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
                             setState((prev) => {
                                 if (!prev.searching) return prev
                                 const timeline = [...prev.timeline]
-                                const last = timeline[timeline.length - 1]
+                                const last = timeline.at(-1)
                                 if (last && last.type === 'text') {
                                     timeline[timeline.length - 1] = {
                                         ...last,

@@ -1,12 +1,12 @@
-export type { ContextDef, ToolDef } from './base'
+export type { ContextDef, ToolDef } from './base.ts'
 export {
     call,
     createSummarizer,
     listModels,
     listProviders,
     setModelProvider,
-} from './base'
-export type { LibrarianResult, Mode, TraceStep } from './librarian'
-export { librarian } from './librarian'
-export type { ReviewResult, SourceRef } from './sub-agents/reviewer'
-export { reviewer } from './sub-agents/reviewer'
+} from './base.ts'
+export type { LibrarianResult, Mode, TraceStep } from './librarian.ts'
+export { librarian } from './librarian.ts'
+export type { ReviewResult, SourceRef } from './sub-agents/reviewer.ts'
+export { reviewer } from './sub-agents/reviewer.ts'

@@ -1,17 +1,17 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
 import { Agent } from '@earendil-works/pi-agent-core'
 import { getModel, Type } from '@earendil-works/pi-ai'
-import { logger } from '../../config'
-import type { ModelProvider } from '../../config/type'
+import { logger } from '../../config/index.ts'
+import type { ModelProvider } from '../../config/type.ts'
 import {
     getDocOutlines,
     getNodeDetails,
     searchDocsByKeyword,
-} from '../../store'
-import { getModelProvider } from '../base'
-import { SEARCH_DOCS_BY_KEYWORD_META } from '../tools'
-import type { ToolCtx, ToolMeta } from '../types'
-import { ellipsis, extractResultText } from './utils'
+} from '../../store/index.ts'
+import { getModelProvider } from '../base.ts'
+import { SEARCH_DOCS_BY_KEYWORD_META } from '../tools.ts'
+import type { ToolCtx, ToolMeta } from '../types.ts'
+import { ellipsis, extractResultText } from './utils.ts'
 
 const slog = logger.child({ module: 'search-screener' })
 
@@ -82,7 +82,7 @@ export const SEARCH_SCREENER_PROMPT = `你是一个文档搜索筛选员。根�
 ## 流程
 
 1. 分析用户查询，识别核心主题（剔除意图词如"如何迭代"/"发展历史"等，聚焦主体概念）
-2. 提取 1-3 个区分度高的关键词，调用 searchDocsByKeyword
+2. 提取核心关键词并自行分词：将复合词拆分为最小语义单元（如「周期监测」→「周期 监测」，「文本纠错功能」→「文本 纠错」，「双写一致性」→「双写 一致性」），以空格分隔传入 searchDocsByKeyword。分词粒度宁细勿粗——宁可拆分过细，不可整词硬匹配
 3. 结合 snippet + outline 筛选相关性：
    - snippet 或 outline 与核心主题明显相关 → 保留
    - outline 中有专门章节（如"XXX优化"/"XXX功能"）匹配查询 → high
@@ -100,6 +100,7 @@ export const SEARCH_SCREENER_PROMPT = `你是一个文档搜索筛选员。根�
 
 - 最多 3 次搜索
 - 最多返回 10 篇文档
+- 传入 searchDocsByKeyword 的关键词必须自行分词（空格分隔），不得传入未经拆分的复合词
 - 只返回 snippet/outline 表明与查询相关的文档
 - 相关性标注：high=大纲中有专门章节，medium=部分涉及，low=仅边缘提及
 - 空结果时返回 []
@@ -118,7 +119,7 @@ function makeSearchDocsByKeyword(
         description:
             '通过关键词在文档摘要中搜索相关文档。传入 1-3 个空格分隔的核心关键词。' +
             '关键词应是用户问题中最具区分度的概念词和专有名词，避免泛化词（功能/系统/模块）和问题意图词（迭代/演进/历史/如何）。' +
-            '示例：「周期监测功能是如何迭代的」→ 关键词应为「周期监测」。' +
+            '示例：「周期监测功能是如何迭代的」→ 自行分词为「周期 监测」传入（空格分隔，非「周期监测」整词）。' +
             '默认返回前 10 条，可通过 offset 翻页；如果前 10 条均不相关，可用 offset=10 获取更多结果。' +
             '返回 [{docId, snippet, rank, outline}]，按匹配度降序。' +
             'snippet 为文档核心摘要，outline 为文档标题大纲（仅章节标题，无摘要正文），二者结合用于判断相关性。',
@@ -262,16 +263,21 @@ async function searchAndScreen(
         searchDocsByKeyword: SEARCH_DOCS_BY_KEYWORD_META,
     }
     const toolStartTimes = new Map<string, number>()
+    const toolQueries = new Map<string, string>()
     agent.subscribe((event) => {
         if (event.type === 'tool_execution_start') {
             toolStartTimes.set(event.toolCallId, performance.now())
+            const args = (event.args as Record<string, unknown>) ?? {}
+            const query = String(args.query ?? '')
+            toolQueries.set(event.toolCallId, query)
             const meta = INTERNAL_META[event.toolName]
             const label = meta
-                ? meta.stepLabel((event.args as Record<string, unknown>) ?? {})
+                ? meta.stepLabel(args)
                 : `Calling ${event.toolName}...`
             onStep?.(`[Search] ${label}`)
-            slog.debug({
+            slog.info({
                 toolName: event.toolName,
+                query,
                 stepCount,
                 content: 'SearchScreener tool start',
             })
@@ -288,8 +294,9 @@ async function searchAndScreen(
             if (label) {
                 onStep?.(`  ${label}`)
             }
-            slog.debug({
+            slog.info({
                 toolName: event.toolName,
+                query: toolQueries.get(event.toolCallId) ?? '',
                 resultLen: resultText.length,
                 elapsedMs,
                 content: 'SearchScreener tool end',

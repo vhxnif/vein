@@ -6,7 +6,7 @@ import {
     resolveProjectRoot,
 } from '@vein/core'
 import type { Command } from 'commander'
-import { formatDuration } from '../utils/cli-helpers'
+import { formatDuration } from '../utils/cli-helpers.ts'
 
 function formatHistoryDetail(entry: HistoryEntry): string {
     const lines = [
@@ -30,7 +30,7 @@ export function register(program: Command) {
         .option(
             '-p, --page <n>',
             'page number for --list (20 per page)',
-            (v) => Math.max(1, parseInt(v, 10) || 1),
+            (v) => Math.max(1, Number.parseInt(v, 10) || 1),
             1
         )
         .action(

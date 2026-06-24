@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { NodeInfo } from '../lib/api'
-import { fetchNode } from '../lib/api'
+import type { NodeInfo } from '../lib/api.ts'
+import { fetchNode } from '../lib/api.ts'
 
 // ── Module-level cache ─────────────────────────────────────────
 

@@ -1,8 +1,8 @@
-import { createSummarizer } from '../ai/base'
-import * as store from '../store'
-import { md5 } from '../utils/common'
-import { logger } from './index'
-import type { ModelProvider, ProjectConfig } from './type'
+import { createSummarizer } from '../ai/base.ts'
+import * as store from '../store/index.ts'
+import { md5 } from '../utils/common.ts'
+import { logger } from './index.ts'
+import type { ModelProvider, ProjectConfig } from './type.ts'
 
 const log = logger.child({ module: 'summarizer' })
 

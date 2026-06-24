@@ -9,7 +9,7 @@ import {
     useRef,
     useState,
 } from 'react'
-import { type ImportResultEvent, importDocuments } from './api'
+import { type ImportResultEvent, importDocuments } from './api.ts'
 
 // ── Types ──────────────────────────────────────────────────────
 

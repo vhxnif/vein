@@ -1,5 +1,5 @@
-import { logger } from '../config'
-import type { BaseDocNode, DocNode } from './type'
+import { logger } from '../config/index.ts'
+import type { BaseDocNode, DocNode } from './type.ts'
 
 const log = logger.child({ module: 'markdown_split' })
 
@@ -276,14 +276,14 @@ function buildTreeFromNodes(nodeList: FlatNode[], docId: string): DocNode[] {
         }
         nodeCounter++
 
-        while (stack.length > 0 && stack[stack.length - 1]!.level >= level) {
+        while (stack.length > 0 && stack.at(-1)!.level >= level) {
             stack.pop()
         }
 
         if (stack.length === 0) {
             rootNodes.push(treeNode)
         } else {
-            stack[stack.length - 1]!.node.nodes.push(treeNode)
+            stack.at(-1)!.node.nodes.push(treeNode)
         }
 
         stack.push({ node: treeNode, level })

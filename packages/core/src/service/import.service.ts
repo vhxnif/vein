@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { logger, resolveProjectRoot } from '../config'
-import type { ModelProvider, ProjectConfig } from '../config/type'
-import * as store from '../store'
-import { mdToTree } from '../tree/markdown_split'
-import type { DocNode } from '../tree/type'
-import { getErrorMessage, md5 } from '../utils/common'
-import { segmentText } from '../utils/segment'
+import { logger, resolveProjectRoot } from '../config/index.ts'
+import type { ModelProvider, ProjectConfig } from '../config/type.ts'
+import * as store from '../store/index.ts'
+import { mdToTree } from '../tree/markdown_split.ts'
+import type { DocNode } from '../tree/type.ts'
+import { getErrorMessage, md5 } from '../utils/common.ts'
+import { segmentText } from '../utils/segment.ts'
 
 const log = logger.child({ module: 'import' })
 

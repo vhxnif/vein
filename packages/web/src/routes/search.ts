@@ -62,12 +62,14 @@ searchRouter.post('/', async (c) => {
                     reviewerModel: config.reviewer,
                     searchAgentModel: config.searchAgent,
                     thinkingLevel: config.thinkingLevel,
+                    maxAnalyzeResultFull: config.maxAnalyzeResultFull,
+                    maxParallelAnalyze: config.maxParallelAnalyze,
                     mode,
                     signal,
                     onThinkingDelta: (delta) => {
                         if (!aborted) {
                             send({ type: 'thinking_delta', delta })
-                            const last = timeline[timeline.length - 1]
+                            const last = timeline.at(-1)
                             if (last && last.type === 'thinking') {
                                 last.text += delta
                             } else {

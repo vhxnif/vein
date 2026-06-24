@@ -1,9 +1,9 @@
-import type { ModelProvider } from '../config'
-import * as store from '../store'
-import { segmentText } from '../utils/segment'
-import type { LibrarianResult, TraceStep } from './librarian'
-import { ellipsis } from './sub-agents/utils'
-import type { ToolMeta } from './types'
+import type { ModelProvider } from '../config/index.ts'
+import * as store from '../store/index.ts'
+import { segmentText } from '../utils/segment.ts'
+import type { LibrarianResult, TraceStep } from './librarian.ts'
+import { ellipsis } from './sub-agents/utils.ts'
+import type { ToolMeta } from './types.ts'
 
 // ── Tool metadata ─────────────────────────────────────────────
 
@@ -144,6 +144,10 @@ type SearchOptions = {
     ) => void
     /** Retrieval mode: 'default' uses analyze+review pipeline, 'quick' skips review for faster results. */
     mode?: 'default' | 'quick'
+    /** Max number of full analyzeDocument results before compaction. Default: 15. */
+    maxAnalyzeResultFull?: number
+    /** Max concurrent analyzeDocument sub-agent calls. Default: 10. */
+    maxParallelAnalyze?: number
 }
 
 type SearchResult = LibrarianResult & {
@@ -158,7 +162,7 @@ async function searchDocuments(
     query: string,
     opts?: SearchOptions
 ): Promise<SearchResult> {
-    const { librarian } = await import('./librarian')
+    const { librarian } = await import('./librarian.ts')
     const result = await librarian(query, opts?.onStep, {
         segmenter: opts?.segmenter,
         subagentModel: opts?.subagentModel,
@@ -166,6 +170,8 @@ async function searchDocuments(
         searchAgentModel: opts?.searchAgentModel,
         signal: opts?.signal,
         thinkingLevel: opts?.thinkingLevel,
+        maxAnalyzeResultFull: opts?.maxAnalyzeResultFull,
+        maxParallelAnalyze: opts?.maxParallelAnalyze,
         onThinkingDelta: opts?.onThinkingDelta,
         onTextDelta: opts?.onTextDelta,
         onToolCallStart: opts?.onToolCallStart,
