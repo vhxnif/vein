@@ -236,10 +236,10 @@ function HistoryRow({
             : rawTime
 
     return (
-        <div className="-mx-3">
+        <div className="-mx-[12pt]">
             <button
                 type="button"
-                className="w-full text-left px-3 py-3 rounded-[6pt] flex items-center justify-between
+                className="w-full text-left px-[12pt] py-[12pt] rounded-[6pt] flex items-center justify-between
                            bg-transparent border-none cursor-pointer
                            hover:bg-sand/60 transition-colors"
                 onClick={() =>

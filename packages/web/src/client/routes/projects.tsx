@@ -9,11 +9,11 @@ function ProjectsPage() {
     const { project, setProject, projects, loading } = useProject()
 
     return (
-        <div className="max-w-[680px] mx-auto px-4 sm:px-8 py-8 sm:py-16">
-            <h1 className="font-serif text-[16pt] sm:text-[22pt] font-medium leading-tight text-near-black mb-1">
+        <div className="max-w-[780px] mx-auto px-4 md:px-8 py-6 md:py-16">
+            <h1 className="font-serif text-[20pt] font-medium leading-tight text-near-black mb-1">
                 Projects
             </h1>
-            <p className="font-sans text-[8.5pt] sm:text-[9pt] text-stone mb-8">
+            <p className="font-sans text-[8.5pt] md:text-[9pt] text-stone mb-8">
                 Select a project to search and browse documents
             </p>
 
@@ -58,13 +58,10 @@ function ProjectsPage() {
                     <button
                         type="button"
                         onClick={() => setProject(null)}
-                        className={`w-full text-left px-4 sm:px-5 py-3 sm:py-3.5 rounded-[8pt]
-                            flex items-center gap-3 transition-colors
-                            ${
-                                !project
-                                    ? 'bg-tint text-ink ring-warm'
-                                    : 'bg-ivory text-olive hover:bg-sand'
-                            }`}
+                        className={`w-full text-left px-4 md:px-5 py-3 md:py-3.5 rounded-[8pt]
+                            flex items-center gap-3
+                            focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2
+                            project-item${!project ? ' selected' : ''}`}
                     >
                         <span
                             className={`flex-shrink-0 w-2.5 h-2.5 rounded-full border-2 transition-colors
@@ -75,7 +72,7 @@ function ProjectsPage() {
                                 }`}
                         />
                         <div className="min-w-0 flex-1">
-                            <p className="font-sans text-[9pt] sm:text-[9.5pt] font-medium text-olive">
+                            <p className="font-sans text-[9pt] font-medium text-near-black">
                                 None
                             </p>
                             <p className="font-sans text-[7.5pt] text-stone truncate">
@@ -91,13 +88,10 @@ function ProjectsPage() {
                             onClick={() =>
                                 setProject(project === p.name ? null : p.name)
                             }
-                            className={`w-full text-left px-4 sm:px-5 py-3 sm:py-3.5 rounded-[8pt]
-                                flex items-center gap-3 transition-colors
-                                ${
-                                    project === p.name
-                                        ? 'bg-tint text-ink ring-warm'
-                                        : 'bg-ivory text-olive hover:bg-sand'
-                                }`}
+                            className={`w-full text-left px-4 md:px-5 py-3 md:py-3.5 rounded-[8pt]
+                                flex items-center gap-3
+                                focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2
+                                project-item${project === p.name ? ' selected' : ''}`}
                         >
                             <span
                                 className={`flex-shrink-0 w-2.5 h-2.5 rounded-full border-2 transition-colors
@@ -108,10 +102,10 @@ function ProjectsPage() {
                                     }`}
                             />
                             <div className="min-w-0 flex-1">
-                                <p className="font-sans text-[9pt] sm:text-[9.5pt] font-medium">
+                                <p className="font-sans text-[9pt] font-medium">
                                     {p.name}
                                 </p>
-                                <p className="font-mono text-[7pt] sm:text-[7.5pt] text-stone truncate">
+                                <p className="font-mono text-[8pt] text-stone truncate">
                                     {p.path}
                                 </p>
                             </div>

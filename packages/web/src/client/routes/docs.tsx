@@ -182,7 +182,7 @@ function DocsList() {
                     {docs.map((doc) => (
                         <div
                             key={doc.id}
-                            className="flex items-center gap-2 px-3 py-3 -mx-3 rounded-[6pt]
+                            className="flex items-center gap-2 px-[12pt] py-[12pt] -mx-[12pt] rounded-[6pt]
                                        hover:bg-sand/60 transition-colors group"
                         >
                             <Link

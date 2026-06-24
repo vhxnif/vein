@@ -185,8 +185,8 @@ function ProjectSelector() {
             {/* Dropdown on click */}
             {open && (
                 <div
-                    className="absolute top-full left-0 mt-1 w-52 bg-ivory
-                               ring-warm rounded-[8pt] py-1 z-50 shadow-sm
+                    className="absolute top-full left-0 mt-1 min-w-32 w-max max-w-48 bg-ivory
+                               ring-warm rounded-[8pt] py-1 px-1 z-50 shadow-sm overflow-hidden
                                animate-[fadeIn_150ms_ease]"
                 >
                     <div className="px-3 py-1.5 font-sans text-[7.5pt] font-semibold text-stone uppercase tracking-wide">
@@ -205,7 +205,7 @@ function ProjectSelector() {
                             {/* None option */}
                             <button
                                 type="button"
-                                className={`w-full text-left px-3 py-1.5 font-sans text-[8.5pt]
+                                className={`w-full text-left px-3 py-1.5 rounded-[4pt] font-sans text-[8.5pt]
                                     transition-colors hover:bg-sand
                                     ${!project ? 'text-ink font-medium' : 'text-olive'}`}
                                 onClick={() => {
@@ -220,7 +220,7 @@ function ProjectSelector() {
                                 <button
                                     type="button"
                                     key={p.name}
-                                    className={`w-full text-left px-3 py-1.5 font-sans text-[8.5pt]
+                                    className={`w-full text-left px-3 py-1.5 rounded-[4pt] font-sans text-[8.5pt]
                                         transition-colors hover:bg-sand truncate
                                         ${project === p.name ? 'text-ink font-medium' : 'text-olive'}`}
                                     onClick={() => {
