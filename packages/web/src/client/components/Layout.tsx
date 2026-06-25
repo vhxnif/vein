@@ -1,10 +1,11 @@
 import { Link } from '@tanstack/react-router'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useProject } from '../lib/project.tsx'
+import { StreamingStatusBar } from './StreamingStatusBar.tsx'
 
 export function Layout({ children }: { children: ReactNode }) {
     return (
-        <div className="h-screen md:h-auto md:min-h-screen bg-parchment flex flex-col md:block">
+        <div className="h-dvh md:h-auto md:min-h-screen bg-parchment flex flex-col md:block">
             {/* Desktop sidebar — fixed, independent of main scroll */}
             <aside
                 className="hidden md:flex fixed z-30 left-0 top-0 h-screen
@@ -72,9 +73,12 @@ export function Layout({ children }: { children: ReactNode }) {
             </aside>
 
             {/* Main content — scrollable on mobile, normal flow on desktop */}
-            <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pb-6 md:pb-0 md:overflow-visible md:pl-[48px]">
+            <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden md:overflow-visible md:pl-[48px]">
                 {children}
             </main>
+
+            {/* Streaming status bar — sits between content and tab bar on mobile */}
+            <StreamingStatusBar />
 
             {/* Mobile bottom tab bar — flex child, always at bottom */}
             <nav

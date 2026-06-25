@@ -25,7 +25,7 @@ function DocsLayout() {
 
     return (
         <div
-            className="max-w-[780px] mx-auto px-8 py-16"
+            className="max-w-[780px] mx-auto px-[16pt] pt-[24pt] pb-[80pt] md:px-[32pt] md:py-[64pt]"
             style={{ animation: isDetail ? 'fadeIn 250ms ease' : 'none' }}
         >
             {isDetail ? <Outlet /> : <DocsList />}
@@ -167,7 +167,7 @@ function DocsList() {
     return (
         <>
             {/* Header: title + search + import (responsive) */}
-            <div className="mb-8">
+            <div className="sticky top-0 z-10 bg-parchment pb-4 mb-8 border-b border-cream/50 md:static md:bg-transparent md:border-b-0 md:pb-0">
                 <div className="flex items-end justify-between flex-wrap gap-y-3">
                     <div>
                         <h1 className="font-serif text-[20pt] font-medium leading-tight text-ink">

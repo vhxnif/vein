@@ -41,10 +41,14 @@ function HomePage() {
         void timeline.length
     }, [timeline, searching])
 
-    // Scroll to top when results arrive
+    // Scroll to top when results arrive — defer so the Layout's
+    // flex recalc (StreamingStatusBar removal on mobile) settles first.
     useEffect(() => {
         if (result) {
-            topAnchorRef.current?.scrollIntoView({ behavior: 'smooth' })
+            const timer = setTimeout(() => {
+                topAnchorRef.current?.scrollIntoView({ behavior: 'smooth' })
+            }, 0)
+            return () => clearTimeout(timer)
         }
     }, [result])
 
@@ -69,10 +73,6 @@ function HomePage() {
         if (e.key === 'Enter') handleSearch()
     }
 
-    const runningCount = timeline.filter(
-        (b) => b.type === 'tool' && b.status === 'running'
-    ).length
-
     // For the completed collapsed view: split timeline into
     // "process" (everything except the last text block) and
     // "finalText" (the last text block, if any).
@@ -81,6 +81,10 @@ function HomePage() {
     const processBlocks = lastIsText ? timeline.slice(0, -1) : timeline
 
     const hasProcessContent = processBlocks.length > 0
+
+    const runningCount = timeline.filter(
+        (b) => b.type === 'tool' && b.status === 'running'
+    ).length
 
     // Build shortId → fullDocId lookup from result.docNames
     const docIdMap = useMemo(() => {
@@ -165,9 +169,9 @@ function HomePage() {
                 </button>
             </div>
 
-            {/* Searching state with no content yet */}
+            {/* Desktop: initial searching state (mobile handled by Layout's StreamingStatusBar) */}
             {searching && timeline.length === 0 && (
-                <div className="mb-8 flex items-center gap-3">
+                <div className="hidden md:flex items-center gap-3 mb-8">
                     <RunCat size={24} />
                     <span className="font-sans text-[9pt] text-olive">
                         Searching...
@@ -178,18 +182,17 @@ function HomePage() {
                 </div>
             )}
 
-            {/* ── Streaming: timeline + status bar ── */}
+            {/* ── Streaming: timeline ── */}
             {searching && timeline.length > 0 && (
                 <div className="mb-8">
-                    {/* Timeline blocks */}
                     <div className="space-y-1">
                         {timeline.map((block) => (
                             <TimelineBlockView key={block.id} block={block} />
                         ))}
                     </div>
 
-                    {/* Status bar fixed at bottom of content */}
-                    <div className="flex items-center gap-2 mt-3">
+                    {/* Desktop status bar — inline, scrolls with content */}
+                    <div className="hidden md:flex items-center gap-2 mt-3">
                         <RunCat size={16} />
                         <span className="font-sans text-[8pt] text-olive">
                             {runningCount > 0

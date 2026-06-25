@@ -49,17 +49,45 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
 
     // Position relative to anchor, clamped to viewport
     const rect = anchorEl?.getBoundingClientRect()
-    const top = rect ? rect.bottom + 4 : 0
-    const left = rect
-        ? Math.max(8, Math.min(rect.left, window.innerWidth - 436))
-        : 0
+    const tooltipWidth = Math.min(420, window.innerWidth - 16)
+    const margin = 8
+
+    // Horizontal: clamp left so tooltip doesn't overflow viewport edges
+    let left: number
+    if (rect) {
+        left = Math.min(
+            Math.max(rect.left, margin),
+            window.innerWidth - tooltipWidth - margin
+        )
+    } else {
+        left = margin
+    }
+
+    // Vertical: prefer below anchor, flip above if it would overflow bottom
+    let top: number
+    if (rect) {
+        const belowTop = rect.bottom + 4
+        const maxHeight = 280
+        if (belowTop + maxHeight > window.innerHeight - margin) {
+            // Not enough space below — position above the anchor
+            top = Math.max(margin, rect.top - maxHeight - 4)
+        } else {
+            top = belowTop
+        }
+    } else {
+        top = margin
+    }
 
     return (
         <div
             ref={tooltipRef}
-            className="fixed z-50 w-[420px] max-h-[280px] overflow-y-auto kami-scrollbar
+            className="fixed z-50 max-h-[280px] overflow-y-auto kami-scrollbar
                        bg-parchment border border-ink/20 rounded-[8pt] shadow-lg p-4"
-            style={{ top: `${top}px`, left: `${left}px` }}
+            style={{
+                top: `${top}px`,
+                left: `${left}px`,
+                width: `${tooltipWidth}px`,
+            }}
         >
             {loading && (
                 <div className="flex items-center gap-2 font-sans text-[8.5pt] text-ink">
