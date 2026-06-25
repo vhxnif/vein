@@ -1,5 +1,5 @@
 import process from 'node:process'
-import { confirm, intro, note, outro, select } from '@clack/prompts'
+import { confirm, intro, note, outro, select, text } from '@clack/prompts'
 import {
     type BaseDocNode,
     type DocNode,
@@ -352,13 +352,27 @@ async function showNodeDetail(
 
 // ── Browse by Doc (main list) ──────────────────────────────────────
 
-async function browseDocsPage(page: number): Promise<void> {
+async function browseDocsPage(page: number, keyword?: string): Promise<void> {
     await drainStdin()
-    const { docs, total } = await listDocuments(page, PER_PAGE)
+    const { docs, total } = await listDocuments(page, PER_PAGE, keyword)
     const totalPages = Math.ceil(total / PER_PAGE)
 
     if (docs.length === 0) {
-        note('No documents in the library.')
+        if (keyword) {
+            note(`No documents matching "${keyword}".`)
+        } else {
+            note('No documents in the library.')
+        }
+        // If filtered with no results and not on page 1, retry page 1
+        if (keyword && page > 1) {
+            await browseDocsPage(1, keyword)
+            return
+        }
+        // Offer to go back to unfiltered list
+        if (keyword) {
+            await browseDocsPage(1)
+            return
+        }
         return
     }
 
@@ -390,6 +404,21 @@ async function browseDocsPage(page: number): Promise<void> {
             })
         }
 
+        // Search / clear filter option
+        if (keyword) {
+            choices.push({
+                value: '__clear_filter__',
+                label: '❌  Clear filter',
+                hint: `remove "${keyword}" filter`,
+            })
+        } else {
+            choices.push({
+                value: '__search__',
+                label: '🔍  Search',
+                hint: 'filter by keyword',
+            })
+        }
+
         choices.push({
             value: '__back__',
             label: '( back to main menu )',
@@ -399,8 +428,12 @@ async function browseDocsPage(page: number): Promise<void> {
         return choices
     }
 
+    const titleMsg = keyword
+        ? `Search: "${keyword}" · ${total} result${total !== 1 ? 's' : ''} · page ${page}/${totalPages}`
+        : `Documents (${total} total, page ${page}/${totalPages})`
+
     const selected = await safeSelect({
-        message: `Documents (${total} total, page ${page}/${totalPages})`,
+        message: titleMsg,
         options: buildChoices(),
     })
 
@@ -409,25 +442,42 @@ async function browseDocsPage(page: number): Promise<void> {
     if (selected === '__back__') return
     if (selected === '__prev__') {
         if (page > 1) {
-            await browseDocsPage(page - 1)
+            await browseDocsPage(page - 1, keyword)
         }
         return
     }
     if (selected === '__next__') {
         if (page < totalPages) {
-            await browseDocsPage(page + 1)
+            await browseDocsPage(page + 1, keyword)
         }
+        return
+    }
+    if (selected === '__search__') {
+        const q = await text({
+            message: 'Enter keywords to search:',
+            placeholder: 'e.g. react 性能',
+        })
+        await drainStdin()
+        if (typeof q !== 'string' || !q.trim()) {
+            await browseDocsPage(page)
+        } else {
+            await browseDocsPage(1, q.trim())
+        }
+        return
+    }
+    if (selected === '__clear_filter__') {
+        await browseDocsPage(1)
         return
     }
 
     const result = await showDocDetailMenu(selected)
     if (result === 'deleted') {
-        const { docs: refetched } = await listDocuments(page, PER_PAGE)
+        const { docs: refetched } = await listDocuments(page, PER_PAGE, keyword)
         const targetPage = refetched.length === 0 && page > 1 ? page - 1 : page
-        await browseDocsPage(targetPage)
+        await browseDocsPage(targetPage, keyword)
         return
     }
-    await browseDocsPage(page)
+    await browseDocsPage(page, keyword)
 }
 
 // ── Top-level browse command ───────────────────────────────────────
@@ -437,7 +487,8 @@ export function register(program: Command) {
         .command('browse')
         .alias('br')
         .description('browse the library by document')
-        .action(async () => {
+        .option('-k, --keyword <terms>', 'filter documents by keyword')
+        .action(async (options: { keyword?: string }) => {
             const config = await setupProjectModel()
             if (!config) {
                 outro('Not in a vein project. Run "vein new" first.')
@@ -446,7 +497,7 @@ export function register(program: Command) {
 
             intro('Browse Library')
 
-            await browseDocsPage(1)
+            await browseDocsPage(1, options.keyword)
 
             outro('Done')
         })

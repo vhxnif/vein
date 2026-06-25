@@ -27,9 +27,10 @@ docsRouter.get('/', async (c) => {
 
     const page = Number(c.req.query('page')) || 1
     const pageSize = Number(c.req.query('pageSize')) || 20
+    const keyword = c.req.query('keyword') || undefined
 
-    const { docs, total } = await listDocuments(page, pageSize)
-    return c.json({ docs, total, page, pageSize })
+    const { docs, total } = await listDocuments(page, pageSize, keyword)
+    return c.json({ docs, total, page, pageSize, keyword: keyword ?? null })
 })
 
 // ── GET /api/projects/current/documents/:id ─────────────────────

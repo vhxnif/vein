@@ -868,13 +868,117 @@ type DocInfo = BrowseDoc
 /** Paginated document listing. Returns documents + total count. */
 async function listDocuments(
     page: number,
-    pageSize: number
+    pageSize: number,
+    keyword?: string
 ): Promise<{ docs: DocInfo[]; total: number }> {
+    if (keyword?.trim()) {
+        return listDocumentsByKeyword(page, pageSize, keyword.trim())
+    }
     const [docs, total] = await Promise.all([
         getDocsPaginated((page - 1) * pageSize, pageSize),
         getDocCount(),
     ])
     return { docs, total }
+}
+
+/** Paginated document listing filtered by FTS5 keyword search. */
+async function listDocumentsByKeyword(
+    page: number,
+    pageSize: number,
+    keyword: string
+): Promise<{ docs: DocInfo[]; total: number }> {
+    const raw = getRawClient()
+    const offset = (page - 1) * pageSize
+
+    // Sanitize: strip double quotes to prevent FTS5 query syntax issues
+    const safeKeyword = keyword.replace(/"/g, '')
+    if (!safeKeyword.trim()) {
+        // After stripping quotes, keyword is empty — fall back to full listing
+        return listDocuments(page, pageSize)
+    }
+
+    const tokens = safeKeyword.split(/\s+/).filter(Boolean)
+    const ftsQuery =
+        tokens.length === 1
+            ? `"${tokens[0]}"`
+            : tokens.map((t) => `"${t}"`).join(' OR ')
+
+    // Step 1: FTS5 search to get matching docIds with ranks
+    let matchedIds: string[]
+    let total = 0
+    try {
+        const countResult = await raw.execute({
+            sql: `SELECT COUNT(*) AS count FROM docs_fts WHERE docs_fts MATCH ?`,
+            args: [ftsQuery],
+        })
+        total = (countResult.rows[0] as { count: number })?.count ?? 0
+
+        if (total === 0) return { docs: [], total: 0 }
+
+        const result = await raw.execute({
+            sql: `
+                SELECT doc_id, rank
+                FROM docs_fts
+                WHERE docs_fts MATCH ?
+                ORDER BY rank
+                LIMIT ? OFFSET ?
+            `,
+            args: [ftsQuery, pageSize, offset],
+        })
+        const rows = result.rows as Array<{
+            doc_id: string
+            rank: number
+        }>
+        matchedIds = rows.map((r) => r.doc_id)
+    } catch {
+        return { docs: [], total: 0 }
+    }
+
+    if (matchedIds.length === 0) return { docs: [], total: 0 }
+
+    // Step 2: Query docs metadata + node counts for the matched docIds
+    const placeholders = matchedIds.map(() => '?').join(', ')
+    try {
+        const result = await raw.execute({
+            sql: `
+                SELECT d.id, d.metadata, d.created_at,
+                       COUNT(n.id) AS node_count
+                FROM docs d
+                LEFT JOIN nodes n ON n.doc_id = d.id
+                WHERE d.id IN (${placeholders})
+                GROUP BY d.id
+                ORDER BY d.created_at DESC
+            `,
+            args: matchedIds,
+        })
+        const rows = result.rows as Array<{
+            id: string
+            metadata: string
+            created_at: string
+            node_count: number
+        }>
+
+        // Preserve FTS rank order
+        const docMap = new Map(rows.map((r) => [r.id, r]))
+        const docs = matchedIds
+            .map((id) => docMap.get(id))
+            .filter((r): r is NonNullable<typeof r> => r !== undefined)
+            .map((r) => {
+                const meta = JSON.parse(r.metadata) as Record<string, unknown>
+                return {
+                    id: r.id,
+                    title: (meta.title as string) ?? 'Untitled',
+                    sourcePath: (meta.sourcePath as string) ?? '',
+                    nodeCount: r.node_count,
+                    createdAt: r.created_at,
+                    metadata: r.metadata,
+                }
+            })
+
+        return { docs, total }
+    } catch {
+        return { docs: [], total: 0 }
+    }
 }
 
 /** Get a single document's info by ID. */

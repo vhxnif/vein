@@ -159,12 +159,14 @@ export async function fetchModels(provider: string): Promise<ModelInfo[]> {
 
 export async function fetchDocuments(
     page: number,
-    pageSize: number
-): Promise<{ docs: DocInfo[]; total: number }> {
-    const res = await fetch(
-        u(`/projects/current/documents?page=${page}&pageSize=${pageSize}`),
-        { headers: h() }
-    )
+    pageSize: number,
+    keyword?: string
+): Promise<{ docs: DocInfo[]; total: number; keyword: string | null }> {
+    let url = `/projects/current/documents?page=${page}&pageSize=${pageSize}`
+    if (keyword) {
+        url += `&keyword=${encodeURIComponent(keyword)}`
+    }
+    const res = await fetch(u(url), { headers: h() })
     if (!res.ok) throw new Error('Failed to fetch documents')
     return res.json()
 }

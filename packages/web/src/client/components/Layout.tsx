@@ -4,7 +4,7 @@ import { useProject } from '../lib/project.tsx'
 
 export function Layout({ children }: { children: ReactNode }) {
     return (
-        <div className="min-h-screen bg-parchment">
+        <div className="h-screen md:h-auto md:min-h-screen bg-parchment flex flex-col md:block">
             {/* Desktop sidebar — fixed, independent of main scroll */}
             <aside
                 className="hidden md:flex fixed z-30 left-0 top-0 h-screen
@@ -71,15 +71,15 @@ export function Layout({ children }: { children: ReactNode }) {
                 <div className="flex-1" />
             </aside>
 
-            {/* Main content */}
-            <main className="min-w-0 pb-16 md:pb-0 md:pl-[48px]">
+            {/* Main content — scrollable on mobile, normal flow on desktop */}
+            <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden md:overflow-visible md:pl-[48px]">
                 {children}
             </main>
 
-            {/* Mobile bottom tab bar */}
+            {/* Mobile bottom tab bar — flex child, always at bottom */}
             <nav
-                className="md:hidden fixed bottom-0 left-0 right-0 bg-ivory border-t border-cream/50
-                            flex items-center justify-around py-2 safe-area-bottom z-50"
+                className="md:hidden flex-shrink-0 bg-ivory border-t border-cream/50
+                            flex items-center justify-around py-2 safe-area-bottom"
             >
                 <MobileTab href="/" label="Ask">
                     <svg
