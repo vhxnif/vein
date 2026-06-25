@@ -25,7 +25,7 @@ function DocsLayout() {
 
     return (
         <div
-            className="max-w-[780px] mx-auto px-8 py-16"
+            className="max-w-[780px] mx-auto px-[16pt] pt-[24pt] pb-[80pt] md:px-[32pt] md:py-[64pt]"
             style={{ animation: isDetail ? 'fadeIn 250ms ease' : 'none' }}
         >
             {isDetail ? <Outlet /> : <DocsList />}
@@ -42,6 +42,8 @@ function DocsList() {
     const sentinelRef = useRef<HTMLDivElement>(null)
     const [isMobile, setIsMobile] = useState(false)
     const [desktopPage, setDesktopPage] = useState(1)
+    const [searchInput, setSearchInput] = useState('')
+    const [keyword, setKeyword] = useState('')
 
     // Dynamic page size: fill ~1.5 viewports so pagination is visible without scrolling
     const [pageSize] = useState(() => {
@@ -68,8 +70,9 @@ function DocsList() {
         hasNextPage,
         isFetchingNextPage,
     } = useInfiniteQuery({
-        queryKey: ['documents', project, pageSize],
-        queryFn: ({ pageParam }) => fetchDocuments(pageParam, pageSize),
+        queryKey: ['documents', project, pageSize, keyword],
+        queryFn: ({ pageParam }) =>
+            fetchDocuments(pageParam, pageSize, keyword || undefined),
         initialPageParam: 1,
         getNextPageParam: (lastPage, allPages) => {
             const totalPages = Math.ceil(lastPage.total / pageSize)
@@ -125,6 +128,21 @@ function DocsList() {
         },
     })
 
+    // Reset desktop page when keyword changes
+    // biome-ignore lint/correctness/useExhaustiveDependencies: reset on keyword change
+    useEffect(() => {
+        setDesktopPage(1)
+    }, [keyword])
+
+    const handleSearch = useCallback(() => {
+        setKeyword(searchInput.trim())
+    }, [searchInput])
+
+    const handleClearSearch = useCallback(() => {
+        setSearchInput('')
+        setKeyword('')
+    }, [])
+
     if (!project) {
         return (
             <>
@@ -148,22 +166,82 @@ function DocsList() {
 
     return (
         <>
-            <div className="flex items-end justify-between mb-8">
-                <div>
-                    <h1 className="font-serif text-[20pt] font-medium leading-tight text-ink">
-                        Documents
-                    </h1>
-                    <p className="font-sans text-[9pt] text-stone mt-1">
-                        {total} document{total !== 1 ? 's' : ''}
-                    </p>
+            {/* Header: title + search + import (responsive) */}
+            <div className="sticky top-0 z-10 bg-parchment pb-4 mb-8 border-b border-cream/50 md:static md:bg-transparent md:border-b-0 md:pb-0">
+                <div className="flex items-end justify-between flex-wrap gap-y-3">
+                    <div>
+                        <h1 className="font-serif text-[20pt] font-medium leading-tight text-ink">
+                            Documents
+                        </h1>
+                        <p className="font-sans text-[9pt] text-stone mt-1">
+                            {keyword
+                                ? `${total} result${total !== 1 ? 's' : ''} for "${keyword}"`
+                                : `${total} document${total !== 1 ? 's' : ''}`}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        className="btn-primary flex-shrink-0"
+                        onClick={openImport}
+                    >
+                        Import
+                    </button>
                 </div>
-                <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={openImport}
-                >
-                    Import
-                </button>
+
+                {/* Search bar */}
+                <div className="mt-4">
+                    <div className="relative max-w-[360px]">
+                        <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            className="absolute left-[10pt] top-1/2 -translate-y-1/2 text-stone/50 pointer-events-none"
+                        >
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <input
+                            type="text"
+                            className="w-full pl-[32pt] pr-[32pt] py-[8pt] font-sans text-[9pt] text-near-black
+                                       bg-ivory border border-cream rounded-[6pt]
+                                       placeholder:text-stone/40
+                                       focus:outline-none focus:border-sand focus:ring-1 focus:ring-sand/30
+                                       transition-colors"
+                            placeholder="Search by keyword..."
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSearch()
+                            }}
+                        />
+                        {searchInput && (
+                            <button
+                                type="button"
+                                className="absolute right-[8pt] top-1/2 -translate-y-1/2 w-5 h-5
+                                           flex items-center justify-center rounded-[3pt]
+                                           text-stone/40 hover:text-ink hover:bg-sand/30
+                                           transition-colors"
+                                onClick={handleClearSearch}
+                                aria-label="Clear search"
+                            >
+                                <svg
+                                    width="12"
+                                    height="12"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.5"
+                                >
+                                    <line x1="18" y1="6" x2="6" y2="18" />
+                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {isLoading ? (
@@ -175,7 +253,9 @@ function DocsList() {
                 </p>
             ) : docs.length === 0 ? (
                 <p className="font-sans text-[9pt] text-olive">
-                    No documents yet. Import Markdown files to get started.
+                    {keyword
+                        ? `No documents matching "${keyword}".`
+                        : 'No documents yet. Import Markdown files to get started.'}
                 </p>
             ) : (
                 <div>

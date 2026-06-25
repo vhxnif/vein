@@ -28,18 +28,40 @@ function HomePage() {
 
     const [input, setInput] = useState(query)
     const contentEndRef = useRef<HTMLDivElement>(null)
+    const topAnchorRef = useRef<HTMLDivElement>(null)
 
-    // Auto-scroll to latest content as streaming progresses
+    // Auto-scroll to bottom during streaming only
     useEffect(() => {
-        if (searching || result) {
+        if (searching) {
             contentEndRef.current?.scrollIntoView({
                 behavior: 'smooth',
                 block: 'end',
             })
         }
-        // timeline is read via closure to trigger re-scroll on new blocks
         void timeline.length
-    }, [timeline, searching, result])
+    }, [timeline, searching])
+
+    // Scroll to top when results arrive — defer so the Layout's
+    // flex recalc (StreamingStatusBar removal on mobile) settles first.
+    useEffect(() => {
+        if (result) {
+            const timer = setTimeout(() => {
+                topAnchorRef.current?.scrollIntoView({ behavior: 'smooth' })
+            }, 0)
+            return () => clearTimeout(timer)
+        }
+    }, [result])
+
+    // On mount: if there's existing search data, scroll to top
+    const didMountRef = useRef(false)
+    useEffect(() => {
+        if (!didMountRef.current) {
+            didMountRef.current = true
+            if (result || error) {
+                topAnchorRef.current?.scrollIntoView()
+            }
+        }
+    }, [result, error])
 
     const handleSearch = () => {
         const q = input.trim()
@@ -51,10 +73,6 @@ function HomePage() {
         if (e.key === 'Enter') handleSearch()
     }
 
-    const runningCount = timeline.filter(
-        (b) => b.type === 'tool' && b.status === 'running'
-    ).length
-
     // For the completed collapsed view: split timeline into
     // "process" (everything except the last text block) and
     // "finalText" (the last text block, if any).
@@ -63,6 +81,10 @@ function HomePage() {
     const processBlocks = lastIsText ? timeline.slice(0, -1) : timeline
 
     const hasProcessContent = processBlocks.length > 0
+
+    const runningCount = timeline.filter(
+        (b) => b.type === 'tool' && b.status === 'running'
+    ).length
 
     // Build shortId → fullDocId lookup from result.docNames
     const docIdMap = useMemo(() => {
@@ -83,6 +105,9 @@ function HomePage() {
 
     return (
         <div className="max-w-[780px] mx-auto px-8 py-16">
+            {/* Scroll anchor for top-of-page navigation */}
+            <div ref={topAnchorRef} />
+
             {/* Project indicator */}
             {project ? (
                 <div className="text-center mb-12">
@@ -121,18 +146,6 @@ function HomePage() {
                 <button
                     type="button"
                     disabled={searching}
-                    onClick={() => setMode('default')}
-                    className={`px-[12pt] py-[4pt] rounded-full font-sans text-[8pt] font-medium transition-colors ${
-                        mode === 'default'
-                            ? 'bg-ink text-ivory border border-ink'
-                            : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
-                    }`}
-                >
-                    Review
-                </button>
-                <button
-                    type="button"
-                    disabled={searching}
                     onClick={() => setMode('quick')}
                     className={`px-[12pt] py-[4pt] rounded-full font-sans text-[8pt] font-medium transition-colors ${
                         mode === 'quick'
@@ -142,11 +155,23 @@ function HomePage() {
                 >
                     Quick
                 </button>
+                <button
+                    type="button"
+                    disabled={searching}
+                    onClick={() => setMode('default')}
+                    className={`px-[12pt] py-[4pt] rounded-full font-sans text-[8pt] font-medium transition-colors ${
+                        mode === 'default'
+                            ? 'bg-ink text-ivory border border-ink'
+                            : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
+                    }`}
+                >
+                    Review
+                </button>
             </div>
 
-            {/* Searching state with no content yet */}
+            {/* Desktop: initial searching state (mobile handled by Layout's StreamingStatusBar) */}
             {searching && timeline.length === 0 && (
-                <div className="mb-8 flex items-center gap-3">
+                <div className="hidden md:flex items-center gap-3 mb-8">
                     <RunCat size={24} />
                     <span className="font-sans text-[9pt] text-olive">
                         Searching...
@@ -157,18 +182,17 @@ function HomePage() {
                 </div>
             )}
 
-            {/* ── Streaming: timeline + status bar ── */}
+            {/* ── Streaming: timeline ── */}
             {searching && timeline.length > 0 && (
                 <div className="mb-8">
-                    {/* Timeline blocks */}
                     <div className="space-y-1">
                         {timeline.map((block) => (
                             <TimelineBlockView key={block.id} block={block} />
                         ))}
                     </div>
 
-                    {/* Status bar fixed at bottom of content */}
-                    <div className="flex items-center gap-2 mt-3">
+                    {/* Desktop status bar — inline, scrolls with content */}
+                    <div className="hidden md:flex items-center gap-2 mt-3">
                         <RunCat size={16} />
                         <span className="font-sans text-[8pt] text-olive">
                             {runningCount > 0

@@ -130,7 +130,19 @@ body::before {
         padding-left: 16px;
         padding-right: 16px;
         padding-top: 24px;
-        padding-bottom: 80px;
+        padding-bottom: 24px;
+    }
+
+    /* Prevent iOS auto-zoom when focusing text inputs (< 16px triggers zoom) */
+    input[type="text"],
+    input[type="search"],
+    input:not([type]) {
+        font-size: 16px;
+    }
+
+    /* Scroll padding to keep auto-scrolled content above the bottom nav */
+    main {
+        scroll-padding-bottom: 24px;
     }
 }
 
