@@ -3,11 +3,13 @@ import {
     type ReactNode,
     useCallback,
     useContext,
+    useEffect,
     useRef,
     useState,
 } from 'react'
 import type { SearchResult } from './api.ts'
 import { searchQuery } from './api.ts'
+import { useProject } from './project.tsx'
 
 // ── Timeline types ──────────────────────────────────────────
 
@@ -22,6 +24,21 @@ export type TimelineBlock =
           summary?: string
       }
     | { type: 'text'; id: string; text: string }
+
+// ── Helpers ──────────────────────────────────────────
+
+/** Generate a UUID v4 that works in both secure and insecure contexts. */
+function randomUUID(): string {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID()
+    }
+    // Fallback for insecure contexts (e.g. LAN HTTP access on mobile)
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0
+        const v = c === 'x' ? r : (r & 0x3) | 0x8
+        return v.toString(16)
+    })
+}
 
 // ── State ───────────────────────────────────────────────────
 
@@ -85,6 +102,16 @@ export function SearchProvider({ children }: { children: ReactNode }) {
         setState(initialState)
     }, [])
 
+    // Clear search state when project changes
+    const { project } = useProject()
+    const prevProjectRef = useRef<string | null>(project)
+    useEffect(() => {
+        if (prevProjectRef.current !== project) {
+            prevProjectRef.current = project
+            clearSearch()
+        }
+    }, [project, clearSearch])
+
     const runSearch = useCallback(
         async (q: string, mode?: 'default' | 'quick') => {
             if (abortRef.current) {
@@ -136,7 +163,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
                                 } else {
                                     timeline.push({
                                         type: 'thinking',
-                                        id: crypto.randomUUID(),
+                                        id: randomUUID(),
                                         text: delta,
                                     })
                                 }
@@ -156,7 +183,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
                                 } else {
                                     timeline.push({
                                         type: 'text',
-                                        id: crypto.randomUUID(),
+                                        id: randomUUID(),
                                         text: delta,
                                     })
                                 }

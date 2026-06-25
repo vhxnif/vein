@@ -139,6 +139,11 @@ body::before {
     input:not([type]) {
         font-size: 16px;
     }
+
+    /* Scroll padding to keep auto-scrolled content above the bottom nav */
+    main {
+        scroll-padding-bottom: 24px;
+    }
 }
 
 /* Drop cap for opening paragraphs (Kami print aesthetic) */

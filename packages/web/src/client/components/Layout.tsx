@@ -72,7 +72,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </aside>
 
             {/* Main content — scrollable on mobile, normal flow on desktop */}
-            <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden md:overflow-visible md:pl-[48px]">
+            <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pb-6 md:pb-0 md:overflow-visible md:pl-[48px]">
                 {children}
             </main>
 

@@ -28,18 +28,36 @@ function HomePage() {
 
     const [input, setInput] = useState(query)
     const contentEndRef = useRef<HTMLDivElement>(null)
+    const topAnchorRef = useRef<HTMLDivElement>(null)
 
-    // Auto-scroll to latest content as streaming progresses
+    // Auto-scroll to bottom during streaming only
     useEffect(() => {
-        if (searching || result) {
+        if (searching) {
             contentEndRef.current?.scrollIntoView({
                 behavior: 'smooth',
                 block: 'end',
             })
         }
-        // timeline is read via closure to trigger re-scroll on new blocks
         void timeline.length
-    }, [timeline, searching, result])
+    }, [timeline, searching])
+
+    // Scroll to top when results arrive
+    useEffect(() => {
+        if (result) {
+            topAnchorRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }
+    }, [result])
+
+    // On mount: if there's existing search data, scroll to top
+    const didMountRef = useRef(false)
+    useEffect(() => {
+        if (!didMountRef.current) {
+            didMountRef.current = true
+            if (result || error) {
+                topAnchorRef.current?.scrollIntoView()
+            }
+        }
+    }, [result, error])
 
     const handleSearch = () => {
         const q = input.trim()
@@ -83,6 +101,9 @@ function HomePage() {
 
     return (
         <div className="max-w-[780px] mx-auto px-8 py-16">
+            {/* Scroll anchor for top-of-page navigation */}
+            <div ref={topAnchorRef} />
+
             {/* Project indicator */}
             {project ? (
                 <div className="text-center mb-12">
