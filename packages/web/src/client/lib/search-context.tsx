@@ -62,7 +62,7 @@ interface SearchContextType extends SearchState {
 
 const initialState: SearchState = {
     query: '',
-    mode: 'default',
+    mode: 'quick',
     searching: false,
     result: null,
     error: null,
