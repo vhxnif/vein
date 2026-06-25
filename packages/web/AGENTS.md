@@ -1,11 +1,5 @@
 # @vein/web
 
-Thin web layer — Hono REST API + React SPA. All business logic delegated to `@vein/core`.
-
-## Build And Test
-
-`bun run dev:web`, verify search + docs + history pages.
-
 ## Architecture Boundaries
 
 Routes are thin wrappers: call `@vein/core`, return JSON. Client uses TanStack Router + Query with typed fetch client in `lib/api.ts`.
@@ -72,12 +66,3 @@ All visual design governed by `DESIGN.md` (repo root). Read it before writing an
 
 - **SelectField**: custom dropdown with keyboard nav (↑↓/Enter/Escape), click-outside close. Never native `<select>`.
 - **Tool Call Blocks**: running and done share same `bg-ivory`. Only border changes: `border-cream` → `border-ink/30`.
-
-## Compact Instructions
-
-Preserve:
-
-1. NEVER/ALWAYS rules — keep intact (especially no native `<select>`, no ring on form controls)
-2. Keyboard accessibility split (interactive chrome vs form controls)
-3. CI hex color enforcement
-4. Component rules (SelectField, Tool Call Blocks)

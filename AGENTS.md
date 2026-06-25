@@ -42,12 +42,3 @@ Web UI governed by `DESIGN.md` (tokens, components) and `packages/web/AGENTS.md`
 - `logger.child({ module: 'xxx' })` for module-scoped logging
 - `BEGIN/COMMIT` transactions for multi-table mutations (docs + docs_fts, insertTree + deleteTree)
 
-## Compact Instructions
-
-Preserve when compressing:
-
-1. Architecture boundaries (monorepo table, import rules) — do not summarize away
-2. Modified files and their package ownership
-3. Current verification status (pass/fail for check + lint)
-4. Open risks, TODOs, rollback notes
-5. NEVER/ALWAYS rules — keep the list intact

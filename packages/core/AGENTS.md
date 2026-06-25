@@ -1,14 +1,8 @@
 # @vein/core
 
-All business logic, single export entry. CLI and Web import only from `@vein/core`.
-
-## Build And Test
-
-`bun run check && bun run lint`
-
 ## Architecture Boundaries
 
-SQL lives in `store/` only. Never export sub-paths from `@vein/core` (only `"."` in exports).
+SQL lives in `store/` only.
 
 ## Coding Conventions
 
@@ -78,7 +72,6 @@ Backtick template literals with code examples containing backticks (`` `ref reac
 ### NEVER
 
 - Export sub-paths from `@vein/core` (only `"."` in exports)
-- Use `INSERT OR REPLACE` on FTS5 — always `DELETE` then `INSERT`
 - Put SQL outside `store/`
 
 ### ALWAYS
@@ -90,14 +83,3 @@ Backtick template literals with code examples containing backticks (`` `ref reac
 
 - Output: `~/.config/vein/logs/vein-YYYY-MM-DD.log` (JSON per line, file only)
 - `sessionId` = `crypto.randomUUID().slice(0, 8)` ties all logs for one session
-- Never log full LLM prompt/messages/response — log summaries only
-
-## Compact Instructions
-
-Preserve:
-
-1. 6-location checklist for new model config fields
-2. NEVER/ALWAYS rules — keep intact
-3. Agent traps: memoization, try/catch, nodeId extraction, context pruning
-4. DeepSeek behavior notes (structured templates, reasoning suppression)
-5. Logging constraints (file-only, no full LLM content)
