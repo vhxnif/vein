@@ -414,7 +414,7 @@ function ExpandedEntry({ id }: { id: string }) {
             <div className="mt-3">
                 <button
                     type="button"
-                    className="btn-ghost inline-flex items-center gap-1.5"
+                    className="inline-flex items-center gap-1.5 py-[6pt] pr-[8pt] bg-transparent text-stone hover:text-ink rounded-[8pt] font-sans text-[9pt] font-medium cursor-pointer transition-colors"
                     onClick={handleExport}
                     disabled={exporting}
                 >

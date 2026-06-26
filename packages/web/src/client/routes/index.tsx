@@ -304,11 +304,11 @@ function HomePage() {
                         </div>
                     )}
 
-                    <div className="mt-6 flex items-center gap-4 font-sans text-[8pt] text-stone">
+                    <div className="mt-6 flex items-center gap-3 font-sans text-[8pt] text-stone">
                         <span>{(result.elapsedMs / 1000).toFixed(1)}s</span>
                         <button
                             type="button"
-                            className="btn-ghost inline-flex items-center gap-1.5"
+                            className="inline-flex items-center gap-1.5 py-[6pt] bg-transparent text-stone hover:text-ink rounded-[8pt] font-sans text-[9pt] font-medium cursor-pointer transition-colors"
                             onClick={handleExport}
                             disabled={exporting}
                         >
