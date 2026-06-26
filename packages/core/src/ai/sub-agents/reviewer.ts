@@ -12,6 +12,7 @@ import {
     Type,
 } from '../base.ts'
 import type { ToolCtx, ToolMeta } from '../types.ts'
+import { formatSize } from './utils.ts'
 
 const prompt = `你是一个文档检索结果审查员。你的任务是审查 Librarian 返回的检索结果，判断其是否满足用户的需求。
 
@@ -96,8 +97,8 @@ export const GET_REVIEW_SOURCE_META: ToolMeta = {
         const nid = normalizeNodeId(String(a.nodeId ?? ''))
         return `Verifying: ${a.docId ?? '?'}/${nid}...`
     },
-    resultLabel: (text) => `${text.length} chars`,
-    resultSummary: (raw) => `${raw.length} chars`,
+    resultLabel: (text) => `${formatSize(text.length)}`,
+    resultSummary: (raw) => `${formatSize(raw.length)}`,
     logDetail: (a) => {
         const nid = normalizeNodeId(String(a.nodeId ?? ''))
         return `${a.docId ?? '?'}/${nid}`

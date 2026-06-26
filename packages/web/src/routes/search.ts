@@ -81,7 +81,18 @@ searchRouter.post('/', async (c) => {
                         }
                     },
                     onTextDelta: (delta) => {
-                        if (!aborted) send({ type: 'text_delta', delta })
+                        if (!aborted) {
+                            send({ type: 'text_delta', delta })
+                            const last = timeline.at(-1)
+                            if (last && last.type === 'text') {
+                                last.text += delta
+                            } else {
+                                timeline.push({
+                                    type: 'text',
+                                    text: delta,
+                                })
+                            }
+                        }
                     },
                     onToolCallStart: (toolCallId, toolName, label) => {
                         if (!aborted) {

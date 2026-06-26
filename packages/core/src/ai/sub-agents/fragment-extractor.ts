@@ -8,6 +8,7 @@ import type { ToolCtx, ToolMeta } from '../types.ts'
 import {
     ellipsis,
     extractResultText,
+    formatSize,
     makeGetDocNodeDetails,
     makeGetDocStructure,
     Semaphore,
@@ -21,14 +22,12 @@ export const GET_DOCUMENT_FRAGMENTS_META: ToolMeta = {
     stepLabel: (a) =>
         `Extracting fragments from ${String(a.docId ?? '').slice(0, 8)}...`,
     resultLabel: (text) => {
-        const len = text.length
-        const kb = (len / 1024).toFixed(1)
-        return `Extracted · ${kb}KB`
+        return `Extracted · ${formatSize(text.length)}`
     },
     resultSummary: (raw) => {
         // Count how many fragments (### sections) were returned
         const count = (raw.match(/^###\s+/gm) || []).length
-        return `${count} fragment${count !== 1 ? 's' : ''} · ${raw.length} chars`
+        return `${count} fragment${count !== 1 ? 's' : ''} · ${formatSize(raw.length)}`
     },
     logDetail: (a) => `doc=${String(a.docId ?? '').slice(0, 8)}`,
 }
@@ -167,18 +166,18 @@ async function extractFragments(
                     ?.replace(/^\s*\d+\s+/, '')
                     .trim()
                 if (firstTitle && firstTitle.length > 0) {
-                    return `Loaded "${ellipsis(firstTitle, 40)}" · ${text.length} chars`
+                    return `Loaded "${ellipsis(firstTitle, 40)}" · ${formatSize(text.length)}`
                 }
-                return `Loaded structure · ${text.length} chars`
+                return `Loaded structure · ${formatSize(text.length)}`
             },
-            resultSummary: (raw) => `${raw.length} chars`,
+            resultSummary: (raw) => `${formatSize(raw.length)}`,
             logDetail: () => `doc=${shortDocId}`,
         },
         getDocNodeDetails: {
             stepLabel: (a) =>
                 `[${shortDocId}] Reading section ${a.nodeId ?? '?'}...`,
-            resultLabel: (text) => `${text.length} chars`,
-            resultSummary: (raw) => `${raw.length} chars`,
+            resultLabel: (text) => `${formatSize(text.length)}`,
+            resultSummary: (raw) => `${formatSize(raw.length)}`,
             logDetail: (a) => `doc=${shortDocId}/${a.nodeId ?? '?'}`,
         },
     }

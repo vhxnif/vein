@@ -32,6 +32,12 @@ export function ellipsis(s: string, max: number): string {
     return s.length > max ? `${s.slice(0, max)}...` : s
 }
 
+/** Format char count as human-readable: "500 chars" or "2.5k chars". */
+export function formatSize(chars: number): string {
+    if (chars >= 1000) return `${(chars / 1000).toFixed(1)}k chars`
+    return `${chars} chars`
+}
+
 export function renderDocStructure(
     nodes: TreeNode<BaseDocNode>[],
     indent = 0
