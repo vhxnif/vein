@@ -1,10 +1,16 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
-import { getModel, Type } from '@earendil-works/pi-ai'
+
 import { logger } from '../../config/index.ts'
 import type { ModelProvider } from '../../config/type.ts'
 import { getNodeDetails } from '../../store/index.ts'
 import type { BaseDocNode } from '../../tree/type.ts'
-import { call, getModelProvider, type ToolDef } from '../base.ts'
+import {
+    call,
+    getModel,
+    getModelProvider,
+    type ToolDef,
+    Type,
+} from '../base.ts'
 import type { ToolCtx, ToolMeta } from '../types.ts'
 
 const prompt = `你是一个文档检索结果审查员。你的任务是审查 Librarian 返回的检索结果，判断其是否满足用户的需求。

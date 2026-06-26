@@ -1,5 +1,5 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
-import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core'
+import type { AgentTool, AgentToolResult } from './base.ts'
 
 export type ToolCtx = {
     cached: (key: string, fn: () => Promise<string>) => Promise<string>

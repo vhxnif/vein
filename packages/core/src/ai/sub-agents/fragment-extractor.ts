@@ -1,10 +1,9 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
-import { Agent } from '@earendil-works/pi-agent-core'
-import { getModel, Type } from '@earendil-works/pi-ai'
+
 import { logger } from '../../config/index.ts'
 import type { ModelProvider } from '../../config/type.ts'
 import { getErrorMessage } from '../../utils/common.ts'
-import { getModelProvider } from '../base.ts'
+import { Agent, getModel, getModelProvider, Type } from '../base.ts'
 import type { ToolCtx, ToolMeta } from '../types.ts'
 import {
     ellipsis,

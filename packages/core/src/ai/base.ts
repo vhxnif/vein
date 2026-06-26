@@ -1,14 +1,45 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
+// ── Pi SDK imports (centralized barrel — update here on breaking changes) ──
+// complete: still in compat (not yet deprecated)
+
 import {
-    complete,
-    getModel,
-    getModels,
-    getProviders,
+    Agent,
+    type AgentMessage,
+    type AgentTool,
+    type AgentToolResult,
+} from '@earendil-works/pi-agent-core'
+import {
+    type KnownProvider,
     type Message,
     type Tool,
+    Type,
 } from '@earendil-works/pi-ai'
+import { complete } from '@earendil-works/pi-ai/compat'
+// getBuiltin*: non-deprecated replacements for getModel/getModels/getProviders
+import {
+    getBuiltinModel,
+    getBuiltinModels,
+    getBuiltinProviders,
+} from '@earendil-works/pi-ai/providers/all'
+
 import { logger } from '../config/index.ts'
 import type { ModelProvider } from '../config/type.ts'
+
+// ── Aliases preserving the old API surface for internal + consumer use ──
+const getModel = getBuiltinModel
+const getModels = getBuiltinModels
+const getProviders = getBuiltinProviders
+
+export type {
+    AgentMessage,
+    AgentTool,
+    AgentToolResult,
+    KnownProvider,
+    Message,
+    Tool,
+}
+// ── Re-exports for consumers — import from './base.ts' instead of @earendil-works/* ──
+export { Agent, complete, getModel, getModels, getProviders, Type }
 
 export type ToolDef = Tool & {
     run: (args: any) => Promise<string>

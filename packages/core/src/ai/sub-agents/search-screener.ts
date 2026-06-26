@@ -1,6 +1,5 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
-import { Agent } from '@earendil-works/pi-agent-core'
-import { getModel, Type } from '@earendil-works/pi-ai'
+
 import { logger } from '../../config/index.ts'
 import type { ModelProvider } from '../../config/type.ts'
 import {
@@ -8,7 +7,7 @@ import {
     getNodeDetails,
     searchDocsByKeyword,
 } from '../../store/index.ts'
-import { getModelProvider } from '../base.ts'
+import { Agent, getModel, getModelProvider, Type } from '../base.ts'
 import { SEARCH_DOCS_BY_KEYWORD_META } from '../tools.ts'
 import type { ToolCtx, ToolMeta } from '../types.ts'
 import { ellipsis, extractResultText } from './utils.ts'

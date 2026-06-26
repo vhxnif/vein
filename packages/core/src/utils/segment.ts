@@ -1,6 +1,5 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: pi-ai getModel type is strict */
-import { complete, getModel } from '@earendil-works/pi-ai'
-import { call, getModelKey } from '../ai/base.ts'
+import { call, complete, getModel, getModelKey } from '../ai/base.ts'
 import { logger } from '../config/index.ts'
 import type { ModelProvider } from '../config/type.ts'
 import * as store from '../store/index.ts'

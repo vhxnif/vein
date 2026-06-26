@@ -1,4 +1,4 @@
-import type { KnownProvider } from '@earendil-works/pi-ai'
+import type { KnownProvider } from '../ai/base.ts'
 
 export type ModelProvider = {
     provider: KnownProvider
