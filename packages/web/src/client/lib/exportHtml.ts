@@ -1,9 +1,9 @@
 import { createElement, type ReactNode, useMemo } from 'react'
-import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
+import { createRoot } from 'react-dom/client'
 import { annotateNodeRefs, Markdown } from '../components/Markdown.tsx'
-import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
 import type { SharedTimelineBlock } from '../components/TimelineBlockView.tsx'
+import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
 import type { NodeInfo } from './api.ts'
 import { fetchNode } from './api.ts'
 
@@ -34,7 +34,9 @@ export interface ExportOptions {
  * (Markdown, TimelineBlockView) into a hidden DOM node, capturing the HTML + all
  * page CSS, and embedding both. This guarantees visual fidelity with the web app.
  */
-export async function exportResultAsHtml(options: ExportOptions): Promise<void> {
+export async function exportResultAsHtml(
+    options: ExportOptions
+): Promise<void> {
     const {
         query,
         content,
@@ -383,9 +385,7 @@ function extractNodeRefs(
 
 // ── Node data fetching ─────────────────────────────────────────
 
-async function fetchNodeData(
-    refs: NodeRef[]
-): Promise<
+async function fetchNodeData(refs: NodeRef[]): Promise<
     Map<
         string,
         NodeInfo & {
@@ -416,7 +416,11 @@ async function fetchNodeData(
     )
 
     // 2. Collect texts that need rendering (body + title)
-    const toRender: { key: string; text: string; field: 'textHtml' | 'titleHtml' }[] = []
+    const toRender: {
+        key: string
+        text: string
+        field: 'textHtml' | 'titleHtml'
+    }[] = []
     for (const result of apiResults) {
         if (result.status === 'fulfilled') {
             const { key, ref, data } = result.value
@@ -649,10 +653,7 @@ ${capturedHtml}
  */
 function stripMarkdownWrapper(html: string): string {
     // Remove <div class="markdown-body">...</div> wrapper
-    let inner = html.replace(
-        /^<div class="markdown-body"[^>]*>/,
-        ''
-    )
+    let inner = html.replace(/^<div class="markdown-body"[^>]*>/, '')
     inner = inner.replace(/<\/div>$/, '')
 
     // If it's a single <p>, unwrap it (keep inline content like <code>, <em>, etc.)
@@ -698,4 +699,3 @@ function escapeHtml(s: string): string {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;')
 }
-

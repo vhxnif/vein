@@ -110,7 +110,13 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
                         <span className="font-serif text-[10pt] font-medium text-near-black leading-snug">
                             <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
-                                allowedElements={['code', 'em', 'strong', 'a', 'del']}
+                                allowedElements={[
+                                    'code',
+                                    'em',
+                                    'strong',
+                                    'a',
+                                    'del',
+                                ]}
                                 unwrapDisallowed
                                 components={{
                                     code: ({ children }) => (

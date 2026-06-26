@@ -8,6 +8,7 @@ import type { ToolCtx, ToolMeta } from '../types.ts'
 import {
     ellipsis,
     extractResultText,
+    formatSize,
     makeGetDocNodeDetails,
     makeGetDocStructure,
     parseAnalyzeResult,
@@ -27,9 +28,9 @@ export const GET_DOC_STRUCTURE_META: ToolMeta = {
             ?.replace(/^\s*\d+\s+/, '')
             .trim()
         if (firstTitle && firstTitle.length > 0) {
-            return `Loaded "${ellipsis(firstTitle, 40)}" · ${text.length} chars`
+            return `Loaded "${ellipsis(firstTitle, 40)}" · ${formatSize(text.length)}`
         }
-        return `Loaded structure · ${text.length} chars`
+        return `Loaded structure · ${formatSize(text.length)}`
     },
     resultSummary: (raw) => {
         const lines = raw.split('\n')
@@ -38,17 +39,17 @@ export const GET_DOC_STRUCTURE_META: ToolMeta = {
             ?.replace(/^\s*\d+\s+/, '')
             .trim()
         if (docTitle) {
-            return `"${ellipsis(docTitle, 40)}" · ${raw.length} chars`
+            return `"${ellipsis(docTitle, 40)}" · ${formatSize(raw.length)}`
         }
-        return `${raw.length} chars`
+        return `${formatSize(raw.length)}`
     },
     logDetail: (a) => `doc=${String(a.docId ?? '').slice(0, 8)}`,
 }
 
 export const GET_DOC_NODE_DETAILS_META: ToolMeta = {
     stepLabel: (a) => `Reading section ${a.nodeId ?? '?'}...`,
-    resultLabel: (text) => `${text.length} chars`,
-    resultSummary: (raw) => `${raw.length} chars`,
+    resultLabel: (text) => `${formatSize(text.length)}`,
+    resultSummary: (raw) => `${formatSize(raw.length)}`,
     logDetail: (a) =>
         `doc=${String(a.docId ?? '').slice(0, 8)}/${a.nodeId ?? '?'}`,
 }
@@ -58,8 +59,7 @@ export const ANALYZE_DOCUMENT_META: ToolMeta = {
         `Analyzing document ${String(a.docId ?? '').slice(0, 8)}...`,
     resultLabel: (text) => {
         const { relevance } = parseAnalyzeResult(text)
-        const kb = (text.length / 1024).toFixed(1)
-        return `Analysis: ${relevance} · ${kb}KB`
+        return `Analysis: ${relevance} · ${formatSize(text.length)}`
     },
     resultSummary: (raw) => {
         const { relevance, summary } = parseAnalyzeResult(raw)
