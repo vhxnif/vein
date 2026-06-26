@@ -5,6 +5,7 @@ import { annotateNodeRefs, Markdown } from '../components/Markdown.tsx'
 import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
 import type { HistoryEntry } from '../lib/api.ts'
 import { fetchHistory, fetchHistoryEntry } from '../lib/api.ts'
+import { exportResultAsHtml } from '../lib/exportHtml.ts'
 import { useProject } from '../lib/project.tsx'
 
 export const Route = createFileRoute('/history')({
@@ -289,6 +290,9 @@ function HistoryRow({
 }
 
 function ExpandedEntry({ id }: { id: string }) {
+    const { project } = useProject()
+    const [exporting, setExporting] = useState(false)
+
     const { data: entry, isLoading } = useQuery({
         queryKey: ['historyEntry', id],
         queryFn: () => fetchHistoryEntry(id),
@@ -318,6 +322,35 @@ function ExpandedEntry({ id }: { id: string }) {
         return annotateNodeRefs(raw, docIdMap)
     }, [entry?.answer, docIdMap])
 
+    const handleExport = useCallback(async () => {
+        if (!entry || exporting) return
+        setExporting(true)
+        try {
+            const reviewObj =
+                entry.verdict && entry.score !== undefined
+                    ? {
+                          verdict: entry.verdict,
+                          score: entry.score,
+                          reason: '',
+                      }
+                    : undefined
+            await exportResultAsHtml({
+                query: entry.query,
+                content: entry.answer,
+                docIdMap,
+                review: reviewObj,
+                timeline: (entry.timeline as
+                    | import('../components/TimelineBlockView.tsx').SharedTimelineBlock[]
+                    | undefined),
+                elapsedMs: entry.elapsedMs,
+                mode: entry.mode,
+                project,
+            })
+        } finally {
+            setExporting(false)
+        }
+    }, [entry, exporting, docIdMap, project])
+
     if (isLoading) {
         return (
             <div className="px-3 pb-4 font-sans text-[8.5pt] text-olive">
@@ -328,21 +361,28 @@ function ExpandedEntry({ id }: { id: string }) {
 
     if (!entry) return null
 
-    const hasTimeline = entry.timeline && entry.timeline.length > 0
-    const toolBlocks = entry.timeline?.filter((b) => b.type === 'tool') ?? []
-    const hasThinking = entry.timeline?.some((b) => b.type === 'thinking')
+    // Split timeline: processBlocks = all except last text block (matches Ask page behavior)
+    const lastTimelineBlock = entry.timeline?.at(-1)
+    const lastIsText = lastTimelineBlock?.type === 'text'
+    const processBlocks = lastIsText
+        ? (entry.timeline ?? []).slice(0, -1)
+        : (entry.timeline ?? [])
+
+    const hasProcessContent = processBlocks.length > 0
+    const toolBlocks = processBlocks.filter((b) => b.type === 'tool')
+    const hasThinking = processBlocks.some((b) => b.type === 'thinking')
 
     return (
         <div className="px-3 pb-4">
-            {/* Reasoning process (timeline) */}
-            {hasTimeline && (
+            {/* Reasoning process (processBlocks: thinking + tool + intermediate text) */}
+            {hasProcessContent && (
                 <details className="mt-3 mb-2">
                     <summary className="font-sans text-[7.5pt] font-semibold text-stone uppercase tracking-wide cursor-pointer select-none hover:text-ink transition-colors">
                         Reasoning process ({toolBlocks.length} tools
                         {hasThinking && ', thinking'})
                     </summary>
                     <div className="mt-3 pl-4 border-l-2 border-cream space-y-1">
-                        {entry.timeline!.map((block, i) => (
+                        {processBlocks.map((block, i) => (
                             <TimelineBlockView
                                 // biome-ignore lint/suspicious/noArrayIndexKey: static content, order never changes
                                 key={i}
@@ -369,6 +409,23 @@ function ExpandedEntry({ id }: { id: string }) {
                     </p>
                 </div>
             )}
+
+            {/* Export */}
+            <div className="mt-3">
+                <button
+                    type="button"
+                    className="btn-ghost inline-flex items-center gap-1.5"
+                    onClick={handleExport}
+                    disabled={exporting}
+                >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                        <polyline points="7,10 12,15 17,10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    {exporting ? 'Exporting…' : 'Export'}
+                </button>
+            </div>
 
             {/* Trace (fallback when no timeline, or as additional detail) */}
             {entry.trace && entry.trace.length > 0 && (

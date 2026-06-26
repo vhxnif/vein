@@ -48,6 +48,9 @@
     "packages/web": {
       "name": "@vein/web",
       "version": "0.1.0",
+      "bin": {
+        "vein-web": "./dist/server.js",
+      },
       "dependencies": {
         "@tanstack/react-query": "^5.71.10",
         "@tanstack/react-router": "^1.115.0",

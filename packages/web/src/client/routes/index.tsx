@@ -1,8 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { annotateNodeRefs, Markdown } from '../components/Markdown.tsx'
 import { RunCat } from '../components/RunCat.tsx'
 import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
+import { exportResultAsHtml } from '../lib/exportHtml.ts'
 import { useProject } from '../lib/project.tsx'
 import { useSearch } from '../lib/search-context.tsx'
 
@@ -27,6 +28,7 @@ function HomePage() {
     } = useSearch()
 
     const [input, setInput] = useState(query)
+    const [exporting, setExporting] = useState(false)
     const contentEndRef = useRef<HTMLDivElement>(null)
     const topAnchorRef = useRef<HTMLDivElement>(null)
 
@@ -96,6 +98,26 @@ function HomePage() {
         }
         return m
     }, [result?.docNames])
+
+    const handleExport = useCallback(async () => {
+        if (!result || exporting) return
+        setExporting(true)
+        try {
+            await exportResultAsHtml({
+                query,
+                content: result.content,
+                docIdMap,
+                review: result.review,
+                reviewElapsedMs: result.reviewElapsedMs,
+                timeline: processBlocks,
+                elapsedMs: result.elapsedMs,
+                mode,
+                project,
+            })
+        } finally {
+            setExporting(false)
+        }
+    }, [result, exporting, query, docIdMap, processBlocks, mode, project])
 
     // Annotate node references in content for hover tooltips
     const annotatedContent = useMemo(() => {
@@ -284,6 +306,19 @@ function HomePage() {
 
                     <div className="mt-6 flex items-center gap-4 font-sans text-[8pt] text-stone">
                         <span>{(result.elapsedMs / 1000).toFixed(1)}s</span>
+                        <button
+                            type="button"
+                            className="btn-ghost inline-flex items-center gap-1.5"
+                            onClick={handleExport}
+                            disabled={exporting}
+                        >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                                <polyline points="7,10 12,15 17,10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            {exporting ? 'Exporting…' : 'Export'}
+                        </button>
                     </div>
                 </div>
             )}

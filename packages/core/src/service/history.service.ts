@@ -7,6 +7,7 @@ const log = logger.child({ module: 'history' })
 
 export type HistoryTimelineBlock =
     | { type: 'thinking'; text: string }
+    | { type: 'text'; text: string }
     | { type: 'tool'; name: string; label: string; summary?: string }
 
 export type HistoryEntry = {

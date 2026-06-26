@@ -263,6 +263,8 @@ function NodeRefSpan({
         <span
             ref={containerRef}
             className="inline relative"
+            data-doc-id={fullDocId}
+            data-node-id={nodeId}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
         >

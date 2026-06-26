@@ -56,7 +56,7 @@ export interface DocInfo {
 }
 
 export interface HistoryTimelineBlock {
-    type: 'thinking' | 'tool'
+    type: 'thinking' | 'tool' | 'text'
     text?: string
     name?: string
     label?: string
