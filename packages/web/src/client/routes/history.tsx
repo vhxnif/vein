@@ -264,15 +264,11 @@ function HistoryRow({
                             {entry.verdict} {entry.score}/5
                         </span>
                     )}
-                    <span
-                        className={`px-2 py-0.5 rounded-full font-sans text-[7.5pt] font-medium ${
-                            entry.mode === 'quick'
-                                ? 'border border-ink/30 bg-transparent text-stone'
-                                : 'bg-ink/10 text-ink'
-                        }`}
-                    >
-                        {entry.mode === 'quick' ? 'Quick' : 'Review'}
-                    </span>
+                    {entry.mode === 'review' && (
+                        <span className="px-2 py-0.5 rounded-full font-sans text-[7.5pt] font-medium bg-ink/10 text-ink">
+                            Review
+                        </span>
+                    )}
                     {showDate && (
                         <span className="text-stone">
                             {date} {time}

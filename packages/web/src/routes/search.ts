@@ -28,7 +28,6 @@ searchRouter.post('/', async (c) => {
     const body = await c.req.json()
     const query = body.q as string
     if (!query) return c.json({ error: 'Missing query' }, 400)
-    const mode = (body.mode as string) ?? 'default'
 
     const startedAt = performance.now()
 
@@ -138,7 +137,7 @@ searchRouter.post('/', async (c) => {
                         query,
                         result,
                         elapsedMs,
-                        mode,
+                        result.review ? 'review' : 'quick',
                         timeline
                     ).catch(() => {
                         /* ignore */

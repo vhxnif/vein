@@ -317,17 +317,14 @@ function ExportPreview({
                     'mt-6 flex items-center gap-4 font-sans text-[8pt] text-stone',
             },
             createElement('span', null, `${(elapsedMs / 1000).toFixed(1)}s`),
-            createElement(
-                'span',
-                {
-                    className: `inline-block px-[12pt] py-[2pt] rounded-full font-sans text-[7.5pt] font-medium ${
-                        mode === 'quick'
-                            ? 'border border-ink/30 bg-transparent text-stone'
-                            : 'bg-ink/10 text-ink'
-                    }`,
-                },
-                mode === 'quick' ? 'Quick' : 'Review'
-            )
+            mode === 'review' &&
+                createElement(
+                    'span',
+                    {
+                        className: `inline-block px-[12pt] py-[2pt] rounded-full font-sans text-[7.5pt] font-medium bg-ink/10 text-ink`,
+                    },
+                    'Review'
+                )
         )
     )
 }

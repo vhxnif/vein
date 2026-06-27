@@ -110,13 +110,13 @@ function HomePage() {
                 reviewElapsedMs: result.reviewElapsedMs,
                 timeline: processBlocks,
                 elapsedMs: result.elapsedMs,
-                mode,
+                mode: result.review ? 'review' : 'quick',
                 project,
             })
         } finally {
             setExporting(false)
         }
-    }, [result, exporting, query, docIdMap, processBlocks, mode, project])
+    }, [result, exporting, query, docIdMap, processBlocks, project])
 
     // Annotate node references in content for hover tooltips
     const annotatedContent = useMemo(() => {

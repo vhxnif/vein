@@ -158,7 +158,7 @@ export function register(program: Command) {
                         query,
                         result,
                         elapsedMs,
-                        'default',
+                        result.review ? 'review' : 'quick',
                         timeline
                     ).catch((err) =>
                         log.warn({
