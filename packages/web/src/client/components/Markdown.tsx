@@ -6,6 +6,29 @@ import remarkGfm from 'remark-gfm'
 import { NodeTooltip } from './NodeTooltip.tsx'
 
 /**
+ * Resolve a docId (which may be 8, 10, or 32+ hex chars) to a full
+ * document hash via docIdMap. Tries exact match first, then first-8-chars
+ * fallback (handles LLM output like "f57894882e" where the model truncated
+ * the hash to an arbitrary length).
+ *
+ * Used by annotateNodeRefs, the Markdown component's link handler, and
+ * extractNodeRefs in exportHtml — this is the SINGLE shared resolution.
+ */
+export function resolveDocId(
+    raw: string,
+    docIdMap?: Map<string, string>
+): string {
+    if (!docIdMap || docIdMap.size === 0) return raw
+    // Exact match (handles 8-char short IDs and full 32-char hashes that
+    // happen to be in the map)
+    const exact = docIdMap.get(raw)
+    if (exact) return exact
+    // Fallback: try the first 8 hex chars
+    const short = raw.slice(0, 8)
+    return docIdMap.get(short) ?? raw
+}
+
+/**
  * Annotate node references in markdown content so they become hoverable.
  *
  * Two patterns, both strict:
@@ -26,8 +49,10 @@ export function annotateNodeRefs(
     // Pass 1: bracketed form [XXXXX...:YYYY] — display short (8 hex), link with full docId for lookup
     content = content.replace(
         /\[([a-f0-9]{8,}):(\d{2,5})\]/g,
-        (_, docId: string, nodeId: string) =>
-            `[${docId.slice(0, 8)}:${nodeId}](node://${docId}/${nodeId})`
+        (_, docId: string, nodeId: string) => {
+            const fullDocId = resolveDocId(docId)
+            return `[${fullDocId.slice(0, 8)}:${nodeId}](node://${fullDocId}/${nodeId})`
+        }
     )
 
     // Pass 2: bare form XXXXXXXXX:YYYY — only when docId is in the whitelist,
@@ -41,8 +66,10 @@ export function annotateNodeRefs(
         )
         content = content.replace(
             bareRe,
-            (_, docId: string, nodeId: string) =>
-                `[${docId.slice(0, 8)}:${nodeId}](node://${docId}/${nodeId})`
+            (_, docId: string, nodeId: string) => {
+                const fullDocId = resolveDocId(docId)
+                return `[${fullDocId.slice(0, 8)}:${nodeId}](node://${fullDocId}/${nodeId})`
+            }
         )
     }
 
@@ -128,8 +155,7 @@ export function Markdown({ children, docIdMap }: MarkdownProps) {
                             const parts = href.slice(7).split('/')
                             const shortDocId = parts[0] ?? ''
                             const nodeId = parts[1] ?? ''
-                            const fullDocId =
-                                docIdMap?.get(shortDocId) ?? shortDocId
+                            const fullDocId = resolveDocId(shortDocId, docIdMap)
                             return (
                                 <NodeRefSpan
                                     fullDocId={fullDocId}
@@ -147,8 +173,10 @@ export function Markdown({ children, docIdMap }: MarkdownProps) {
                             if (m?.[1] && m?.[2]) {
                                 const shortDocId = m[1]
                                 const nodeId = m[2]
-                                const fullDocId =
-                                    docIdMap?.get(shortDocId) ?? shortDocId
+                                const fullDocId = resolveDocId(
+                                    shortDocId,
+                                    docIdMap
+                                )
                                 return (
                                     <NodeRefSpan
                                         fullDocId={fullDocId}
@@ -176,6 +204,13 @@ export function Markdown({ children, docIdMap }: MarkdownProps) {
                         </strong>
                     ),
                     hr: () => <hr className="border-cream my-4" />,
+                    img: ({ src, alt }) => (
+                        <img
+                            src={src}
+                            alt={alt ?? ''}
+                            className="max-w-full h-auto rounded my-3"
+                        />
+                    ),
                     table: ({ children }) => (
                         <table className="w-full text-left border-collapse my-3">
                             {children}
