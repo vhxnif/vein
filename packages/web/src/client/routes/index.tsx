@@ -24,7 +24,6 @@ function HomePage() {
         mode,
         timeline,
         runSearch,
-        setMode,
     } = useSearch()
 
     const [input, setInput] = useState(query)
@@ -162,34 +161,7 @@ function HomePage() {
                 />
             </div>
 
-            {/* Mode selector */}
-            <div className="mb-6 flex items-center gap-2">
-                <span className="font-sans text-[8pt] text-stone">Mode:</span>
-                <button
-                    type="button"
-                    disabled={searching}
-                    onClick={() => setMode('quick')}
-                    className={`px-[12pt] py-[4pt] rounded-full font-sans text-[8pt] font-medium transition-colors ${
-                        mode === 'quick'
-                            ? 'bg-ink text-ivory border border-ink'
-                            : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
-                    }`}
-                >
-                    Quick
-                </button>
-                <button
-                    type="button"
-                    disabled={searching}
-                    onClick={() => setMode('default')}
-                    className={`px-[12pt] py-[4pt] rounded-full font-sans text-[8pt] font-medium transition-colors ${
-                        mode === 'default'
-                            ? 'bg-ink text-ivory border border-ink'
-                            : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
-                    }`}
-                >
-                    Review
-                </button>
-            </div>
+            {/* Mode selector — always 'default' since sub-agent pipeline was flattened */}
 
             {/* Desktop: initial searching state (mobile handled by Layout's StreamingStatusBar) */}
             {searching && timeline.length === 0 && (

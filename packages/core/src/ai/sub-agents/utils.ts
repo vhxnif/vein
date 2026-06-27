@@ -3,31 +3,6 @@ import type { BaseDocNode, TreeNode } from '../../tree/type.ts'
 import { Type } from '../base.ts'
 import type { ToolCtx } from '../types.ts'
 
-export class Semaphore {
-    private waiters: (() => void)[] = []
-    private running = 0
-    constructor(private max: number) {}
-
-    async acquire(): Promise<void> {
-        if (this.running < this.max) {
-            this.running++
-            return
-        }
-        return new Promise<void>((resolve) => {
-            this.waiters.push(resolve)
-        })
-    }
-
-    release(): void {
-        this.running--
-        const next = this.waiters.shift()
-        if (next) {
-            this.running++
-            next()
-        }
-    }
-}
-
 export function ellipsis(s: string, max: number): string {
     return s.length > max ? `${s.slice(0, max)}...` : s
 }
@@ -67,13 +42,6 @@ export function renderDocStructure(
     return lines.join('\n')
 }
 
-export function compactDocText(text: string): string {
-    return text
-        .split('\n')
-        .filter((line) => /^\s*\d+\s+\S/.test(line) || line.includes('(目录)'))
-        .join('\n')
-}
-
 /** Extract text content from a tool result, joining all text parts. */
 export function extractResultText(
     result: { content?: Array<{ type: string; text?: string }> } | undefined
@@ -85,58 +53,7 @@ export function extractResultText(
         .join('')
 }
 
-/** Extract relevance and summary from the subagent's markdown output. */
-export function parseAnalyzeResult(raw: string): {
-    relevance: string
-    summary: string
-} {
-    const relMatch = raw.match(/##\s*相关性\s*\n+([^\n#]+)/i)
-    const relevance = relMatch?.[1]?.trim().toLowerCase() || 'unknown'
-    const sumMatch = raw.match(/##\s*概述\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i)
-    const summary = sumMatch?.[1]?.trim() || raw.slice(0, 120)
-    return { relevance, summary }
-}
-
-/**
- * Extract the raw source lines from subagent output, preserving
- * the original "- [docId:nodeId] 章节标题" format for citation integrity.
- */
-export function extractAnalyzeSourceLines(text: string): string[] {
-    const match = text.match(/##\s*数据来源\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i)
-    const raw = match?.[1]?.trim() ?? ''
-    if (!raw) return []
-    return raw
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => /^[-*]\s/.test(line))
-}
-
-/**
- * Compact older analyzeDocument results to save context.
- * Uses natural Markdown format (matching doc-analyzer output structure)
- * so the main agent does not perceive compaction as data loss.
- *
- * Strategy:
- * - Preserve ## 相关性 (needed for review + final answer)
- * - Preserve ## 概述, truncate to ~100 chars (provides context)
- * - Preserve ## 数据来源 in full (citations depend on node references)
- * - Discard ## 关键发现 (overlaps with 概述 + 详细分析, large)
- * - Discard ## 详细分析 (largest section, replaced by 概述)
- */
-export function compactAnalyzeResult(text: string): string {
-    const { relevance, summary } = parseAnalyzeResult(text)
-    const sourceLines = extractAnalyzeSourceLines(text)
-    const sections = ['## 相关性', '', relevance, '']
-    if (summary) {
-        sections.push('## 概述', '', ellipsis(summary, 100), '')
-    }
-    if (sourceLines.length > 0) {
-        sections.push('## 数据来源', '', ...sourceLines, '')
-    }
-    return sections.join('\n')
-}
-
-// ── Shared tool factories for doc-analyzer & fragment-extractor ──
+// ── Shared tool factories ─────────────────────────────────────
 
 /**
  * Creates a `getDocStructure` tool for document sub-agents.

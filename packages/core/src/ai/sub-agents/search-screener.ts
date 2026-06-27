@@ -1,4 +1,6 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
+/** @deprecated Replaced by direct FTS5 + enrichment in librarian.ts buildTools().
+ *  Kept for reference only. Will be removed in a future version. */
 
 import { logger } from '../../config/index.ts'
 import type { ModelProvider } from '../../config/type.ts'
@@ -8,9 +10,33 @@ import {
     searchDocsByKeyword,
 } from '../../store/index.ts'
 import { Agent, getModel, getModelProvider, Type } from '../base.ts'
-import { SEARCH_DOCS_BY_KEYWORD_META } from '../tools.ts'
 import type { ToolCtx, ToolMeta } from '../types.ts'
 import { ellipsis, extractResultText } from './utils.ts'
+
+// Local copy for deprecated file (removed from tools.ts)
+const SEARCH_DOCS_BY_KEYWORD_META: ToolMeta = {
+    stepLabel: (a) => `Searching: "${ellipsis(String(a.query ?? ''), 36)}"...`,
+    resultLabel: (text) => {
+        try {
+            const parsed = JSON.parse(text) as Array<{ snippet?: string }>
+            if (Array.isArray(parsed) && parsed.length > 0)
+                return `Found ${parsed.length} results`
+        } catch {
+            /* ignore */
+        }
+        return undefined
+    },
+    resultSummary: (raw) => {
+        try {
+            const parsed = JSON.parse(raw) as Array<{ snippet?: string }>
+            if (Array.isArray(parsed)) return `${parsed.length} docs`
+        } catch {
+            /* ignore */
+        }
+        return raw.slice(0, 200)
+    },
+    logDetail: (a) => `"${String(a.query ?? '')}"`,
+}
 
 const slog = logger.child({ module: 'search-screener' })
 

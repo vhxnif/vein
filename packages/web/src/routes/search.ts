@@ -28,7 +28,7 @@ searchRouter.post('/', async (c) => {
     const body = await c.req.json()
     const query = body.q as string
     if (!query) return c.json({ error: 'Missing query' }, 400)
-    const mode = (body.mode as 'default' | 'quick') ?? 'default'
+    const mode = (body.mode as string) ?? 'default'
 
     const startedAt = performance.now()
 
@@ -57,14 +57,8 @@ searchRouter.post('/', async (c) => {
 
             try {
                 const result = await searchDocuments(query, {
-                    segmenter: config.segmenter,
-                    subagentModel: config.subagent,
                     reviewerModel: config.reviewer,
-                    searchAgentModel: config.searchAgent,
                     thinkingLevel: config.thinkingLevel,
-                    maxAnalyzeResultFull: config.maxAnalyzeResultFull,
-                    maxParallelAnalyze: config.maxParallelAnalyze,
-                    mode,
                     signal,
                     onThinkingDelta: (delta) => {
                         if (!aborted) {

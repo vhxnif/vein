@@ -6,7 +6,7 @@ export {
     listProviders,
     setModelProvider,
 } from './base.ts'
-export type { LibrarianResult, Mode, TraceStep } from './librarian.ts'
+export type { LibrarianResult, TraceStep } from './librarian.ts'
 export { librarian } from './librarian.ts'
 export type { ReviewResult, SourceRef } from './sub-agents/reviewer.ts'
 export { reviewer } from './sub-agents/reviewer.ts'
