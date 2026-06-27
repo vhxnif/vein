@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { annotateNodeRefs, Markdown } from '../components/Markdown.tsx'
+import { annotateRefs, Markdown } from '../components/Markdown.tsx'
 import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
 import type { HistoryEntry } from '../lib/api.ts'
 import { fetchHistory, fetchHistoryEntry } from '../lib/api.ts'
@@ -315,7 +315,7 @@ function ExpandedEntry({ id }: { id: string }) {
     const annotatedAnswer = useMemo(() => {
         const raw = entry?.answer || ''
         if (!raw) return ''
-        return annotateNodeRefs(raw, docIdMap)
+        return annotateRefs(raw, docIdMap)
     }, [entry?.answer, docIdMap])
 
     const handleExport = useCallback(async () => {

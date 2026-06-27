@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { DocTooltip } from './DocTooltip.tsx'
 import { NodeTooltip } from './NodeTooltip.tsx'
 
 /**
@@ -11,8 +12,8 @@ import { NodeTooltip } from './NodeTooltip.tsx'
  * fallback (handles LLM output like "f57894882e" where the model truncated
  * the hash to an arbitrary length).
  *
- * Used by annotateNodeRefs, the Markdown component's link handler, and
- * extractNodeRefs in exportHtml — this is the SINGLE shared resolution.
+ * Used by annotateRefs, the Markdown component's link handler, and
+ * extractRefs in exportHtml — this is the SINGLE shared resolution.
  */
 export function resolveDocId(
     raw: string,
@@ -29,24 +30,27 @@ export function resolveDocId(
 }
 
 /**
- * Annotate node references in markdown content so they become hoverable.
+ * Annotate node and document references in markdown content so they become hoverable.
  *
- * Two patterns, both strict:
- *   `[XXXXXXXX:YYYY]` — bracketed (per prompt constraint), always matched
- *   `XXXXXXXX:YYYY`   — bare fallback, only matched when XXXXXXXX is a
- *                        known short doc ID from `docIdMap`
+ * Node ref patterns (→ node:// links):
+ *   `[docId:nodeId]` — bracketed (per prompt constraint), always matched
+ *   `docId:nodeId`   — bare fallback, only when docId is in `docIdMap`
+ *
+ * Doc ref patterns (→ doc:// links):
+ *   `[docId]` — bracketed (full or short hex, no :nodeId), always matched
+ *   `**docId**` — bold-wrapped 32+ char hex, always matched
  *
  * Using `docIdMap` as a whitelist for bare-form matching eliminates false
  * positives (e.g. commit hashes, timestamps that happen to match the pattern).
  */
-export function annotateNodeRefs(
+export function annotateRefs(
     content: string,
     docIdMap?: Map<string, string>
 ): string {
     // Build a set of known valid short doc IDs (first 8 hex chars)
     const validIds = new Set(docIdMap?.keys())
 
-    // Pass 1: bracketed form [XXXXX...:YYYY] — display short (8 hex), link with full docId for lookup
+    // Pass 1: bracketed node ref [XXXXX...:YYYY] → node:// link
     content = content.replace(
         /\[([a-f0-9]{8,}):(\d{2,5})\]/g,
         (_, docId: string, nodeId: string) => {
@@ -55,9 +59,7 @@ export function annotateNodeRefs(
         }
     )
 
-    // Pass 2: bare form XXXXXXXXX:YYYY — only when docId is in the whitelist,
-    // not inside brackets (avoids re-processing pass 1 output),
-    // and not inside an existing link URL (negative lookbehind for '(')
+    // Pass 2: bare node ref XXXXXXXX:YYYY (whitelist, not in brackets/links)
     if (validIds.size > 0) {
         const idPattern = [...validIds].join('|')
         const bareRe = new RegExp(
@@ -73,8 +75,31 @@ export function annotateNodeRefs(
         )
     }
 
+    // Pass 3: bracketed doc ref [XXXXX...] → doc:// link (no :nodeId after hex)
+    // [a-f0-9] doesn't match ':', so [docId:nodeId] won't match — hex stops at ':'
+    content = content.replace(
+        /\[([a-f0-9]{8,})\](?!\()/g,
+        (_, docId: string) => {
+            const fullDocId = resolveDocId(docId)
+            return `[${fullDocId.slice(0, 8)}](doc://${fullDocId})`
+        }
+    )
+
+    // Pass 3b: bold-wrapped doc ref **XXXXX...** → doc:// link (no brackets)
+    // LLMs may output **fullHex** without [] around it
+    content = content.replace(
+        /\*\*([a-f0-9]{32,})\*\*(?!\()/g,
+        (_, docId: string) => {
+            const fullDocId = resolveDocId(docId)
+            return `**[${fullDocId.slice(0, 8)}](doc://${fullDocId})**`
+        }
+    )
+
     return content
 }
+
+/** @deprecated Use annotateRefs instead */
+export const annotateNodeRefs = annotateRefs
 
 interface MarkdownProps {
     children: string
@@ -150,40 +175,41 @@ export function Markdown({ children, docIdMap }: MarkdownProps) {
                         </pre>
                     ),
                     a: ({ children, href }) => {
-                        // Detect node:// protocol links (from annotateNodeRefs)
-                        if (href?.startsWith('node://')) {
-                            const parts = href.slice(7).split('/')
-                            const shortDocId = parts[0] ?? ''
-                            const nodeId = parts[1] ?? ''
-                            const fullDocId = resolveDocId(shortDocId, docIdMap)
-                            return (
-                                <NodeRefSpan
-                                    fullDocId={fullDocId}
-                                    nodeId={nodeId}
-                                >
-                                    {children}
-                                </NodeRefSpan>
-                            )
-                        }
-                        // ReactMarkdown auto-links bare XX:YYYY as <a href="">.
-                        // Treat empty-href links matching the node ref pattern as citations.
+                        // ReactMarkdown strips custom URL protocols (node://, doc://)
+                        // to empty string. We detect refs from the link TEXT + empty href.
                         if (!href || href === '') {
                             const text = extractTextContent(children)
-                            const m = text?.match(/^([a-f0-9]{8,}):(\d{2,5})$/)
-                            if (m?.[1] && m?.[2]) {
-                                const shortDocId = m[1]
-                                const nodeId = m[2]
+                            // Node ref: docId:nodeId pattern (e.g. "738882f0:0002")
+                            const nodeMatch = text?.match(
+                                /^([a-f0-9]{8,}):(\d{2,5})$/
+                            )
+                            if (nodeMatch?.[1] && nodeMatch?.[2]) {
                                 const fullDocId = resolveDocId(
-                                    shortDocId,
+                                    nodeMatch[1],
                                     docIdMap
                                 )
                                 return (
                                     <NodeRefSpan
                                         fullDocId={fullDocId}
-                                        nodeId={nodeId}
+                                        nodeId={nodeMatch[2]}
                                     >
                                         {children}
                                     </NodeRefSpan>
+                                )
+                            }
+                            // Doc ref: bare hex-only text (e.g. "738882f0")
+                            // Only match when docIdMap is available to avoid false positives.
+                            if (
+                                text &&
+                                docIdMap &&
+                                docIdMap.size > 0 &&
+                                /^[a-f0-9]{8,}$/.test(text)
+                            ) {
+                                const fullDocId = resolveDocId(text, docIdMap)
+                                return (
+                                    <DocRefSpan fullDocId={fullDocId}>
+                                        {children}
+                                    </DocRefSpan>
                                 )
                             }
                         }
@@ -314,6 +340,70 @@ function NodeRefSpan({
                     <NodeTooltip
                         fullDocId={fullDocId}
                         nodeId={nodeId}
+                        anchorEl={containerRef.current}
+                    />
+                </span>
+            )}
+        </span>
+    )
+}
+
+// ── DocRefSpan ──────────────────────────────────────────────
+
+function DocRefSpan({
+    fullDocId,
+    children,
+}: {
+    fullDocId: string
+    children: React.ReactNode
+}) {
+    const [showTooltip, setShowTooltip] = useState(false)
+    const containerRef = useRef<HTMLSpanElement>(null)
+    const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+    const handleMouseEnter = useCallback(() => {
+        if (hideTimerRef.current) {
+            clearTimeout(hideTimerRef.current)
+            hideTimerRef.current = null
+        }
+        setShowTooltip(true)
+    }, [])
+
+    const handleMouseLeave = useCallback(() => {
+        hideTimerRef.current = setTimeout(() => {
+            setShowTooltip(false)
+        }, 150)
+    }, [])
+
+    const handleTooltipEnter = useCallback(() => {
+        if (hideTimerRef.current) {
+            clearTimeout(hideTimerRef.current)
+            hideTimerRef.current = null
+        }
+    }, [])
+
+    const handleTooltipLeave = useCallback(() => {
+        setShowTooltip(false)
+    }, [])
+
+    return (
+        <span
+            ref={containerRef}
+            className="inline relative"
+            data-doc-id={fullDocId}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+        >
+            <span className="cursor-pointer border-b border-dashed border-ink/30 text-ink rounded-sm px-0.5 hover:bg-ink/8 hover:border-ink transition-colors">
+                {children}
+            </span>
+            {showTooltip && (
+                <span
+                    onMouseEnter={handleTooltipEnter}
+                    onMouseLeave={handleTooltipLeave}
+                >
+                    <DocTooltip
+                        fullDocId={fullDocId}
                         anchorEl={containerRef.current}
                     />
                 </span>

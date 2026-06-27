@@ -1,16 +1,17 @@
 import { createElement, type ReactNode, useMemo } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
+import { DocTooltipContent } from '../components/DocTooltipContent.tsx'
 import {
-    annotateNodeRefs,
+    annotateRefs,
     Markdown,
     resolveDocId,
 } from '../components/Markdown.tsx'
 import { NodeTooltipContent } from '../components/NodeTooltipContent.tsx'
 import type { SharedTimelineBlock } from '../components/TimelineBlockView.tsx'
 import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
-import type { NodeInfo } from './api.ts'
-import { fetchNode } from './api.ts'
+import type { DocInfo, NodeInfo } from './api.ts'
+import { fetchDocument, fetchNode } from './api.ts'
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -75,12 +76,15 @@ export async function exportResultAsHtml(
     // 3. Collect all CSS from the current page (Tailwind + Kami component styles)
     const css = await collectAllCss()
 
-    // 4. Extract node references from the ANNOTATED content for tooltip data.
+    // 4. Extract node and doc references from the ANNOTATED content for tooltip data.
     //    Must use annotated content because the raw markdown may contain bare
-    //    (unbracketed) references that extractNodeRefs doesn't handle directly.
-    const annotatedContent = annotateNodeRefs(content, docIdMap)
-    const nodeRefs = extractNodeRefs(annotatedContent, docIdMap)
-    const nodeDataMap = await fetchNodeData(nodeRefs)
+    //    (unbracketed) references that extractRefs doesn't handle directly.
+    const annotatedContent = annotateRefs(content, docIdMap)
+    const { nodeRefs, docRefs } = extractRefs(annotatedContent, docIdMap)
+    const [nodeDataMap, docDataMap] = await Promise.all([
+        fetchNodeData(nodeRefs),
+        fetchDocData(docRefs),
+    ])
 
     // 5. Build the full HTML document
     const fullHtml = buildHtmlDocument({
@@ -88,6 +92,7 @@ export async function exportResultAsHtml(
         capturedHtml,
         css,
         nodeDataMap,
+        docDataMap,
         review,
         reviewElapsedMs,
         elapsedMs,
@@ -194,7 +199,7 @@ function ExportPreview({
     project,
 }: ExportPreviewProps) {
     const annotatedContent = useMemo(
-        () => annotateNodeRefs(content, docIdMap),
+        () => annotateRefs(content, docIdMap),
         [content, docIdMap]
     )
 
@@ -337,58 +342,87 @@ function ExportPreview({
     )
 }
 
-// ── Node reference extraction ──────────────────────────────────
+// ── Reference extraction ───────────────────────────────────────
 
 interface NodeRef {
     fullDocId: string
     nodeId: string
 }
 
+interface DocRef {
+    fullDocId: string
+}
+
 /**
- * Find all `[XXXXXXXX:YYYY](node://fullDocId/nodeId)` and bare `[XXXXXXXX:YYYY]`
- * patterns in markdown content.
+ * Find all node:// and doc:// references in annotated markdown content.
  */
-function extractNodeRefs(
+function extractRefs(
     content: string,
     docIdMap?: Map<string, string>
-): NodeRef[] {
-    const seen = new Set<string>()
-    const refs: NodeRef[] = []
+): { nodeRefs: NodeRef[]; docRefs: DocRef[] } {
+    const seenNodes = new Set<string>()
+    const seenDocs = new Set<string>()
+    const nodeRefs: NodeRef[] = []
+    const docRefs: DocRef[] = []
 
     // Match markdown links with node:// protocol.
-    // resolveDocId handles 8-char, 10-char truncated, and 32-char full hashes.
-    const re = /\[.*?\]\(node:\/\/([a-f0-9]+)\/(\d+)\)/g
+    const nodeRe = /\[.*?\]\(node:\/\/([a-f0-9]+)\/(\d+)\)/g
     let m: RegExpExecArray | null
-    m = re.exec(content)
+    m = nodeRe.exec(content)
     while (m !== null) {
         const rawDocId = m[1] ?? ''
         const fullDocId = resolveDocId(rawDocId, docIdMap)
         const nodeId = m[2] ?? ''
         const key = `${fullDocId}:${nodeId}`
-        if (!seen.has(key)) {
-            seen.add(key)
-            refs.push({ fullDocId, nodeId })
+        if (!seenNodes.has(key)) {
+            seenNodes.add(key)
+            nodeRefs.push({ fullDocId, nodeId })
         }
-        m = re.exec(content)
+        m = nodeRe.exec(content)
     }
 
-    // Also match bare `[XXXXXXXX:YYYY]` patterns (safety net for any refs
-    // that survived annotation without a node:// URL).
-    const bareRe = /\[([a-f0-9]{8,}):(\d{2,5})\](?!\()/g
-    m = bareRe.exec(content)
+    // Also match bare `[XXXXXXXX:YYYY]` patterns (safety net for node refs).
+    const bareNodeRe = /\[([a-f0-9]{8,}):(\d{2,5})\](?!\()/g
+    m = bareNodeRe.exec(content)
     while (m !== null) {
         const rawDocId = m[1] ?? ''
         const nodeId = m[2] ?? ''
         const fullDocId = resolveDocId(rawDocId, docIdMap)
         const key = `${fullDocId}:${nodeId}`
-        if (!seen.has(key)) {
-            seen.add(key)
-            refs.push({ fullDocId, nodeId })
+        if (!seenNodes.has(key)) {
+            seenNodes.add(key)
+            nodeRefs.push({ fullDocId, nodeId })
         }
-        m = bareRe.exec(content)
+        m = bareNodeRe.exec(content)
     }
 
-    return refs
+    // Match markdown links with doc:// protocol.
+    const docRe = /\[.*?\]\(doc:\/\/([a-f0-9]+)\)/g
+    m = docRe.exec(content)
+    while (m !== null) {
+        const rawDocId = m[1] ?? ''
+        const fullDocId = resolveDocId(rawDocId, docIdMap)
+        if (!seenDocs.has(fullDocId)) {
+            seenDocs.add(fullDocId)
+            docRefs.push({ fullDocId })
+        }
+        m = docRe.exec(content)
+    }
+
+    // Also match bare `[XXXXXXXX]` patterns (safety net for doc refs).
+    const bareDocRe = /\[([a-f0-9]{8,})\](?!\()/g
+    m = bareDocRe.exec(content)
+    while (m !== null) {
+        const rawDocId = m[1] ?? ''
+        const fullDocId = resolveDocId(rawDocId, docIdMap)
+        if (!seenDocs.has(fullDocId)) {
+            seenDocs.add(fullDocId)
+            docRefs.push({ fullDocId })
+        }
+        m = bareDocRe.exec(content)
+    }
+
+    return { nodeRefs, docRefs }
 }
 
 // ── Node data fetching ─────────────────────────────────────────
@@ -476,6 +510,81 @@ async function fetchNodeData(refs: NodeRef[]): Promise<
     return map
 }
 
+// ── Doc data fetching ─────────────────────────────────────────
+
+async function fetchDocData(refs: DocRef[]): Promise<
+    Map<
+        string,
+        DocInfo & {
+            tooltipHtml: string
+        }
+    >
+> {
+    const map = new Map<
+        string,
+        DocInfo & {
+            tooltipHtml: string
+        }
+    >()
+
+    if (refs.length === 0) return map
+
+    const apiResults = await Promise.allSettled(
+        refs.map(async (ref) => {
+            const data = await fetchDocument(ref.fullDocId)
+            return { ref, data }
+        })
+    )
+
+    const toRender: { key: string; data: DocInfo }[] = []
+    for (const result of apiResults) {
+        if (result.status === 'fulfilled') {
+            const { ref, data } = result.value
+            map.set(ref.fullDocId, { ...data, tooltipHtml: '' })
+            toRender.push({ key: ref.fullDocId, data })
+        }
+    }
+
+    if (toRender.length > 0) {
+        const container = document.createElement('div')
+        container.style.cssText =
+            'position:fixed;left:-9999px;top:0;width:420px;visibility:hidden;'
+        document.body.appendChild(container)
+        const root = createRoot(container)
+
+        for (const { key, data } of toRender) {
+            try {
+                flushSync(() => {
+                    root.render(
+                        createElement(DocTooltipContent, {
+                            fullDocId: key,
+                            doc: data,
+                        })
+                    )
+                })
+                const entry = map.get(key)
+                if (entry) {
+                    map.set(key, {
+                        ...entry,
+                        tooltipHtml: container.innerHTML,
+                    })
+                }
+            } catch {
+                const entry = map.get(key)
+                if (entry) {
+                    const fallback = `<p>${escapeHtml(data.ftsSummary || data.title || '').slice(0, 500)}</p>`
+                    map.set(key, { ...entry, tooltipHtml: fallback })
+                }
+            }
+        }
+
+        root.unmount()
+        document.body.removeChild(container)
+    }
+
+    return map
+}
+
 // ── HTML document builder ──────────────────────────────────────
 
 function buildHtmlDocument(opts: {
@@ -489,19 +598,23 @@ function buildHtmlDocument(opts: {
             shortNodeId: string
         }
     >
+    docDataMap: Map<
+        string,
+        DocInfo & {
+            tooltipHtml: string
+        }
+    >
     review?: { verdict: string; score: number; reason: string }
     reviewElapsedMs?: number
     elapsedMs: number
     mode: string
     project?: string | null
 }): string {
-    const { query, capturedHtml, css, nodeDataMap } = opts
+    const { query, capturedHtml, css, nodeDataMap, docDataMap } = opts
 
     const title = `Vein: ${query.slice(0, 60)}${query.length > 60 ? '\u2026' : ''}`
 
     // Serialize node data: keyed by "fullDocId:shortNodeId" for tooltip lookup.
-    // tooltipHtml is pre-rendered using the exact same NodeTooltipContent component
-    // as the web app, guaranteeing visual fidelity.
     const nodeDataJson = JSON.stringify(
         Object.fromEntries(
             [...nodeDataMap].map(([key, node]) => [
@@ -510,6 +623,16 @@ function buildHtmlDocument(opts: {
                     nodeId: node.shortNodeId,
                     tooltipHtml: node.tooltipHtml,
                 },
+            ])
+        )
+    )
+
+    // Serialize doc data: keyed by fullDocId.
+    const docDataJson = JSON.stringify(
+        Object.fromEntries(
+            [...docDataMap].map(([key, doc]) => [
+                key,
+                { tooltipHtml: doc.tooltipHtml },
             ])
         )
     )
@@ -527,7 +650,7 @@ ${css}
 /* ── Override: dim paper texture for export readability ── */
 body::before { opacity: 0.015 !important; }
 
-/* ── Node reference citations (for tooltip JS) ─────── */
+/* ── Reference citations (for tooltip JS) ─────────── */
 [data-doc-id] {
   cursor: pointer;
   border-bottom: 1px dashed rgba(27,54,93,0.3);
@@ -547,15 +670,17 @@ body::before { opacity: 0.015 !important; }
 </head>
 <body>
 <script type="application/json" id="node-data">${nodeDataJson}</script>
+<script type="application/json" id="doc-data">${docDataJson}</script>
 
 ${capturedHtml}
 
-<div id="node-tooltip" class="fixed z-50 max-h-[280px] overflow-y-auto kami-scrollbar bg-parchment border border-ink/20 rounded-[8pt] shadow-lg p-4" style="display:none"></div>
+<div id="ref-tooltip" class="fixed z-50 max-h-[280px] overflow-y-auto kami-scrollbar bg-parchment border border-ink/20 rounded-[8pt] shadow-lg p-4" style="display:none"></div>
 
 <script>
 (function() {
-  var data = JSON.parse(document.getElementById('node-data').textContent);
-  var tooltip = document.getElementById('node-tooltip');
+  var nodeData = JSON.parse(document.getElementById('node-data').textContent);
+  var docData = JSON.parse(document.getElementById('doc-data').textContent);
+  var tooltip = document.getElementById('ref-tooltip');
   var hideTimer = null;
   var activeRef = null;
 
@@ -579,9 +704,11 @@ ${capturedHtml}
     activeRef = ref;
     var docId = ref.getAttribute('data-doc-id') || '';
     var nodeId = ref.getAttribute('data-node-id') || '';
-    var node = data[docId + ':' + nodeId];
-    if (!node || !node.tooltipHtml) { tooltip.style.display = 'none'; return; }
-    tooltip.innerHTML = node.tooltipHtml;
+    // Try node ref first (key: docId:nodeId), then doc ref (key: docId)
+    var entry = nodeId ? nodeData[docId + ':' + nodeId] : null;
+    if (!entry) entry = docData[docId];
+    if (!entry || !entry.tooltipHtml) { tooltip.style.display = 'none'; return; }
+    tooltip.innerHTML = entry.tooltipHtml;
     positionTooltip(ref);
     tooltip.style.display = 'block';
   });

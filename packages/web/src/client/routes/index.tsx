@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { annotateNodeRefs, Markdown } from '../components/Markdown.tsx'
+import { annotateRefs, Markdown } from '../components/Markdown.tsx'
 import { RunCat } from '../components/RunCat.tsx'
 import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
 import { exportResultAsHtml } from '../lib/exportHtml.ts'
@@ -121,7 +121,7 @@ function HomePage() {
     // Annotate node references in content for hover tooltips
     const annotatedContent = useMemo(() => {
         if (!result?.content) return ''
-        return annotateNodeRefs(result.content, docIdMap)
+        return annotateRefs(result.content, docIdMap)
     }, [result?.content, docIdMap])
 
     return (

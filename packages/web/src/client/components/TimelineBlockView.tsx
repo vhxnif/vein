@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { annotateNodeRefs, Markdown } from './Markdown.tsx'
+import { annotateRefs, Markdown } from './Markdown.tsx'
 
 // ── Braille spinner (classic single-char) ────────────────────
 
@@ -69,7 +69,7 @@ export function TimelineBlockView({
                 ? (block.text ?? '')
                 : ''
         if (!raw || !docIdMap) return raw
-        return annotateNodeRefs(raw, docIdMap)
+        return annotateRefs(raw, docIdMap)
     }, [block, docIdMap])
 
     if (block.type === 'thinking') {
