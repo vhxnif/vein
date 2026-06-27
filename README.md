@@ -100,18 +100,19 @@ vein -p my-knowledge-base ask "检索 API 设计文档"
 你的问题
    │
    ▼
-关键词分词搜索 ──→ 定位到具体文档
+Librarian Agent 自主规划检索路径
+   ├─ searchDocs       → 关键词搜索，获取候选文档 + snippet + 大纲
+   ├─ getDocStructure  → 浏览文档目录树，定位相关章节
+   ├─ getDocNodeDetails → 按需阅读节点原文，精确引用
+   └─ reviewResult      → 自检答案准确性（可选）
    │
    ▼
-AI Agent 深入文档节点 ──→ 阅读原文、理解上下文
-   │
-   ▼
-汇总分析 + 自检审查 ──→ 结构化答案（附数据来源）
+汇总分析 + 来源引用 ──→ 结构化答案（附 [docId:nodeId] 引用）
 ```
 
 **不是搜文档，是让 AI 替你读文档。**
 
-> 💡 推理策略参考 [PageIndex](https://github.com/VectifyAI/PageIndex) —— 按文档结构逐层递进阅读，先大纲后正文，先定位再深读，避免一次性塞入大量无关上下文。
+> 💡 单 Agent 直接操作工具，自行规划搜索策略：自行分词、判读 snippet、按需深读、翻页重试——全程自主决策，避免固定流水线的僵化和上下文浪费。
 
 ---
 
@@ -120,9 +121,9 @@ AI Agent 深入文档节点 ──→ 阅读原文、理解上下文
 | 特性 | 说明 |
 |------|------|
 | 🔍 **中文分词搜索** | LLM 驱动的中文分词 + SQLite FTS5 BM25 排序，精准匹配中文语义 |
-| 🤖 **多 Agent 协作检索** | 三层子 Agent：SearchScreener 搜索筛选 → Document Analyzer 深度分析 → Reviewer 自检审查 |
+| 🧠 **自主检索 Agent** | 单一 Librarian Agent 直接操作 searchDocs / getDocStructure / getDocNodeDetails 工具，自行规划搜索→判读→深读→引用全流程 |
 | 🌲 **文档树形结构** | Markdown 自动拆分为节点树，支持层级浏览和精准定位 |
-| 💾 **项目级配置** | 每个项目独立 `.vein/config.json`，可为分词/摘要/检索配置不同模型 |
+| 💾 **项目级配置** | 每个项目独立 `.vein/config.json`，可为分词/摘要/检索/审查配置不同模型 |
 | 🌐 **全局项目注册表** | `vein -p <name>` 从任意目录操作已注册项目 |
 | 📝 **查询历史** | 每次 `ask` 自动保存到 `.vein/ask-history/`，可回溯浏览 |
 | 🗃️ **LLM 缓存** | `model_cache` 表缓存分词和摘要结果，避免重复调用 |
@@ -188,7 +189,7 @@ bun run build:web
 | **Docs** | `/docs` `/docs/:id` | 文档列表（响应式分页/无限滚动）、文档详情（大纲树 + 节点原文）、导入弹窗（拖放上传 + 进度流）/删除 |
 | **History** | `/history` | 查询历史（按日期分组）、展开查看完整问答与审查结果 |
 | **Projects** | `/projects` | 项目选择器：列表展示全局注册项目、切换/取消当前项目 |
-| **Settings** | `/settings` | 项目配置（名称、主模型、摘要、分词、文档分析子 Agent、搜索筛选子 Agent、审查 6 个独立模型槽位） |
+| **Settings** | `/settings` | 项目配置（名称、主模型、摘要、分词、审查 4 个独立模型槽位 + 推理深度） |
 
 Web UI 采用 [Kami](https://github.com/tw93/Kami) 设计语言：暖色羊皮纸底、墨水蓝单色强调、Serif 排版层级，界面如印刷品般克制优雅。
 
@@ -230,28 +231,33 @@ library（逻辑概念，对应 nodes 子树）
         └── docs_fts（FTS5 unicode61 全文索引）
 ```
 
-### 检索流程：主 Agent + 子 Agent 委托
+### 检索流程：单 Agent 直接工具调用
 
 ```
 User Query
   │
   ▼
-Main Librarian Agent (主 Agent)
-  ├─ searchDocuments(userQuery)          → SearchScreener 子 Agent：关键词搜索 + snippet/大纲初筛
-  │                                                │
-  │                                                └───────────┘
-  │                                         返回筛选后的文档列表
-  ├─ analyzeDocument(docId, userQuery)   → 一次性并发 10 个 Document Analyzer
-  │                                                │
-  │                                                ▼
-  │                                    Document Analyzer (子 Agent)
-  │                                    ├─ getDocStructure(docId)
-  │                                    └─ getDocNodeDetails(docId, nodeId)
-  │                                                │
-  │                                                └───────────┘
-  │                                         返回 Markdown 分析报告
-  └─ reviewResult(query, answer, sources) → 审查前自查覆盖度，getReviewSource 并行验证
+Librarian Agent（单一 Agent，自主规划检索路径）
+  │
+  ├─ searchDocs(query, limit, offset)
+  │     → 对用户问题进行自行分词，FTS5 BM25 搜索
+  │     → 返回 [{docId, snippet, rank, outline}]，含文档摘要和大纲
+  │     → Agent 根据 snippet + outline 判读相关性
+  │     → 结果不足时自动换同义词或翻页（offset）重试
+  │
+  ├─ getDocStructure(docId)
+  │     → 获取单个文档的完整大纲树（缩进格式：nodeId + title + summary）
+  │     → Agent 根据大纲定位需要深读的章节
+  │
+  ├─ getDocNodeDetails(docId, nodeId)
+  │     → 按需读取节点原文，支持批量并发请求
+  │     → Agent 直接引用原文，标注 [docId:nodeId] 来源
+  │
+  └─ reviewResult(query, answer, sources)  [可选]
+        → Reviewer 子 Agent 验证答案覆盖度和准确性
 ```
+
+> 相比旧版的多 Agent 流水线（SearchScreener → Document Analyzer → Reviewer），扁平化的单 Agent 设计消除了子 Agent 间的上下文传递损耗和固定编排逻辑，让 LLM 自行根据搜索结果动态调整策略——结果少时换词重搜，snippet 不确定时先看大纲再决定是否深读。
 
 ### 批量导入管道
 
@@ -262,8 +268,6 @@ Phase 1 — 并行 LLM（4 文件并发）
 Phase 2 — 串行 DB（WAL 模式）
   insertTree → insertDoc（含 docs_fts）
 ```
-
----
 
 ---
 
@@ -288,29 +292,21 @@ Phase 2 — 串行 DB（WAL 模式）
     "provider": "openai",
     "model": "gpt-4o-mini"
   },
-  "subagent": {
-    "provider": "openai",
-    "model": "gpt-4o-mini"
-  },
   "reviewer": {
     "provider": "openai",
     "model": "gpt-4o"
   },
-  "searchAgent": {
-    "provider": "openai",
-    "model": "gpt-4o-mini"
-  }
+  "thinkingLevel": "high"
 }
 ```
 
 | 字段 | 说明 |
 |------|------|
-| `model` | 主检索 Agent 使用的模型 |
+| `model` | 主 Librarian Agent 使用的模型 |
 | `summarizer` | 文档摘要专用模型（可选，回退到 `model`） |
 | `segmenter` | 中文分词专用模型（可选，回退到 `model`） |
-| `subagent` | Document Analyzer 子 Agent 专用模型（可选，回退到 `model`） |
 | `reviewer` | 结果审查专用模型（可选，回退到 `model`） |
-| `searchAgent` | SearchScreener 搜索筛选专用模型（可选，回退到 `model`） |
+| `thinkingLevel` | 主 Agent 推理深度（`off` / `minimal` / `low` / `medium` / `high` / `xhigh`），默认 `off` |
 | `db` | SQLite 数据库文件路径 |
 
 AI Provider 通过 `@earendil-works/pi-ai` 统一适配，支持 OpenAI / DeepSeek 及兼容接口。
@@ -337,7 +333,6 @@ AI Provider 通过 `@earendil-works/pi-ai` 统一适配，支持 OpenAI / DeepSe
 ## 🙏 致谢
 
 - [Kami](https://github.com/tw93/Kami) — Web UI 设计语言：暖色羊皮纸底、墨水蓝单色强调、Serif 排版层级
-- [PageIndex](https://github.com/VectifyAI/PageIndex) — 按文档结构逐层递进推理的检索策略
 
 ---
 
