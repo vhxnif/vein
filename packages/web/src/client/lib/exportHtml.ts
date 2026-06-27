@@ -559,10 +559,6 @@ ${capturedHtml}
   var hideTimer = null;
   var activeRef = null;
 
-  function esc(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
   function positionTooltip(ref) {
     var rect = ref.getBoundingClientRect();
     var w = Math.min(420, window.innerWidth - 16);
