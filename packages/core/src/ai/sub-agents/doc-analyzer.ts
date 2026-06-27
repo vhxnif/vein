@@ -1,4 +1,6 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
+/** @deprecated Replaced by direct getDocStructure/getDocNodeDetails tools in librarian.ts.
+ *  Kept for reference only. Will be removed in a future version. */
 
 import { logger } from '../../config/index.ts'
 import type { ModelProvider } from '../../config/type.ts'
@@ -11,9 +13,41 @@ import {
     formatSize,
     makeGetDocNodeDetails,
     makeGetDocStructure,
-    parseAnalyzeResult,
-    Semaphore,
 } from './utils.ts'
+
+// Local copy for deprecated file (removed from utils.ts)
+class Semaphore {
+    private waiters: (() => void)[] = []
+    private running = 0
+    constructor(private max: number) {}
+    async acquire(): Promise<void> {
+        if (this.running < this.max) {
+            this.running++
+            return
+        }
+        return new Promise<void>((resolve) => {
+            this.waiters.push(resolve)
+        })
+    }
+    release(): void {
+        this.running--
+        const next = this.waiters.shift()
+        if (next) {
+            this.running++
+            next()
+        }
+    }
+}
+function parseAnalyzeResult(raw: string): {
+    relevance: string
+    summary: string
+} {
+    const relMatch = raw.match(/##\s*相关性\s*\n+([^\n#]+)/i)
+    const relevance = relMatch?.[1]?.trim().toLowerCase() || 'unknown'
+    const sumMatch = raw.match(/##\s*概述\s*\n+([\s\S]*?)(?=\n##\s|\n*$)/i)
+    const summary = sumMatch?.[1]?.trim() || raw.slice(0, 120)
+    return { relevance, summary }
+}
 
 const subLog = logger.child({ module: 'doc-analyzer' })
 

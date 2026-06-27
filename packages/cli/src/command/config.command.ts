@@ -1,4 +1,4 @@
-import { autocomplete, intro, note, outro, select, text } from '@clack/prompts'
+import { autocomplete, intro, note, outro, select } from '@clack/prompts'
 import type { ModelProvider, ProjectConfig } from '@vein/core'
 import {
     listModels,
@@ -19,12 +19,8 @@ function display(c: ProjectConfig): string {
         `Model:    ${formatMd(c.model)}`,
         `Summarizer: ${formatMd(c.summarizer)}`,
         `Segmenter:  ${formatMd(c.segmenter)}`,
-        `Subagent:   ${formatMd(c.subagent)}`,
         `Reviewer:   ${formatMd(c.reviewer)}`,
-        `Search:     ${formatMd(c.searchAgent)}`,
         `Thinking:  ${c.thinkingLevel ?? 'off'}`,
-        `Max Full:  ${c.maxAnalyzeResultFull ?? 15} (docs)`,
-        `Parallel:  ${c.maxParallelAnalyze ?? 10}`,
     ].join('\n')
 }
 
@@ -83,15 +79,17 @@ export function register(program: Command) {
                 outro('Not in a vein project. Run "vein new" first.')
                 return
             }
-            let config = await loadProjectConfig(root)
+            const config = await loadProjectConfig(root)
             if (!config) {
                 outro('No config found. Run "vein new" first.')
                 return
             }
 
+            let current = { ...config }
+
             while (true) {
                 intro('Vein Configuration')
-                note(display(config))
+                note(display(current))
 
                 const choice = await select({
                     message: 'What would you like to change?',
@@ -99,47 +97,27 @@ export function register(program: Command) {
                         {
                             value: 'model',
                             label: 'Model',
-                            hint: formatMd(config.model),
+                            hint: formatMd(current.model),
                         },
                         {
                             value: 'summarizer',
                             label: 'Summarizer',
-                            hint: formatMd(config.summarizer),
+                            hint: formatMd(current.summarizer),
                         },
                         {
                             value: 'segmenter',
                             label: 'Segmenter',
-                            hint: formatMd(config.segmenter),
-                        },
-                        {
-                            value: 'subagent',
-                            label: 'Subagent',
-                            hint: formatMd(config.subagent),
+                            hint: formatMd(current.segmenter),
                         },
                         {
                             value: 'reviewer',
                             label: 'Reviewer',
-                            hint: formatMd(config.reviewer),
-                        },
-                        {
-                            value: 'searchAgent',
-                            label: 'Search Screener',
-                            hint: formatMd(config.searchAgent),
+                            hint: formatMd(current.reviewer),
                         },
                         {
                             value: 'thinkingLevel',
                             label: 'Thinking Level',
-                            hint: config.thinkingLevel ?? 'off',
-                        },
-                        {
-                            value: 'maxAnalyzeResultFull',
-                            label: 'Max Full Results',
-                            hint: `${config.maxAnalyzeResultFull ?? 15} docs kept uncompressed`,
-                        },
-                        {
-                            value: 'maxParallelAnalyze',
-                            label: 'Max Parallel Analyze',
-                            hint: `${config.maxParallelAnalyze ?? 10} concurrent calls`,
+                            hint: current.thinkingLevel ?? 'off',
                         },
                         { value: 'done', label: 'Done — save and exit' },
                     ],
@@ -149,58 +127,40 @@ export function register(program: Command) {
 
                 switch (choice) {
                     case 'model': {
-                        const md = await pickModel('Model', config.model)
-                        if (md) config = { ...config, model: md }
+                        const md = await pickModel('Model', current.model)
+                        if (md) current = { ...current, model: md }
                         break
                     }
                     case 'summarizer': {
                         const md = await pickModel(
                             'Summarizer',
-                            config.summarizer,
+                            current.summarizer,
                             'defaults to Model if unset'
                         )
-                        config = { ...config, summarizer: md }
+                        current = { ...current, summarizer: md }
                         break
                     }
                     case 'segmenter': {
                         const md = await pickModel(
                             'Segmenter',
-                            config.segmenter,
+                            current.segmenter,
                             'defaults to Model if unset'
                         )
-                        config = { ...config, segmenter: md }
-                        break
-                    }
-                    case 'subagent': {
-                        const md = await pickModel(
-                            'Subagent',
-                            config.subagent,
-                            'defaults to Model if unset'
-                        )
-                        config = { ...config, subagent: md }
+                        current = { ...current, segmenter: md }
                         break
                     }
                     case 'reviewer': {
                         const md = await pickModel(
                             'Reviewer',
-                            config.reviewer,
+                            current.reviewer,
                             'defaults to Model if unset'
                         )
-                        config = { ...config, reviewer: md }
-                        break
-                    }
-                    case 'searchAgent': {
-                        const md = await pickModel(
-                            'Search Screener',
-                            config.searchAgent,
-                            'defaults to Model if unset'
-                        )
-                        config = { ...config, searchAgent: md }
+                        current = { ...current, reviewer: md }
                         break
                     }
                     case 'thinkingLevel': {
                         const level: string | symbol = await select({
-                            message: `Thinking level (current: ${config.thinkingLevel ?? 'off'})`,
+                            message: `Thinking level (current: ${current.thinkingLevel ?? 'off'})`,
                             options: [
                                 {
                                     value: 'off',
@@ -215,8 +175,8 @@ export function register(program: Command) {
                             ],
                         })
                         if (typeof level === 'string') {
-                            config = {
-                                ...config,
+                            current = {
+                                ...current,
                                 thinkingLevel:
                                     level === 'off'
                                         ? undefined
@@ -225,57 +185,17 @@ export function register(program: Command) {
                         }
                         break
                     }
-                    case 'maxAnalyzeResultFull': {
-                        const raw = await text({
-                            message: `Max full analyze results (current: ${config.maxAnalyzeResultFull ?? 15})`,
-                            placeholder: '15',
-                            validate: (v) => {
-                                if (!v) return
-                                const n = Number(v)
-                                if (!Number.isInteger(n) || n < 1 || n > 50)
-                                    return 'Must be an integer between 1 and 50'
-                            },
-                        })
-                        if (typeof raw === 'string') {
-                            const n = Number(raw)
-                            config = {
-                                ...config,
-                                maxAnalyzeResultFull: n === 15 ? undefined : n,
-                            }
-                        }
-                        break
-                    }
-                    case 'maxParallelAnalyze': {
-                        const raw = await text({
-                            message: `Max parallel analyze calls (current: ${config.maxParallelAnalyze ?? 10})`,
-                            placeholder: '10',
-                            validate: (v) => {
-                                if (!v) return
-                                const n = Number(v)
-                                if (!Number.isInteger(n) || n < 1 || n > 30)
-                                    return 'Must be an integer between 1 and 30'
-                            },
-                        })
-                        if (typeof raw === 'string') {
-                            const n = Number(raw)
-                            config = {
-                                ...config,
-                                maxParallelAnalyze: n === 10 ? undefined : n,
-                            }
-                        }
-                        break
-                    }
                 }
 
                 // Save after each change so we don't lose progress
-                await saveProjectConfig(root, config)
+                await saveProjectConfig(root, current)
 
-                if (choice === 'model' && config.model) {
-                    setModelProvider(config.model)
+                if (choice === 'model' && current.model) {
+                    setModelProvider(current.model)
                 }
             }
 
-            await saveProjectConfig(root, config)
+            await saveProjectConfig(root, current)
             outro('Configuration saved')
         })
 }

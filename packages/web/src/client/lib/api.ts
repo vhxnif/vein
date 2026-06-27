@@ -78,6 +78,7 @@ export interface HistoryEntry {
 
 export interface NodeInfo {
     nodeId: string
+    docName: string
     title: string
     lineNum: number
     text: string

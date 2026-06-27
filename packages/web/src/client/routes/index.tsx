@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { annotateNodeRefs, Markdown } from '../components/Markdown.tsx'
+import { annotateRefs, Markdown } from '../components/Markdown.tsx'
 import { RunCat } from '../components/RunCat.tsx'
 import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
 import { exportResultAsHtml } from '../lib/exportHtml.ts'
@@ -24,7 +24,6 @@ function HomePage() {
         mode,
         timeline,
         runSearch,
-        setMode,
     } = useSearch()
 
     const [input, setInput] = useState(query)
@@ -111,18 +110,18 @@ function HomePage() {
                 reviewElapsedMs: result.reviewElapsedMs,
                 timeline: processBlocks,
                 elapsedMs: result.elapsedMs,
-                mode,
+                mode: result.review ? 'review' : 'quick',
                 project,
             })
         } finally {
             setExporting(false)
         }
-    }, [result, exporting, query, docIdMap, processBlocks, mode, project])
+    }, [result, exporting, query, docIdMap, processBlocks, project])
 
     // Annotate node references in content for hover tooltips
     const annotatedContent = useMemo(() => {
         if (!result?.content) return ''
-        return annotateNodeRefs(result.content, docIdMap)
+        return annotateRefs(result.content, docIdMap)
     }, [result?.content, docIdMap])
 
     return (
@@ -162,34 +161,7 @@ function HomePage() {
                 />
             </div>
 
-            {/* Mode selector */}
-            <div className="mb-6 flex items-center gap-2">
-                <span className="font-sans text-[8pt] text-stone">Mode:</span>
-                <button
-                    type="button"
-                    disabled={searching}
-                    onClick={() => setMode('quick')}
-                    className={`px-[12pt] py-[4pt] rounded-full font-sans text-[8pt] font-medium transition-colors ${
-                        mode === 'quick'
-                            ? 'bg-ink text-ivory border border-ink'
-                            : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
-                    }`}
-                >
-                    Quick
-                </button>
-                <button
-                    type="button"
-                    disabled={searching}
-                    onClick={() => setMode('default')}
-                    className={`px-[12pt] py-[4pt] rounded-full font-sans text-[8pt] font-medium transition-colors ${
-                        mode === 'default'
-                            ? 'bg-ink text-ivory border border-ink'
-                            : 'border border-cream bg-transparent text-stone hover:border-ink/30 hover:text-near-black'
-                    }`}
-                >
-                    Review
-                </button>
-            </div>
+            {/* Mode selector — always 'default' since sub-agent pipeline was flattened */}
 
             {/* Desktop: initial searching state (mobile handled by Layout's StreamingStatusBar) */}
             {searching && timeline.length === 0 && (

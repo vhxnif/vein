@@ -1,25 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
-import type { NodeInfo } from '../lib/api.ts'
-import { fetchNode } from '../lib/api.ts'
-import { NodeTooltipContent } from './NodeTooltipContent.tsx'
+import type { DocInfo } from '../lib/api.ts'
+import { fetchDocument } from '../lib/api.ts'
+import { DocTooltipContent } from './DocTooltipContent.tsx'
 
 // ── Module-level cache ─────────────────────────────────────────
 
-const nodeCache = new Map<string, NodeInfo>()
+const docCache = new Map<string, DocInfo>()
 
-// ── NodeTooltip ────────────────────────────────────────────────
+// ── DocTooltip ────────────────────────────────────────────────
 
-interface NodeTooltipProps {
+interface DocTooltipProps {
     fullDocId: string
-    nodeId: string
     /** The anchor element to position the tooltip near */
     anchorEl: HTMLElement | null
 }
 
-export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
-    const cacheKey = `${fullDocId}:${nodeId}`
-    const cached = nodeCache.get(cacheKey)
-    const [node, setNode] = useState<NodeInfo | null>(cached ?? null)
+export function DocTooltip({ fullDocId, anchorEl }: DocTooltipProps) {
+    const cached = docCache.get(fullDocId)
+    const [doc, setDoc] = useState<DocInfo | null>(cached ?? null)
     const [loading, setLoading] = useState(!cached)
     const [error, setError] = useState<string | null>(null)
     const tooltipRef = useRef<HTMLDivElement>(null)
@@ -28,11 +26,11 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
         if (cached) return
 
         let cancelled = false
-        fetchNode(fullDocId, nodeId)
+        fetchDocument(fullDocId)
             .then((data) => {
                 if (cancelled) return
-                nodeCache.set(cacheKey, data)
-                setNode(data)
+                docCache.set(fullDocId, data)
+                setDoc(data)
                 setLoading(false)
             })
             .catch((err) => {
@@ -44,14 +42,13 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
         return () => {
             cancelled = true
         }
-    }, [fullDocId, nodeId, cacheKey, cached])
+    }, [fullDocId, cached])
 
     // Position relative to anchor, clamped to viewport
     const rect = anchorEl?.getBoundingClientRect()
     const tooltipWidth = Math.min(420, window.innerWidth - 16)
     const margin = 8
 
-    // Horizontal: clamp left so tooltip doesn't overflow viewport edges
     let left: number
     if (rect) {
         left = Math.min(
@@ -62,13 +59,11 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
         left = margin
     }
 
-    // Vertical: prefer below anchor, flip above if it would overflow bottom
     let top: number
     if (rect) {
         const belowTop = rect.bottom + 4
         const maxHeight = 280
         if (belowTop + maxHeight > window.innerHeight - margin) {
-            // Not enough space below — position above the anchor
             top = Math.max(margin, rect.top - maxHeight - 4)
         } else {
             top = belowTop
@@ -91,7 +86,7 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
             {loading && (
                 <div className="flex items-center gap-2 font-sans text-[8.5pt] text-ink">
                     <span className="inline-block w-3 h-3 border-2 border-ink/30 border-t-ink rounded-full animate-spin" />
-                    Loading source...
+                    Loading document...
                 </div>
             )}
 
@@ -99,8 +94,8 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
                 <div className="font-sans text-[8.5pt] text-error">{error}</div>
             )}
 
-            {node && !loading && (
-                <NodeTooltipContent nodeId={nodeId} node={node} />
+            {doc && !loading && (
+                <DocTooltipContent fullDocId={fullDocId} doc={doc} />
             )}
         </div>
     )

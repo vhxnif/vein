@@ -1,11 +1,17 @@
 import { createElement, type ReactNode, useMemo } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import { annotateNodeRefs, Markdown } from '../components/Markdown.tsx'
+import { DocTooltipContent } from '../components/DocTooltipContent.tsx'
+import {
+    annotateRefs,
+    Markdown,
+    resolveDocId,
+} from '../components/Markdown.tsx'
+import { NodeTooltipContent } from '../components/NodeTooltipContent.tsx'
 import type { SharedTimelineBlock } from '../components/TimelineBlockView.tsx'
 import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
-import type { NodeInfo } from './api.ts'
-import { fetchNode } from './api.ts'
+import type { DocInfo, NodeInfo } from './api.ts'
+import { fetchDocument, fetchNode } from './api.ts'
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -70,9 +76,15 @@ export async function exportResultAsHtml(
     // 3. Collect all CSS from the current page (Tailwind + Kami component styles)
     const css = await collectAllCss()
 
-    // 4. Extract node references from the content for tooltip data
-    const nodeRefs = extractNodeRefs(content, docIdMap)
-    const nodeDataMap = await fetchNodeData(nodeRefs)
+    // 4. Extract node and doc references from the ANNOTATED content for tooltip data.
+    //    Must use annotated content because the raw markdown may contain bare
+    //    (unbracketed) references that extractRefs doesn't handle directly.
+    const annotatedContent = annotateRefs(content, docIdMap)
+    const { nodeRefs, docRefs } = extractRefs(annotatedContent, docIdMap)
+    const [nodeDataMap, docDataMap] = await Promise.all([
+        fetchNodeData(nodeRefs),
+        fetchDocData(docRefs),
+    ])
 
     // 5. Build the full HTML document
     const fullHtml = buildHtmlDocument({
@@ -80,6 +92,7 @@ export async function exportResultAsHtml(
         capturedHtml,
         css,
         nodeDataMap,
+        docDataMap,
         review,
         reviewElapsedMs,
         elapsedMs,
@@ -186,7 +199,7 @@ function ExportPreview({
     project,
 }: ExportPreviewProps) {
     const annotatedContent = useMemo(
-        () => annotateNodeRefs(content, docIdMap),
+        () => annotateRefs(content, docIdMap),
         [content, docIdMap]
     )
 
@@ -317,70 +330,99 @@ function ExportPreview({
                     'mt-6 flex items-center gap-4 font-sans text-[8pt] text-stone',
             },
             createElement('span', null, `${(elapsedMs / 1000).toFixed(1)}s`),
-            createElement(
-                'span',
-                {
-                    className: `inline-block px-[12pt] py-[2pt] rounded-full font-sans text-[7.5pt] font-medium ${
-                        mode === 'quick'
-                            ? 'border border-ink/30 bg-transparent text-stone'
-                            : 'bg-ink/10 text-ink'
-                    }`,
-                },
-                mode === 'quick' ? 'Quick' : 'Review'
-            )
+            mode === 'review' &&
+                createElement(
+                    'span',
+                    {
+                        className: `inline-block px-[12pt] py-[2pt] rounded-full font-sans text-[7.5pt] font-medium bg-ink/10 text-ink`,
+                    },
+                    'Review'
+                )
         )
     )
 }
 
-// ── Node reference extraction ──────────────────────────────────
+// ── Reference extraction ───────────────────────────────────────
 
 interface NodeRef {
     fullDocId: string
     nodeId: string
 }
 
+interface DocRef {
+    fullDocId: string
+}
+
 /**
- * Find all `[XXXXXXXX:YYYY](node://fullDocId/nodeId)` and bare `[XXXXXXXX:YYYY]`
- * patterns in markdown content.
+ * Find all node:// and doc:// references in annotated markdown content.
  */
-function extractNodeRefs(
+function extractRefs(
     content: string,
     docIdMap?: Map<string, string>
-): NodeRef[] {
-    const seen = new Set<string>()
-    const refs: NodeRef[] = []
+): { nodeRefs: NodeRef[]; docRefs: DocRef[] } {
+    const seenNodes = new Set<string>()
+    const seenDocs = new Set<string>()
+    const nodeRefs: NodeRef[] = []
+    const docRefs: DocRef[] = []
 
-    // Match markdown links with node:// protocol
-    const re = /\[.*?\]\(node:\/\/([a-f0-9]+)\/(\d+)\)/g
+    // Match markdown links with node:// protocol.
+    const nodeRe = /\[.*?\]\(node:\/\/([a-f0-9]+)\/(\d+)\)/g
     let m: RegExpExecArray | null
-    m = re.exec(content)
+    m = nodeRe.exec(content)
     while (m !== null) {
-        const fullDocId = m[1] ?? ''
+        const rawDocId = m[1] ?? ''
+        const fullDocId = resolveDocId(rawDocId, docIdMap)
         const nodeId = m[2] ?? ''
         const key = `${fullDocId}:${nodeId}`
-        if (!seen.has(key)) {
-            seen.add(key)
-            refs.push({ fullDocId, nodeId })
+        if (!seenNodes.has(key)) {
+            seenNodes.add(key)
+            nodeRefs.push({ fullDocId, nodeId })
         }
-        m = re.exec(content)
+        m = nodeRe.exec(content)
     }
 
-    // Also match bare `[XXXXXXXX:YYYY]` patterns
-    const bareRe = /\[([a-f0-9]{8,}):(\d{2,5})\](?!\()/g
-    m = bareRe.exec(content)
+    // Also match bare `[XXXXXXXX:YYYY]` patterns (safety net for node refs).
+    const bareNodeRe = /\[([a-f0-9]{8,}):(\d{2,5})\](?!\()/g
+    m = bareNodeRe.exec(content)
     while (m !== null) {
-        const shortId = m[1] ?? ''
+        const rawDocId = m[1] ?? ''
         const nodeId = m[2] ?? ''
-        const fullDocId = docIdMap?.get(shortId) ?? shortId
+        const fullDocId = resolveDocId(rawDocId, docIdMap)
         const key = `${fullDocId}:${nodeId}`
-        if (!seen.has(key)) {
-            seen.add(key)
-            refs.push({ fullDocId, nodeId })
+        if (!seenNodes.has(key)) {
+            seenNodes.add(key)
+            nodeRefs.push({ fullDocId, nodeId })
         }
-        m = bareRe.exec(content)
+        m = bareNodeRe.exec(content)
     }
 
-    return refs
+    // Match markdown links with doc:// protocol.
+    const docRe = /\[.*?\]\(doc:\/\/([a-f0-9]+)\)/g
+    m = docRe.exec(content)
+    while (m !== null) {
+        const rawDocId = m[1] ?? ''
+        const fullDocId = resolveDocId(rawDocId, docIdMap)
+        if (!seenDocs.has(fullDocId)) {
+            seenDocs.add(fullDocId)
+            docRefs.push({ fullDocId })
+        }
+        m = docRe.exec(content)
+    }
+
+    // Also match bare `[XXXXXXXX]` patterns (safety net for doc refs).
+    const bareDocRe = /\[([a-f0-9]{8,})\](?!\()/g
+    m = bareDocRe.exec(content)
+    while (m !== null) {
+        const rawDocId = m[1] ?? ''
+        const fullDocId = resolveDocId(rawDocId, docIdMap)
+        if (!seenDocs.has(fullDocId)) {
+            seenDocs.add(fullDocId)
+            docRefs.push({ fullDocId })
+        }
+        m = bareDocRe.exec(content)
+    }
+
+    return { nodeRefs, docRefs }
 }
 
 // ── Node data fetching ─────────────────────────────────────────
@@ -389,8 +431,8 @@ async function fetchNodeData(refs: NodeRef[]): Promise<
     Map<
         string,
         NodeInfo & {
-            textHtml?: string
-            titleHtml?: string
+            /** Pre-rendered HTML of the complete tooltip content (header + body) */
+            tooltipHtml: string
             shortNodeId: string
         }
     >
@@ -398,8 +440,7 @@ async function fetchNodeData(refs: NodeRef[]): Promise<
     const map = new Map<
         string,
         NodeInfo & {
-            textHtml?: string
-            titleHtml?: string
+            tooltipHtml: string
             shortNodeId: string
         }
     >()
@@ -415,32 +456,22 @@ async function fetchNodeData(refs: NodeRef[]): Promise<
         })
     )
 
-    // 2. Collect texts that need rendering (body + title)
-    const toRender: {
-        key: string
-        text: string
-        field: 'textHtml' | 'titleHtml'
-    }[] = []
+    // 2. Store fetched data (without tooltipHtml yet)
+    const toRender: { key: string; nodeId: string; data: NodeInfo }[] = []
     for (const result of apiResults) {
         if (result.status === 'fulfilled') {
             const { key, ref, data } = result.value
-            const bodyMd = data.summary || data.text || ''
             map.set(key, {
                 ...data,
                 shortNodeId: ref.nodeId,
-                textHtml: '',
-                titleHtml: '',
+                tooltipHtml: '',
             })
-            if (data.title) {
-                toRender.push({ key, text: data.title, field: 'titleHtml' })
-            }
-            if (bodyMd) {
-                toRender.push({ key, text: bodyMd, field: 'textHtml' })
-            }
+            toRender.push({ key, nodeId: ref.nodeId, data })
         }
     }
 
-    // 3. Render all texts to HTML using the same <Markdown> component
+    // 3. Pre-render tooltip content using the EXACT same NodeTooltipContent
+    //    component used by the web hover tooltip — guaranteeing visual fidelity
     if (toRender.length > 0) {
         const container = document.createElement('div')
         container.style.cssText =
@@ -448,29 +479,101 @@ async function fetchNodeData(refs: NodeRef[]): Promise<
         document.body.appendChild(container)
         const root = createRoot(container)
 
-        for (const { key, text, field } of toRender) {
+        for (const { key, nodeId, data } of toRender) {
             try {
                 flushSync(() => {
-                    root.render(createElement(Markdown, null, text))
+                    root.render(
+                        createElement(NodeTooltipContent, {
+                            nodeId,
+                            node: data,
+                        })
+                    )
                 })
                 const entry = map.get(key)
                 if (entry) {
-                    let html = container.innerHTML
-                    // For titles, strip the markdown-body wrapper + <p> to get inline HTML
-                    if (field === 'titleHtml') {
-                        html = stripMarkdownWrapper(html)
-                    }
-                    map.set(key, { ...entry, [field]: html })
+                    map.set(key, { ...entry, tooltipHtml: container.innerHTML })
                 }
             } catch {
-                // Fallback: use plain escaped text
+                // Fallback: plain escaped text summary
                 const entry = map.get(key)
                 if (entry) {
-                    const fallback =
-                        field === 'titleHtml'
-                            ? escapeHtml(text.slice(0, 200))
-                            : `<p>${escapeHtml(text.slice(0, 500))}</p>`
-                    map.set(key, { ...entry, [field]: fallback })
+                    const fallback = `<p>${escapeHtml(data.summary || data.text || '').slice(0, 500)}</p>`
+                    map.set(key, { ...entry, tooltipHtml: fallback })
+                }
+            }
+        }
+
+        root.unmount()
+        document.body.removeChild(container)
+    }
+
+    return map
+}
+
+// ── Doc data fetching ─────────────────────────────────────────
+
+async function fetchDocData(refs: DocRef[]): Promise<
+    Map<
+        string,
+        DocInfo & {
+            tooltipHtml: string
+        }
+    >
+> {
+    const map = new Map<
+        string,
+        DocInfo & {
+            tooltipHtml: string
+        }
+    >()
+
+    if (refs.length === 0) return map
+
+    const apiResults = await Promise.allSettled(
+        refs.map(async (ref) => {
+            const data = await fetchDocument(ref.fullDocId)
+            return { ref, data }
+        })
+    )
+
+    const toRender: { key: string; data: DocInfo }[] = []
+    for (const result of apiResults) {
+        if (result.status === 'fulfilled') {
+            const { ref, data } = result.value
+            map.set(ref.fullDocId, { ...data, tooltipHtml: '' })
+            toRender.push({ key: ref.fullDocId, data })
+        }
+    }
+
+    if (toRender.length > 0) {
+        const container = document.createElement('div')
+        container.style.cssText =
+            'position:fixed;left:-9999px;top:0;width:420px;visibility:hidden;'
+        document.body.appendChild(container)
+        const root = createRoot(container)
+
+        for (const { key, data } of toRender) {
+            try {
+                flushSync(() => {
+                    root.render(
+                        createElement(DocTooltipContent, {
+                            fullDocId: key,
+                            doc: data,
+                        })
+                    )
+                })
+                const entry = map.get(key)
+                if (entry) {
+                    map.set(key, {
+                        ...entry,
+                        tooltipHtml: container.innerHTML,
+                    })
+                }
+            } catch {
+                const entry = map.get(key)
+                if (entry) {
+                    const fallback = `<p>${escapeHtml(data.ftsSummary || data.title || '').slice(0, 500)}</p>`
+                    map.set(key, { ...entry, tooltipHtml: fallback })
                 }
             }
         }
@@ -491,9 +594,14 @@ function buildHtmlDocument(opts: {
     nodeDataMap: Map<
         string,
         NodeInfo & {
-            textHtml?: string
-            titleHtml?: string
+            tooltipHtml: string
             shortNodeId: string
+        }
+    >
+    docDataMap: Map<
+        string,
+        DocInfo & {
+            tooltipHtml: string
         }
     >
     review?: { verdict: string; score: number; reason: string }
@@ -502,23 +610,29 @@ function buildHtmlDocument(opts: {
     mode: string
     project?: string | null
 }): string {
-    const { query, capturedHtml, css, nodeDataMap } = opts
+    const { query, capturedHtml, css, nodeDataMap, docDataMap } = opts
 
     const title = `Vein: ${query.slice(0, 60)}${query.length > 60 ? '\u2026' : ''}`
 
     // Serialize node data: keyed by "fullDocId:shortNodeId" for tooltip lookup.
-    // HTML data-doc-id uses full doc hash, data-node-id uses short numeric id.
     const nodeDataJson = JSON.stringify(
         Object.fromEntries(
             [...nodeDataMap].map(([key, node]) => [
                 key,
                 {
                     nodeId: node.shortNodeId,
-                    title: node.title,
-                    titleHtml: node.titleHtml ?? '',
-                    summary: node.summary,
-                    textHtml: node.textHtml ?? '',
+                    tooltipHtml: node.tooltipHtml,
                 },
+            ])
+        )
+    )
+
+    // Serialize doc data: keyed by fullDocId.
+    const docDataJson = JSON.stringify(
+        Object.fromEntries(
+            [...docDataMap].map(([key, doc]) => [
+                key,
+                { tooltipHtml: doc.tooltipHtml },
             ])
         )
     )
@@ -536,7 +650,7 @@ ${css}
 /* ── Override: dim paper texture for export readability ── */
 body::before { opacity: 0.015 !important; }
 
-/* ── Node reference citations (for tooltip JS) ─────── */
+/* ── Reference citations (for tooltip JS) ─────────── */
 [data-doc-id] {
   cursor: pointer;
   border-bottom: 1px dashed rgba(27,54,93,0.3);
@@ -556,21 +670,19 @@ body::before { opacity: 0.015 !important; }
 </head>
 <body>
 <script type="application/json" id="node-data">${nodeDataJson}</script>
+<script type="application/json" id="doc-data">${docDataJson}</script>
 
 ${capturedHtml}
 
-<div id="node-tooltip" class="fixed z-50 max-h-[280px] overflow-y-auto kami-scrollbar bg-parchment border border-ink/20 rounded-[8pt] shadow-lg p-4" style="display:none"></div>
+<div id="ref-tooltip" class="fixed z-50 max-h-[280px] overflow-y-auto kami-scrollbar bg-parchment border border-ink/20 rounded-[8pt] shadow-lg p-4" style="display:none"></div>
 
 <script>
 (function() {
-  var data = JSON.parse(document.getElementById('node-data').textContent);
-  var tooltip = document.getElementById('node-tooltip');
+  var nodeData = JSON.parse(document.getElementById('node-data').textContent);
+  var docData = JSON.parse(document.getElementById('doc-data').textContent);
+  var tooltip = document.getElementById('ref-tooltip');
   var hideTimer = null;
   var activeRef = null;
-
-  function esc(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
 
   function positionTooltip(ref) {
     var rect = ref.getBoundingClientRect();
@@ -592,14 +704,11 @@ ${capturedHtml}
     activeRef = ref;
     var docId = ref.getAttribute('data-doc-id') || '';
     var nodeId = ref.getAttribute('data-node-id') || '';
-    var node = data[docId + ':' + nodeId];
-    if (!node) { tooltip.style.display = 'none'; return; }
-    tooltip.innerHTML =
-      '<div class="flex items-center gap-2 mb-3 pb-2 border-b border-ink/15">' +
-        '<span class="font-mono text-[7pt] bg-ink/10 px-1.5 py-0.5 rounded text-ink shrink-0">' + esc(node.nodeId) + '</span>' +
-        '<span class="font-serif text-[10pt] font-medium text-near-black leading-snug">' + (node.titleHtml || esc(node.title || '')) + '</span>' +
-      '</div>' +
-      '<div class="text-[9pt] leading-relaxed text-near-black">' + (node.textHtml || node.summary || '') + '</div>';
+    // Try node ref first (key: docId:nodeId), then doc ref (key: docId)
+    var entry = nodeId ? nodeData[docId + ':' + nodeId] : null;
+    if (!entry) entry = docData[docId];
+    if (!entry || !entry.tooltipHtml) { tooltip.style.display = 'none'; return; }
+    tooltip.innerHTML = entry.tooltipHtml;
     positionTooltip(ref);
     tooltip.style.display = 'block';
   });
@@ -642,26 +751,6 @@ ${capturedHtml}
 </script>
 </body>
 </html>`
-}
-
-// ── HTML post-processing ───────────────────────────────────────
-
-/**
- * Strip the outer <div class="markdown-body"> wrapper and, if the content
- * is a single <p>, also strip that. Returns only inline HTML content.
- * Used for titleHtml to keep tooltip header compact.
- */
-function stripMarkdownWrapper(html: string): string {
-    // Remove <div class="markdown-body">...</div> wrapper
-    let inner = html.replace(/^<div class="markdown-body"[^>]*>/, '')
-    inner = inner.replace(/<\/div>$/, '')
-
-    // If it's a single <p>, unwrap it (keep inline content like <code>, <em>, etc.)
-    const pMatch = inner.match(/^<p[^>]*>(.*)<\/p>$/s)
-    if (pMatch?.[1] && !pMatch[1].includes('<p')) {
-        return pMatch[1]
-    }
-    return inner
 }
 
 // ── Download helper ────────────────────────────────────────────

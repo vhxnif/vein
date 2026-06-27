@@ -33,24 +33,14 @@ function formatTrace(
             const num = String(i + 1).padStart(2, ' ')
             const tool = s.tool
             let detail = s.resultSummary
-            if (tool === 'analyzeDocument') {
-                const a = s.args as { docId?: string; userQuery?: string }
-                const name =
-                    (a.docId && docNames.get(a.docId)) ||
-                    a.docId?.slice(0, 8) ||
-                    '?'
-                detail = `${name} → ${s.resultSummary}`
-            }
-            if (tool === 'getDocNodeDetails') {
+            if (tool === 'getDocStructure' || tool === 'getDocNodeDetails') {
                 const a = s.args as { docId?: string; nodeId?: string }
                 const name =
                     (a.docId && docNames.get(a.docId)) ||
                     a.docId?.slice(0, 8) ||
                     '?'
-                detail =
-                    a.docId && a.nodeId
-                        ? `${name}/${a.nodeId} → ${s.resultSummary}`
-                        : s.resultSummary
+                const nodeId = a.nodeId ? `/${a.nodeId}` : ''
+                detail = `${name}${nodeId} → ${s.resultSummary}`
             }
             return `  ${num}. ${tool}  ${detail}`
         })
@@ -68,11 +58,6 @@ export function register(program: Command) {
             'disable interactive prompt, output JSON'
         )
         .option('-t, --trace', 'show retrieval trace in output')
-        .option(
-            '-m, --mode <mode>',
-            'retrieval mode: default (analyze+review) or quick (skip review, faster)',
-            'default'
-        )
         .action(
             async (
                 queryArg?: string,
@@ -80,7 +65,6 @@ export function register(program: Command) {
                     noInteractive?: boolean
                     interactive?: boolean
                     trace?: boolean
-                    mode?: string
                 }
             ) => {
                 const interactive = options?.interactive ?? true
@@ -139,14 +123,7 @@ export function register(program: Command) {
                 let result: SearchResult
                 try {
                     result = await searchDocuments(query, {
-                        segmenter: config.segmenter,
-                        subagentModel: config.subagent,
                         reviewerModel: config.reviewer,
-                        searchAgentModel: config.searchAgent,
-                        maxAnalyzeResultFull: config.maxAnalyzeResultFull,
-                        maxParallelAnalyze: config.maxParallelAnalyze,
-                        mode:
-                            (options?.mode as 'default' | 'quick') ?? 'default',
                         onStep: searchSpinner
                             ? (label) => searchSpinner.message(label)
                             : undefined,
@@ -167,7 +144,6 @@ export function register(program: Command) {
                 const elapsed = formatDuration(elapsedMs)
 
                 const projectRoot = resolveProjectRoot()
-                const mode = (options?.mode as 'default' | 'quick') ?? 'default'
                 if (projectRoot) {
                     const timeline: HistoryTimelineBlock[] = result.trace.map(
                         (s) => ({
@@ -182,7 +158,7 @@ export function register(program: Command) {
                         query,
                         result,
                         elapsedMs,
-                        mode,
+                        result.review ? 'review' : 'quick',
                         timeline
                     ).catch((err) =>
                         log.warn({

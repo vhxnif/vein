@@ -5,6 +5,7 @@ import type { BaseDocNode } from '@vein/core'
 import {
     createCachedSummarizer,
     deleteDoc,
+    getDoc,
     getDocFtsSummary,
     getDocumentDetail,
     getFullTree,
@@ -57,7 +58,19 @@ docsRouter.get('/:id/nodes/:nodeId', async (c) => {
     const nodeData = await getNodeDetails<BaseDocNode>(fullNodeId)
     if (!nodeData) return c.json({ error: 'Node not found' }, 404)
 
-    return c.json({ nodeId: fullNodeId, ...nodeData })
+    // Resolve document filename from doc metadata
+    let docName = docId.slice(0, 8)
+    const doc = await getDoc(docId)
+    if (doc) {
+        try {
+            const meta = JSON.parse(doc.metadata) as { title?: string }
+            docName = meta.title ?? docId.slice(0, 8)
+        } catch {
+            // fallback to short ID
+        }
+    }
+
+    return c.json({ nodeId: fullNodeId, docName, ...nodeData })
 })
 
 // ── DELETE /api/projects/current/documents/:id ───────────────────

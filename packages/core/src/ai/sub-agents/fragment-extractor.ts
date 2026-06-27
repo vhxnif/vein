@@ -1,4 +1,6 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: tools use dynamic args */
+/** @deprecated Replaced by direct extraction via getDocStructure/getDocNodeDetails in librarian.ts.
+ *  Kept for reference only. Will be removed in a future version. */
 
 import { logger } from '../../config/index.ts'
 import type { ModelProvider } from '../../config/type.ts'
@@ -11,8 +13,31 @@ import {
     formatSize,
     makeGetDocNodeDetails,
     makeGetDocStructure,
-    Semaphore,
 } from './utils.ts'
+
+// Local copy for deprecated file (removed from utils.ts)
+class Semaphore {
+    private waiters: (() => void)[] = []
+    private running = 0
+    constructor(private max: number) {}
+    async acquire(): Promise<void> {
+        if (this.running < this.max) {
+            this.running++
+            return
+        }
+        return new Promise<void>((resolve) => {
+            this.waiters.push(resolve)
+        })
+    }
+    release(): void {
+        this.running--
+        const next = this.waiters.shift()
+        if (next) {
+            this.running++
+            next()
+        }
+    }
+}
 
 const subLog = logger.child({ module: 'fragment-extractor' })
 

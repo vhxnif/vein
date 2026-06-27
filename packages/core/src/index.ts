@@ -9,14 +9,13 @@ export {
     listProviders,
     setModelProvider,
 } from './ai/base.ts'
-export type { LibrarianResult, Mode, TraceStep } from './ai/librarian.ts'
+export type { LibrarianResult, TraceStep } from './ai/librarian.ts'
 export { librarian } from './ai/librarian.ts'
 export type { ReviewResult, SourceRef } from './ai/sub-agents/reviewer.ts'
 export { reviewer } from './ai/sub-agents/reviewer.ts'
 export type { SearchOptions, SearchResult } from './ai/tools.ts'
 export {
     resolveDocNames,
-    searchDocsByKeyword,
     searchDocuments,
 } from './ai/tools.ts'
 export { createCachedSummarizer } from './config/cached-summarizer.ts'

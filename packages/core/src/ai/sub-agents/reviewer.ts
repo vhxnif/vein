@@ -202,31 +202,28 @@ function buildReviewTools(): ToolDef[] {
     ]
 }
 
-export const MAX_REVIEW_CALLS = 3
-
 /**
  * Creates the main agent's "reviewResult" tool that wraps the
- * Reviewer sub-agent with call budget enforcement.
+ * Reviewer sub-agent. No hard call budget — the main agent's
+ * global tool budget (MAX_MAIN_TOOL_CALLS) provides the limit.
  */
 export function createReviewResultTool(
     ctx: ToolCtx,
     modelOverride?: ModelProvider
 ): { tool: any; meta: ToolMeta } {
-    let reviewCount = 0
     const { ok, tool, onStep } = ctx
     const toolDef = {
         name: 'reviewResult',
         description:
-            '审查检索结果是否满足用户需求。完成检索后、回复用户前必须调用。' +
-            '不通过时增量调整，不要从头搜索！' +
-            `最多调用 ${MAX_REVIEW_CALLS} 次（含首次），超限会被系统拒绝。`,
+            '审查检索结果是否满足用户需求。可选调用，用于验证答案准确性。' +
+            '不通过时可增量调整后重试，但不要从头搜索。',
         parameters: Type.Object({
             query: Type.String({ description: '用户原始查询' }),
             result: Type.String({ description: '准备返回给用户的检索结果' }),
             sources: Type.String({
                 description:
                     '引用的数据源地址 JSON 字符串，必填，格式：\'[{"docId":"abc","nodeId":"0001"}]\'。' +
-                    '必须从各文档子 Agent 分析的「## 数据来源」中收集全部 nodeId。空或缺省会导致审查失败。',
+                    '从已读取的节点中收集 docId 和纯 nodeId（仅冒号前数字前缀）。',
             }),
         }),
         execute: tool(async (_, p) => {
@@ -234,22 +231,6 @@ export function createReviewResultTool(
                 query: string
                 result: string
                 sources?: string
-            }
-            reviewCount++
-            if (reviewCount > MAX_REVIEW_CALLS) {
-                const reason = `reviewResult 已达最大调用次数 ${MAX_REVIEW_CALLS}，请直接输出最终答案`
-                logger.warn({
-                    reviewCount,
-                    content: 'Review call budget exceeded, blocking',
-                })
-                return ok(
-                    JSON.stringify({
-                        verdict: 'fail',
-                        score: 1,
-                        reason,
-                        suggestion: '',
-                    })
-                )
             }
             let parsed: SourceRef[] | undefined
             if (sources) {
@@ -264,8 +245,7 @@ export function createReviewResultTool(
                 result,
                 parsed,
                 onStep,
-                modelOverride,
-                reviewCount
+                modelOverride
             )
             return ok(JSON.stringify(review))
         }),
@@ -278,8 +258,7 @@ export async function reviewer(
     librarianResponse: string,
     sources?: SourceRef[],
     onStep?: (label: string) => void,
-    modelOverride?: ModelProvider,
-    reviewCount?: number
+    modelOverride?: ModelProvider
 ): Promise<ReviewResult> {
     // Deduplicate by (docId, normalized nodeId) to avoid redundant fetches.
     const uniqueSources = sources?.length
@@ -299,11 +278,7 @@ export async function reviewer(
               .join('\n')
         : '(无数据源)'
 
-    onStep?.(
-        reviewCount && reviewCount > 1
-            ? `Reviewing results... (retry ${reviewCount - 1})`
-            : 'Reviewing results...'
-    )
+    onStep?.('Reviewing results...')
 
     const model = modelOverride
         ? getModel(modelOverride.provider as never, modelOverride.model)

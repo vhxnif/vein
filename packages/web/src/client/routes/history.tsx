@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { annotateNodeRefs, Markdown } from '../components/Markdown.tsx'
+import { annotateRefs, Markdown } from '../components/Markdown.tsx'
 import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
 import type { HistoryEntry } from '../lib/api.ts'
 import { fetchHistory, fetchHistoryEntry } from '../lib/api.ts'
@@ -264,15 +264,11 @@ function HistoryRow({
                             {entry.verdict} {entry.score}/5
                         </span>
                     )}
-                    <span
-                        className={`px-2 py-0.5 rounded-full font-sans text-[7.5pt] font-medium ${
-                            entry.mode === 'quick'
-                                ? 'border border-ink/30 bg-transparent text-stone'
-                                : 'bg-ink/10 text-ink'
-                        }`}
-                    >
-                        {entry.mode === 'quick' ? 'Quick' : 'Review'}
-                    </span>
+                    {entry.mode === 'review' && (
+                        <span className="px-2 py-0.5 rounded-full font-sans text-[7.5pt] font-medium bg-ink/10 text-ink">
+                            Review
+                        </span>
+                    )}
                     {showDate && (
                         <span className="text-stone">
                             {date} {time}
@@ -319,7 +315,7 @@ function ExpandedEntry({ id }: { id: string }) {
     const annotatedAnswer = useMemo(() => {
         const raw = entry?.answer || ''
         if (!raw) return ''
-        return annotateNodeRefs(raw, docIdMap)
+        return annotateRefs(raw, docIdMap)
     }, [entry?.answer, docIdMap])
 
     const handleExport = useCallback(async () => {
