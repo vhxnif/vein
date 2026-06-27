@@ -257,8 +257,6 @@ Librarian Agent（单一 Agent，自主规划检索路径）
         → Reviewer 子 Agent 验证答案覆盖度和准确性
 ```
 
-> 相比旧版的多 Agent 流水线（SearchScreener → Document Analyzer → Reviewer），扁平化的单 Agent 设计消除了子 Agent 间的上下文传递损耗和固定编排逻辑，让 LLM 自行根据搜索结果动态调整策略——结果少时换词重搜，snippet 不确定时先看大纲再决定是否深读。
-
 ### 批量导入管道
 
 ```
