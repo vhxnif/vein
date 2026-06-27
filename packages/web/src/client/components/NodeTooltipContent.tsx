@@ -25,20 +25,7 @@ export function NodeTooltipContent({ nodeId, node }: NodeTooltipContentProps) {
                     {nodeId}
                 </span>
                 <span className="font-serif text-[10pt] font-medium text-near-black leading-snug">
-                    <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        allowedElements={['code', 'em', 'strong', 'a', 'del']}
-                        unwrapDisallowed
-                        components={{
-                            code: ({ children }) => (
-                                <code className="font-mono text-[9pt] bg-ivory px-1 py-0.5 rounded text-ink">
-                                    {children}
-                                </code>
-                            ),
-                        }}
-                    >
-                        {node.title}
-                    </ReactMarkdown>
+                    {node.docName}
                 </span>
             </div>
             {/* Body */}
