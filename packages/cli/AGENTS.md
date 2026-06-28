@@ -1,24 +1,21 @@
 # @vein/cli
 
+## Build And Test
+
+- `bun run build` — bundles to `dist/vein.js`. Must `--external better-sqlite3` (native addon).
+
 ## Architecture Boundaries
 
-Each command file does three things: register flags via `commander`, handle I/O via `@clack/prompts`, call high-level functions from `@vein/core`.
+- Import only from `@vein/core` single entry (root contract)
+- Commands in `command/` each export `register(program: Command)` — new subcommands follow this pattern
+
+## Coding Conventions
+
+- **Output mode**: interactive → `note()` / `outro()`; non-interactive (`-n`) → JSON to stdout
+- `spinner()` for any operation > 1 second
 
 ## Safety Rails
 
 ### NEVER
 
-- Read/write `~/.config/vein/` files directly — use core's `loadGlobalProjects()` etc.
-- Inline business pipeline logic (chunking, segmentation, FTS, Agent orchestration)
 - Log to console — all logs go to file via core's logger
-
-### ALWAYS
-
-- `getErrorMessage(err)` for user-facing error display
-- `spinner()` for any operation > 1 second
-- `colorize()` for terminal colors — check `process.stdout.isTTY` before colorizing
-
-## Coding Conventions
-
-- **Output mode**: interactive → `note()` / `outro()`; non-interactive (`-n`) → JSON to stdout
-- **Colors**: `colorize()` + `VERDICT_COLOR`; respect `process.stdout.isTTY`
