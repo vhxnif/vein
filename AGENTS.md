@@ -2,43 +2,33 @@
 
 ## Build And Test
 
-- Before commit: `bun run check && bun run lint && bun run format`
-- CLI changes: `bun run packages/cli/src/command/vein.ts ask "test query"`
-- Web changes: `bun run dev:web`, verify search + docs + history pages
+- CLI smoke: `bun run packages/cli/src/command/vein.ts ask "test query"`
+- Web smoke: `bun run dev:web` → verify search + docs + history pages
 
 ## Architecture Boundaries
 
 | Package | Path | Role |
 |---------|------|------|
-| `@vein/core` | `packages/core/` | All business logic: AI Agents, DB, config, import, history |
-| `@vein/cli` | `packages/cli/` | Thin client: command parsing + I/O + result display |
-| `@vein/web` | `packages/web/` | Thin web layer: Hono REST API + React SPA |
+| `@vein/core` | `packages/core/` | All business logic: AI, DB, config, import, history |
+| `@vein/cli` | `packages/cli/` | Command parsing + I/O + result display |
+| `@vein/web` | `packages/web/` | Hono REST API + React SPA |
 
-- CLI and Web import only from `@vein/core` single entry, no sub-paths (enforced by exports map)
-- CLI never touches DB / filesystem / AI directly (enforced by package.json dependency graph)
-- Per-package rules in child AGENTS.md files
-
-### Design System
-
-Web UI governed by `DESIGN.md` (tokens, components) and `packages/web/AGENTS.md` (rules). Never invent colors, spacing, or type outside those docs.
+- Import only from `@vein/core` single entry, no sub-paths
+- `resolveProjectRoot()` for all project path resolution (supports `--project` flag)
+- Web UI tokens: `DESIGN.md`
 
 ## Coding Conventions
 
-- **FTS5**: AND-first, fallback to OR on zero results. `INSERT OR REPLACE` unsupported → `DELETE` then `INSERT`. BM25 ranking, k=10.
-- **New model config field**: requires 6 coordinated changes across packages — see `packages/core/AGENTS.md`
-- `resolveProjectRoot()` for all project path resolution (supports `--project` flag)
+- **FTS5**: OR semantics + BM25 ranking. `INSERT OR REPLACE` unsupported → `DELETE` then `INSERT`.
+- **New model config field**: 6 coordinated edits across core/cli/web — checklist in `packages/core/AGENTS.md`
 
 ## Safety Rails
 
 ### NEVER
 
-- Put SQL or persistence logic in CLI or Web code
 - Import from `@vein/core` sub-paths
-- Call `better-sqlite3`, `drizzle-orm`, or `@earendil-works/pi-ai` from CLI or Web
 - Log full LLM prompts, messages, responses, or complete document trees
 
 ### ALWAYS
 
-- `logger.child({ module: 'xxx' })` for module-scoped logging
 - `BEGIN/COMMIT` transactions for multi-table mutations (docs + docs_fts, insertTree + deleteTree)
-
