@@ -6,7 +6,7 @@ import { getNodeDetails } from '../../store/index.ts'
 import type { BaseDocNode } from '../../tree/type.ts'
 import {
     call,
-    getModel,
+    getBuiltinModel,
     getModelProvider,
     type ToolDef,
     Type,
@@ -281,7 +281,7 @@ export async function reviewer(
     onStep?.('Reviewing results...')
 
     const model = modelOverride
-        ? getModel(modelOverride.provider as never, modelOverride.model)
+        ? getBuiltinModel(modelOverride.provider as never, modelOverride.model)
         : undefined
 
     const usedModel = modelOverride

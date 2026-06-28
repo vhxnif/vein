@@ -1,10 +1,5 @@
 import process from 'node:process'
-import type { ModelProvider } from '@vein/core'
-import { getErrorMessage } from '@vein/core'
-
-function modelKey(provider: ModelProvider): string {
-    return `${provider.provider}/${provider.model}`
-}
+import { getErrorMessage, modelKey } from '@vein/core'
 
 function pluralize(count: number, singular: string, plural: string): string {
     return count === 1 ? singular : plural

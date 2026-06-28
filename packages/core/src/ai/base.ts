@@ -25,11 +25,6 @@ import {
 import { logger } from '../config/index.ts'
 import type { ModelProvider } from '../config/type.ts'
 
-// ── Aliases preserving the old API surface for internal + consumer use ──
-const getModel = getBuiltinModel
-const getModels = getBuiltinModels
-const getProviders = getBuiltinProviders
-
 export type {
     AgentMessage,
     AgentTool,
@@ -39,7 +34,14 @@ export type {
     Tool,
 }
 // ── Re-exports for consumers — import from './base.ts' instead of @earendil-works/* ──
-export { Agent, complete, getModel, getModels, getProviders, Type }
+export {
+    Agent,
+    complete,
+    getBuiltinModel,
+    getBuiltinModels,
+    getBuiltinProviders,
+    Type,
+}
 
 export type ToolDef = Tool & {
     run: (args: any) => Promise<string>
@@ -51,7 +53,7 @@ export type ContextDef = {
     systemPrompt?: string
     onToolCall?: (name: string, args: Record<string, unknown>) => void
     /** Optional model override. Uses the global model provider if not set. */
-    model?: ReturnType<typeof getModel>
+    model?: ReturnType<typeof getBuiltinModel>
 }
 
 const log = logger.child({ module: 'ai' })
@@ -60,11 +62,11 @@ let modelProvider: ModelProvider = {
     provider: 'deepseek',
     model: 'deepseek-v4-pro',
 }
-let _model: ReturnType<typeof getModel> | null = null
+let _model: ReturnType<typeof getBuiltinModel> | null = null
 
 function getCurrentModel() {
     if (!_model) {
-        _model = getModel(
+        _model = getBuiltinModel(
             modelProvider.provider as any,
             modelProvider.model as any
         )
@@ -148,7 +150,7 @@ async function call(context: ContextDef) {
 function createSummarizer(provider?: ModelProvider) {
     return async (prompt: string): Promise<string> => {
         const model = provider
-            ? getModel(provider.provider as any, provider.model as any)
+            ? getBuiltinModel(provider.provider as any, provider.model as any)
             : getCurrentModel()
         const msg = await complete(model, {
             messages: [
@@ -161,12 +163,12 @@ function createSummarizer(provider?: ModelProvider) {
 
 /** List available AI providers. */
 export function listProviders(): string[] {
-    return getProviders() as string[]
+    return getBuiltinProviders() as string[]
 }
 
 /** List available models for a given provider. */
 export function listModels(provider: string): { id: string; name: string }[] {
-    return getModels(provider as never).map((m) => ({
+    return getBuiltinModels(provider as never).map((m) => ({
         id: m.id,
         name: m.name,
     }))

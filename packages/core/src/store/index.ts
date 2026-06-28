@@ -863,14 +863,12 @@ async function getDocCount(): Promise<number> {
 
 // ── high-level document listing ───────────────────────────────────
 
-type DocInfo = BrowseDoc
-
 /** Paginated document listing. Returns documents + total count. */
 async function listDocuments(
     page: number,
     pageSize: number,
     keyword?: string
-): Promise<{ docs: DocInfo[]; total: number }> {
+): Promise<{ docs: BrowseDoc[]; total: number }> {
     if (keyword?.trim()) {
         return listDocumentsByKeyword(page, pageSize, keyword.trim())
     }
@@ -886,7 +884,7 @@ async function listDocumentsByKeyword(
     page: number,
     pageSize: number,
     keyword: string
-): Promise<{ docs: DocInfo[]; total: number }> {
+): Promise<{ docs: BrowseDoc[]; total: number }> {
     const raw = getRawClient()
     const offset = (page - 1) * pageSize
 
@@ -982,7 +980,9 @@ async function listDocumentsByKeyword(
 }
 
 /** Get a single document's info by ID. */
-async function getDocumentDetail(docId: string): Promise<DocInfo | undefined> {
+async function getDocumentDetail(
+    docId: string
+): Promise<BrowseDoc | undefined> {
     const doc = await getDoc(docId)
     if (!doc) return undefined
     let meta: Record<string, unknown> = {}
