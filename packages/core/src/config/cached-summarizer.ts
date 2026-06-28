@@ -6,7 +6,7 @@ import type { ModelProvider, ProjectConfig } from './type.ts'
 
 const log = logger.child({ module: 'summarizer' })
 
-function modelKey(provider: ModelProvider): string {
+export function modelKey(provider: ModelProvider): string {
     return `${provider.provider}/${provider.model}`
 }
 

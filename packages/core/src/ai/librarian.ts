@@ -4,7 +4,7 @@ import { logger } from '../config/index.ts'
 import type { ModelProvider } from '../config/type.ts'
 import * as store from '../store/index.ts'
 import type { AgentMessage } from './base.ts'
-import { Agent, getModel, getModelProvider, Type } from './base.ts'
+import { Agent, getBuiltinModel, getModelProvider, Type } from './base.ts'
 import type { ReviewResult } from './sub-agents/reviewer.ts'
 import { createReviewResultTool } from './sub-agents/reviewer.ts'
 import {
@@ -378,7 +378,7 @@ function createLibrarianAgent(
     }
 ): Agent {
     const provider = getModelProvider()
-    const model = getModel(provider.provider as never, provider.model)
+    const model = getBuiltinModel(provider.provider as never, provider.model)
 
     log.info({
         model: `${provider.provider}/${provider.model}`,
@@ -516,22 +516,6 @@ function installAgentInstrumentation(
 
 // ── Abort wiring ──────────────────────────────────────────────
 
-function wireAbort(agent: Agent, signal?: AbortSignal): () => void {
-    if (!signal)
-        return () => {
-            /* no op */
-        }
-
-    if (signal.aborted) {
-        throw new DOMException('Aborted', 'AbortError')
-    }
-
-    const onAbort = () => agent.abort()
-    signal.addEventListener('abort', onAbort, { once: true })
-
-    return () => signal.removeEventListener('abort', onAbort)
-}
-
 // ── Result extraction ─────────────────────────────────────────
 
 function extractFinalResult(
@@ -609,7 +593,17 @@ async function librarian(
         onStep,
         opts
     )
-    const cleanup = wireAbort(agent, opts?.signal)
+    let cleanup = () => {
+        // noop (no abort signal)
+    }
+    if (opts?.signal) {
+        if (opts.signal.aborted) {
+            throw new DOMException('Aborted', 'AbortError')
+        }
+        const onAbort = () => agent.abort()
+        opts.signal.addEventListener('abort', onAbort, { once: true })
+        cleanup = () => opts.signal!.removeEventListener('abort', onAbort)
+    }
 
     try {
         await agent.prompt(msg)

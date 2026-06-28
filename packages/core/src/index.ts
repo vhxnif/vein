@@ -18,7 +18,7 @@ export {
     resolveDocNames,
     searchDocuments,
 } from './ai/tools.ts'
-export { createCachedSummarizer } from './config/cached-summarizer.ts'
+export { createCachedSummarizer, modelKey } from './config/cached-summarizer.ts'
 // ── Global registry ─────────────────────────────────────────────
 export type { GlobalProjects } from './config/global.ts'
 export {

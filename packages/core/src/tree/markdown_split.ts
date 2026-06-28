@@ -62,19 +62,6 @@ function findAllChildren(
     return children
 }
 
-// function reorderDict<T extends Record<string, unknown>>(
-//     data: T,
-//     keyOrder: string[]
-// ): Partial<T> {
-//     const result: Record<string, unknown> = {}
-//     for (const key of keyOrder) {
-//         if (key in data) {
-//             result[key] = data[key]
-//         }
-//     }
-//     return result as Partial<T>
-// }
-
 function createRootNode(
     docId: string,
     docName: string,
@@ -291,44 +278,6 @@ function buildTreeFromNodes(nodeList: FlatNode[], docId: string): DocNode[] {
 
     return rootNodes
 }
-
-// function assignNodeIds(
-//     docId: string,
-//     data: DocNode[],
-//     startId: number = 1
-// ): void {
-//     let counter = startId
-
-//     function traverse(nodes: DocNode[]): void {
-//         for (const node of nodes) {
-//             node.nodeId = `${String(counter).padStart(4, '0')}_${docId}`
-//             counter++
-//             if (node.nodes.length > 0) {
-//                 traverse(node.nodes)
-//             }
-//         }
-//     }
-
-//     traverse(data)
-// }
-
-// function formatStructure(
-//     structure: DocNode[],
-//     valueKeyOrder: string[]
-// ): DocNode[] {
-//     return structure.map((node) => {
-//         const formatted: Record<string, unknown> = {}
-//         formatted.nodeId = node.nodeId
-//         formatted.value = reorderDict(
-//             node.value as unknown as Record<string, unknown>,
-//             valueKeyOrder
-//         )
-//         if (node.nodes.length > 0) {
-//             formatted.nodes = formatStructure(node.nodes, valueKeyOrder)
-//         }
-//         return formatted as unknown as DocNode
-//     })
-// }
 
 // ── LLM helpers ────────────────────────────────────────────────
 
