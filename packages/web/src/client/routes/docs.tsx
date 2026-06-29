@@ -273,14 +273,14 @@ function DocsList() {
                                 <span className="font-serif text-[10pt] font-medium text-near-black leading-relaxed">
                                     {doc.title}
                                 </span>
-                                <div className="flex items-center gap-4 mt-1 font-sans text-[8pt] text-stone">
+                                <div className="flex items-center gap-2 mt-1 font-sans text-[8pt] text-stone">
                                     <span>
                                         {doc.nodeCount} section
                                         {doc.nodeCount !== 1 ? 's' : ''}
                                     </span>
                                     {doc.sourcePath &&
                                         doc.sourcePath !== 'unknown' && (
-                                            <span className="font-mono text-[7.5pt] truncate max-w-[240px]">
+                                            <span className="hidden sm:inline font-mono text-[7.5pt] truncate max-w-[240px]">
                                                 {doc.sourcePath}
                                             </span>
                                         )}
