@@ -29,8 +29,29 @@ function colorize(text: string, code: string): string {
     return process.stdout.isTTY ? `${code}${text}\x1b[0m` : text
 }
 
+/**
+ * Colorize doc references ([docId] and [docId:nodeId]) with ANSI blue underline.
+ * Matches the web's visual cue that these are clickable references.
+ */
+function colorizeDocRefs(text: string): string {
+    if (!process.stdout.isTTY) return text
+    let result = text
+    // Node refs: [hex:digits]
+    result = result.replace(
+        /\[([a-f0-9]{8,}):(\d{2,5})\]/g,
+        (match) => `\x1b[34m\x1b[4m${match}\x1b[0m`
+    )
+    // Doc refs: [hex] (not followed by '(' to avoid matching markdown links)
+    result = result.replace(
+        /\[([a-f0-9]{8,})\](?!\()/g,
+        (match) => `\x1b[34m\x1b[4m${match}\x1b[0m`
+    )
+    return result
+}
+
 export {
     colorize,
+    colorizeDocRefs,
     formatDuration,
     getErrorMessage,
     modelKey,
