@@ -1,5 +1,5 @@
 import process from 'node:process'
-import { intro, note, outro, spinner, text } from '@clack/prompts'
+import { intro, note, outro, text } from '@clack/prompts'
 import type {
     HistoryTimelineBlock,
     LibrarianResult,
@@ -13,8 +13,10 @@ import {
     setupProjectModel,
 } from '@vein/core'
 import type { Command } from 'commander'
+import ora, { type Ora } from 'ora'
 import {
     colorize,
+    colorizeDocRefs,
     formatDuration,
     getErrorMessage,
     VERDICT_COLOR,
@@ -45,7 +47,9 @@ function formatTrace(
             return `  ${num}. ${tool}  ${detail}`
         })
         .join('\n')
-    return `Retrieval trace (${result.trace.length} step${result.trace.length > 1 ? 's' : ''}):\n${traceLines}`
+    return colorizeDocRefs(
+        `Retrieval trace (${result.trace.length} step${result.trace.length > 1 ? 's' : ''}):\n${traceLines}`
+    )
 }
 
 export function register(program: Command) {
@@ -113,23 +117,121 @@ export function register(program: Command) {
                     query = queryArg
                 }
 
-                const searchSpinner = interactive ? spinner() : undefined
-                searchSpinner?.start('Searching...')
-
                 const sessionId = crypto.randomUUID().slice(0, 8)
                 log.info({ sessionId, query, content: 'Ask session start' })
 
+                // ── ora spinner (stderr, won't conflict with stdout text) ─
+                const s: Ora | undefined = interactive
+                    ? ora().start('Searching...')
+                    : undefined
+
+                let toolCount = 0
+                let runningTools = 0
+                const toolLabels = new Map<string, string>()
+                let idleTimer: ReturnType<typeof setTimeout> | null = null
+                const state = {
+                    phase: 'tools' as 'tools' | 'thinking' | 'text',
+                }
+
+                // ── Idle-spinner helpers (debounced: show only during gaps) ─
+                const stopSpinner = () => {
+                    if (idleTimer) {
+                        clearTimeout(idleTimer)
+                        idleTimer = null
+                    }
+                    if (s?.isSpinning) s.stop()
+                }
+                const scheduleIdle = () => {
+                    if (!interactive || state.phase === 'tools') return
+                    if (idleTimer) clearTimeout(idleTimer)
+                    idleTimer = setTimeout(() => {
+                        idleTimer = null
+                        if (!s?.isSpinning) s?.start('Working...')
+                    }, 200)
+                }
+
                 const startedAt = performance.now()
+
                 let result: SearchResult
                 try {
                     result = await searchDocuments(query, {
                         reviewerModel: config.reviewer,
-                        onStep: searchSpinner
-                            ? (label) => searchSpinner.message(label)
-                            : undefined,
+                        thinkingLevel: config.thinkingLevel,
+                        onToolCallStart: (toolCallId, _toolName, label) => {
+                            if (!interactive) return
+                            toolCount++
+                            runningTools++
+                            toolLabels.set(toolCallId, label)
+                            if (state.phase === 'tools') {
+                                s!.text = `${label} (${runningTools} running)`
+                            } else {
+                                // Gap detected: show spinner immediately
+                                stopSpinner()
+                                s?.start('Working...')
+                            }
+                        },
+                        onToolCallEnd: (toolCallId, _toolName, summary) => {
+                            if (!interactive) return
+                            runningTools--
+                            const label = toolLabels.get(toolCallId)
+                            toolLabels.delete(toolCallId)
+                            const display = label
+                                ? `${label} → ${summary}`
+                                : summary
+                            if (state.phase === 'tools') {
+                                s!.stop()
+                                process.stdout.write(
+                                    `  ${colorize('✓', '\x1b[32m')} ${display}\n`
+                                )
+                                if (runningTools > 0) {
+                                    s!.start(
+                                        `${runningTools} tool${runningTools > 1 ? 's' : ''} running`
+                                    )
+                                } else {
+                                    s!.start('Generating answer...')
+                                }
+                            } else {
+                                // Stop gap-spinner, write result, schedule idle
+                                stopSpinner()
+                                process.stdout.write(
+                                    `\n  ${colorize('✓', '\x1b[32m')} ${display}\n`
+                                )
+                                scheduleIdle()
+                            }
+                        },
+                        onThinkingDelta: (delta) => {
+                            if (!interactive) return
+                            if (state.phase === 'tools') {
+                                s!.stop()
+                                state.phase = 'thinking'
+                                process.stdout.write('\n')
+                            }
+                            stopSpinner()
+                            process.stdout.write(
+                                colorize(delta, '\x1b[2m\x1b[37m')
+                            )
+                            scheduleIdle()
+                        },
+                        onTextDelta: (delta) => {
+                            if (!interactive) return
+                            if (state.phase !== 'text') {
+                                s!.stop()
+                                state.phase = 'text'
+                                process.stdout.write('\n')
+                            }
+                            stopSpinner()
+                            process.stdout.write(delta)
+                            scheduleIdle()
+                        },
                     })
                 } catch (err) {
-                    searchSpinner?.stop('Search failed')
+                    stopSpinner()
+                    s?.stop()
+                    if (interactive) {
+                        process.stdout.write(
+                            `${colorize('Search failed', '\x1b[31m')}\n`
+                        )
+                    }
                     if (!interactive) {
                         console.error(
                             JSON.stringify({ error: getErrorMessage(err) })
@@ -137,9 +239,17 @@ export function register(program: Command) {
                         process.exit(1)
                     }
                     log.error({ err, content: 'Librarian search failed' })
-                    outro('Search failed')
                     return
                 }
+
+                // Final spacing after streaming
+                stopSpinner()
+                if (state.phase === 'text' || state.phase === 'thinking') {
+                    process.stdout.write('\n')
+                } else {
+                    s?.stop()
+                }
+
                 const elapsedMs = Math.round(performance.now() - startedAt)
                 const elapsed = formatDuration(elapsedMs)
 
@@ -168,12 +278,6 @@ export function register(program: Command) {
                     )
                 }
 
-                searchSpinner?.stop(
-                    result.review
-                        ? `${result.review.verdict} (${result.review.score}/5) · ${elapsed}`
-                        : `Done · ${elapsed}`
-                )
-
                 if (!interactive) {
                     console.log(
                         JSON.stringify({
@@ -185,7 +289,27 @@ export function register(program: Command) {
                     return
                 }
 
-                note(result.content || '(no results found)')
+                // ── Post-search display ─────────────────────────────
+                // Summary line (web's "Reasoning process" equivalent)
+                const summary =
+                    toolCount > 0
+                        ? colorize(
+                              `Retrieval: ${toolCount} tool${toolCount !== 1 ? 's' : ''} · ${elapsed}`,
+                              '\x1b[90m'
+                          )
+                        : `Done · ${elapsed}`
+                if (state.phase === 'text' || state.phase === 'thinking') {
+                    console.log(`\n${summary}`)
+                } else {
+                    console.log(summary)
+                }
+
+                if (
+                    !result.content ||
+                    result.content === '文档库中未找到相关内容'
+                ) {
+                    note(result.content || '(no results found)')
+                }
 
                 if (result.review) {
                     const verdict = result.review.verdict
@@ -216,8 +340,6 @@ export function register(program: Command) {
                     steps: result.trace.length,
                     content: 'Librarian query complete',
                 })
-
-                outro('Done')
             }
         )
 }

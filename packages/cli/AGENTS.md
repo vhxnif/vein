@@ -12,7 +12,13 @@
 ## Coding Conventions
 
 - **Output mode**: interactive → `note()` / `outro()`; non-interactive (`-n`) → JSON to stdout
-- `spinner()` for any operation > 1 second
+- **Streaming rendering**: three-phase state machine (`tools` → `thinking` → `text`):
+  - **Tools phase**: `ora` spinner on default stream (stderr), label shows tool name + running count. On tool end: stop spinner → write `✓ result` to stdout → restart spinner.
+  - **Thinking/text phase**: spinner stopped. Idle spinner via debounce (200ms) — `stopSpinner()` before each delta write, `scheduleIdle()` after. Spinner only appears during gaps, not during rapid streaming.
+  - Never put ora spinner on stdout alongside streaming text — `\r` cursor conflicts. Use default stderr.
+- **Tool result context**: capture `onToolCallStart` label in `toolLabels` Map keyed by `toolCallId`, combine with `onToolCallEnd` summary for rich display (`Reading node 0001... → 1.5k chars`).
+- `thinkingLevel` must be passed from config → `searchDocuments()` or AI reasoning leaks into text output as normal text instead of dimmed thinking deltas.
+- TypeScript narrows closure-captured primitives across `await` boundaries — use mutable objects (`{ phase: ... }`) to defeat incorrect narrowing in async callbacks.
 
 ## Safety Rails
 
