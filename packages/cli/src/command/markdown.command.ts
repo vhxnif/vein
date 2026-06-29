@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { readdir, stat } from 'node:fs/promises'
 import { intro, note, outro, spinner } from '@clack/prompts'
 import {
     createCachedSummarizer,
@@ -11,12 +12,35 @@ import {
 } from '@vein/core'
 import { Command } from 'commander'
 
+async function collectMarkdownFiles(inputs: string[]): Promise<string[]> {
+    const result: string[] = []
+    for (const input of inputs) {
+        try {
+            const s = await stat(input)
+            if (s.isDirectory()) {
+                const entries = await readdir(input, { recursive: true })
+                for (const entry of entries) {
+                    if (entry.endsWith('.md')) {
+                        result.push(path.join(input, entry))
+                    }
+                }
+            } else if (input.endsWith('.md')) {
+                result.push(input)
+            }
+        } catch {
+            // path doesn't exist, pass through to importBatch for error handling
+            result.push(input)
+        }
+    }
+    return result
+}
+
 export function register(program: Command) {
     program
         .command('markdown')
         .alias('md')
-        .description('import markdown file(s) into the library')
-        .argument('<files...>', 'path(s) to markdown file(s)')
+        .description('import markdown file(s) into the library. Directories are scanned recursively for .md files')
+        .argument('<paths...>', 'path(s) to markdown file(s) or directories')
         .option('-f, --force', 'force re-import even if already exists')
         .action(async (files: string[], options: { force?: boolean }) => {
             const config = await setupProjectModel()
@@ -25,7 +49,8 @@ export function register(program: Command) {
                 return
             }
 
-            const total = files.length
+            const expanded = await collectMarkdownFiles(files)
+            const total = expanded.length
             const force = options.force ?? false
             const summarize = createCachedSummarizer(config)
 
@@ -41,7 +66,7 @@ export function register(program: Command) {
                 s.start('Preparing...')
 
                 const results = await importBatch(
-                    files,
+                    expanded,
                     config,
                     summarize,
                     force,
@@ -95,7 +120,7 @@ export function register(program: Command) {
                 const s = spinner()
                 s.start('Preparing...')
                 const results = await importBatch(
-                    files,
+                    expanded,
                     config,
                     summarize,
                     force,
