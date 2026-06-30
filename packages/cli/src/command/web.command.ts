@@ -1,4 +1,5 @@
-import { spawn } from 'node:child_process'
+import { execSync, spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
@@ -32,6 +33,30 @@ function isAlive(pid: number): boolean {
     }
 }
 
+// ponytail: PATH scan avoids where.exe which itself can flash a console window
+function findWindowsExe(command: string): string | null {
+    const pathext = (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD')
+        .toLowerCase()
+        .split(';')
+    const paths = (process.env.PATH || '').split(path.delimiter)
+    for (const dir of paths) {
+        for (const ext of pathext) {
+            const fullPath = path.join(dir, command + ext)
+            if (existsSync(fullPath)) return fullPath
+        }
+    }
+    return null
+}
+
+function killProcess(pid: number): void {
+    if (process.platform === 'win32') {
+        // ponytail: taskkill /T kills the process tree (shell PID + vein-web child)
+        execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' })
+    } else {
+        process.kill(pid, 'SIGTERM')
+    }
+}
+
 export function register(program: Command) {
     program
         .command('web')
@@ -61,7 +86,7 @@ export function register(program: Command) {
                         })
                         return
                     }
-                    process.kill(pid, 'SIGTERM')
+                    killProcess(pid)
                     await unlink(PID_FILE).catch(() => {
                         /* stale — ignore */
                     })
@@ -112,11 +137,18 @@ export function register(program: Command) {
                 }
                 if (opts.port) env.PORT = opts.port
 
-                const child = spawn('vein-web', args, {
+                // On Windows resolve the .cmd shim to avoid shell: true (which
+                // can flash a console window even with windowsHide)
+                const isWin = process.platform === 'win32'
+                const spawnCmd =
+                    isWin ? (findWindowsExe('vein-web') ?? 'vein-web') : 'vein-web'
+
+                const child = spawn(spawnCmd, args, {
                     stdio: ['ignore', 'inherit', 'inherit'],
                     env,
                     detached: true,
-                    shell: true,
+                    shell: isWin ? false : true,
+                    ...(isWin ? { windowsHide: true } : {}),
                 })
 
                 await ensureConfigDir()
