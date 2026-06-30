@@ -133,7 +133,7 @@ export function register(program: Command) {
                     phase: 'tools' as 'tools' | 'thinking' | 'text',
                 }
 
-                // ── Idle-spinner helpers (debounced: show only during gaps) ─
+                // ── Idle-spinner: show during gaps in thinking/text streaming ─
                 const stopSpinner = () => {
                     if (idleTimer) {
                         clearTimeout(idleTimer)
@@ -146,7 +146,12 @@ export function register(program: Command) {
                     if (idleTimer) clearTimeout(idleTimer)
                     idleTimer = setTimeout(() => {
                         idleTimer = null
-                        if (!s?.isSpinning) s?.start('Working...')
+                        if (!s?.isSpinning) {
+                            // \n ensures spinner starts on its own line,
+                            // not mid-text where it would overwrite on Windows.
+                            process.stdout.write('\n')
+                            s?.start('Working...')
+                        }
                     }, 200)
                 }
 
@@ -165,8 +170,8 @@ export function register(program: Command) {
                             if (state.phase === 'tools') {
                                 s!.text = `${label} (${runningTools} running)`
                             } else {
-                                // Gap detected: show spinner immediately
                                 stopSpinner()
+                                process.stdout.write('\n')
                                 s?.start('Working...')
                             }
                         },
@@ -191,7 +196,6 @@ export function register(program: Command) {
                                     s!.start('Generating answer...')
                                 }
                             } else {
-                                // Stop gap-spinner, write result, schedule idle
                                 stopSpinner()
                                 process.stdout.write(
                                     `\n  ${colorize('✓', '\x1b[32m')} ${display}\n`
