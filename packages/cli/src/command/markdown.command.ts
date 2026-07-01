@@ -1,5 +1,5 @@
-import path from 'node:path'
 import { readdir, stat } from 'node:fs/promises'
+import path from 'node:path'
 import { intro, note, outro, spinner } from '@clack/prompts'
 import {
     createCachedSummarizer,
@@ -39,7 +39,9 @@ export function register(program: Command) {
     program
         .command('markdown')
         .alias('md')
-        .description('import markdown file(s) into the library. Directories are scanned recursively for .md files')
+        .description(
+            'import markdown file(s) into the library. Directories are scanned recursively for .md files'
+        )
         .argument('<paths...>', 'path(s) to markdown file(s) or directories')
         .option('-f, --force', 'force re-import even if already exists')
         .action(async (files: string[], options: { force?: boolean }) => {

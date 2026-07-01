@@ -1,5 +1,5 @@
 import { execSync, spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
@@ -46,6 +46,28 @@ function findWindowsExe(command: string): string | null {
         }
     }
     return null
+}
+
+/**
+ * Parse a .cmd shim to extract the runtime executable and script path.
+ * Bun/npm shims are one-liners: @"<exe>" "<script>" %*
+ * Spawning the runtime directly avoids cmd.exe → grandchild console windows.
+ */
+function parseCmdShim(cmdPath: string): { exe: string; script: string } | null {
+    try {
+        const raw = readFileSync(cmdPath, 'utf-8')
+        const tokens = raw.match(/"([^"]+)"/g)
+        if (!tokens || tokens.length < 2) return null
+        const binDir = path.dirname(cmdPath)
+        const resolveToken = (t: string) =>
+            t.replace(/"/g, '').replace(/%~dp0/gi, binDir)
+        return {
+            exe: resolveToken(tokens[0]!),
+            script: resolveToken(tokens[1]!),
+        }
+    } catch {
+        return null
+    }
 }
 
 function killProcess(pid: number): void {
@@ -137,17 +159,33 @@ export function register(program: Command) {
                 }
                 if (opts.port) env.PORT = opts.port
 
-                // On Windows resolve the .cmd shim to avoid shell: true (which
-                // can flash a console window even with windowsHide)
+                // On Windows, parse the .cmd shim and spawn the runtime directly.
+                // Spawning the .cmd goes through cmd.exe which can create a separate
+                // console window for the grandchild process even with windowsHide.
                 const isWin = process.platform === 'win32'
-                const spawnCmd =
-                    isWin ? (findWindowsExe('vein-web') ?? 'vein-web') : 'vein-web'
+                let spawnCmd: string
+                let spawnArgs: string[]
 
-                const child = spawn(spawnCmd, args, {
+                if (isWin) {
+                    const cmdPath = findWindowsExe('vein-web')
+                    const shim = cmdPath ? parseCmdShim(cmdPath) : null
+                    if (shim && existsSync(shim.script)) {
+                        spawnCmd = shim.exe
+                        spawnArgs = [shim.script, ...args]
+                    } else {
+                        spawnCmd = cmdPath ?? 'vein-web'
+                        spawnArgs = args
+                    }
+                } else {
+                    spawnCmd = 'vein-web'
+                    spawnArgs = args
+                }
+
+                const child = spawn(spawnCmd, spawnArgs, {
                     stdio: ['ignore', 'inherit', 'inherit'],
                     env,
                     detached: true,
-                    shell: isWin ? false : true,
+                    shell: !isWin,
                     ...(isWin ? { windowsHide: true } : {}),
                 })
 
