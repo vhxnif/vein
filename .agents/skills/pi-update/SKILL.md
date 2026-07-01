@@ -80,3 +80,4 @@ bun run --filter @vein/cli build
 ## History
 
 - **0.79.6 → 0.80.2** (Jun 2026): `pi-ai` root API moved to `/compat`; `getModel`/`getModels`/`getProviders` deprecated in favor of `getBuiltin*` from `providers/all`; centralized all imports into `base.ts`
+- **0.80.2 → 0.80.3** (Jul 2026): No breaking changes. New: Claude Sonnet 5, `outputPad`/`externalEditor` settings, `get_entries`/`get_tree` RPC, `session_info_changed` extension event, Azure Foundry endpoints.
