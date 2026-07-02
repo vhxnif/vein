@@ -1,4 +1,5 @@
-import { spawn } from 'node:child_process'
+import { execSync, spawn } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
@@ -32,6 +33,52 @@ function isAlive(pid: number): boolean {
     }
 }
 
+// ponytail: PATH scan avoids where.exe which itself can flash a console window
+function findWindowsExe(command: string): string | null {
+    const pathext = (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD')
+        .toLowerCase()
+        .split(';')
+    const paths = (process.env.PATH || '').split(path.delimiter)
+    for (const dir of paths) {
+        for (const ext of pathext) {
+            const fullPath = path.join(dir, command + ext)
+            if (existsSync(fullPath)) return fullPath
+        }
+    }
+    return null
+}
+
+/**
+ * Parse a .cmd shim to extract the runtime executable and script path.
+ * Bun/npm shims are one-liners: @"<exe>" "<script>" %*
+ * Spawning the runtime directly avoids cmd.exe → grandchild console windows.
+ */
+function parseCmdShim(cmdPath: string): { exe: string; script: string } | null {
+    try {
+        const raw = readFileSync(cmdPath, 'utf-8')
+        const tokens = raw.match(/"([^"]+)"/g)
+        if (!tokens || tokens.length < 2) return null
+        const binDir = path.dirname(cmdPath)
+        const resolveToken = (t: string) =>
+            t.replace(/"/g, '').replace(/%~dp0/gi, binDir)
+        return {
+            exe: resolveToken(tokens[0]!),
+            script: resolveToken(tokens[1]!),
+        }
+    } catch {
+        return null
+    }
+}
+
+function killProcess(pid: number): void {
+    if (process.platform === 'win32') {
+        // ponytail: taskkill /T kills the process tree (shell PID + vein-web child)
+        execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' })
+    } else {
+        process.kill(pid, 'SIGTERM')
+    }
+}
+
 export function register(program: Command) {
     program
         .command('web')
@@ -61,7 +108,7 @@ export function register(program: Command) {
                         })
                         return
                     }
-                    process.kill(pid, 'SIGTERM')
+                    killProcess(pid)
                     await unlink(PID_FILE).catch(() => {
                         /* stale — ignore */
                     })
@@ -112,11 +159,34 @@ export function register(program: Command) {
                 }
                 if (opts.port) env.PORT = opts.port
 
-                const child = spawn('vein-web', args, {
+                // On Windows, parse the .cmd shim and spawn the runtime directly.
+                // Spawning the .cmd goes through cmd.exe which can create a separate
+                // console window for the grandchild process even with windowsHide.
+                const isWin = process.platform === 'win32'
+                let spawnCmd: string
+                let spawnArgs: string[]
+
+                if (isWin) {
+                    const cmdPath = findWindowsExe('vein-web')
+                    const shim = cmdPath ? parseCmdShim(cmdPath) : null
+                    if (shim && existsSync(shim.script)) {
+                        spawnCmd = shim.exe
+                        spawnArgs = [shim.script, ...args]
+                    } else {
+                        spawnCmd = cmdPath ?? 'vein-web'
+                        spawnArgs = args
+                    }
+                } else {
+                    spawnCmd = 'vein-web'
+                    spawnArgs = args
+                }
+
+                const child = spawn(spawnCmd, spawnArgs, {
                     stdio: ['ignore', 'inherit', 'inherit'],
                     env,
                     detached: true,
-                    shell: true,
+                    shell: !isWin,
+                    ...(isWin ? { windowsHide: true } : {}),
                 })
 
                 await ensureConfigDir()
