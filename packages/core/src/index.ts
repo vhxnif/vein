@@ -9,8 +9,27 @@ export {
     listProviders,
     setModelProvider,
 } from './ai/base.ts'
-export type { LibrarianResult, TraceStep } from './ai/librarian.ts'
-export { librarian } from './ai/librarian.ts'
+export type {
+    LibrarianOption,
+    LibrarianResult,
+    TraceStep,
+} from './ai/librarian.ts'
+export {
+    buildTools,
+    createLibrarianAgent,
+    extractFinalResult,
+    installAgentInstrumentation,
+    LIBRARIAN_PROMPT,
+    librarian,
+} from './ai/librarian.ts'
+export type { SessionOptions, SessionSnapshot } from './ai/session.ts'
+export {
+    createSession,
+    LibrarianSession,
+    persistSession,
+    resumeLatestSession,
+    resumeSession,
+} from './ai/session.ts'
 export type { ReviewResult, SourceRef } from './ai/sub-agents/reviewer.ts'
 export { reviewer } from './ai/sub-agents/reviewer.ts'
 export type { SearchOptions, SearchResult } from './ai/tools.ts'
@@ -50,7 +69,6 @@ export {
     listSearchHistory,
     saveSearchHistory,
 } from './service/history.service.ts'
-// ── Service ─────────────────────────────────────────────────────
 export type {
     FailedResult,
     ImportedResult,
@@ -63,6 +81,14 @@ export {
     importBatch,
     resegmentAllDocuments,
 } from './service/import.service.ts'
+// ── Service ────────────────────────────────────────────────────
+export {
+    deleteSession,
+    listSessionIds,
+    loadLatestSession,
+    loadSession,
+    saveSession,
+} from './service/session.service.ts'
 
 // ── Store ───────────────────────────────────────────────────────
 export {

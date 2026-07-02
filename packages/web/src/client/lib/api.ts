@@ -93,6 +93,48 @@ export interface SearchResult {
     elapsedMs: number
     trace?: unknown[]
     docNames?: Record<string, string>
+    sessionId?: string
+}
+
+// ── Sessions ──────────────────────────────────────────────────
+
+export interface SessionInfo {
+    sessionId: string
+    summary: string
+    queryCount: number
+    updatedAt: number
+}
+
+export async function fetchSessions(): Promise<SessionInfo[]> {
+    const res = await fetch(u('/projects/current/sessions'), { headers: h() })
+    if (!res.ok) throw new Error('Failed to fetch sessions')
+    const data = (await res.json()) as { sessions: SessionInfo[] }
+    return data.sessions
+}
+
+export async function fetchSession(
+    id: string
+): Promise<Record<string, unknown> | null> {
+    const res = await fetch(u(`/projects/current/sessions/${id}`), {
+        headers: h(),
+    })
+    if (!res.ok) throw new Error('Session not found')
+    const data = (await res.json()) as { session?: Record<string, unknown> }
+    return (data as unknown as Record<string, unknown>) ?? null
+}
+
+export async function fetchLatestSession(): Promise<Record<
+    string,
+    unknown
+> | null> {
+    const res = await fetch(u('/projects/current/sessions/latest'), {
+        headers: h(),
+    })
+    if (!res.ok) throw new Error('Failed to fetch latest session')
+    const data = (await res.json()) as {
+        session: Record<string, unknown> | null
+    }
+    return data.session ?? null
 }
 
 // ── Projects ──────────────────────────────────────────────────
@@ -390,13 +432,22 @@ export interface SearchStreamCallbacks {
 
 export async function searchQuery(
     q: string,
-    options?: SearchStreamCallbacks & { mode?: 'default' | 'quick' },
+    options?: SearchStreamCallbacks & {
+        mode?: 'default' | 'quick'
+        sessionId?: string
+        newSession?: boolean
+    },
     signal?: AbortSignal
 ): Promise<SearchResult> {
     const res = await fetch(u('/projects/current/search'), {
         method: 'POST',
         headers: h({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ q, mode: options?.mode ?? 'default' }),
+        body: JSON.stringify({
+            q,
+            mode: options?.mode ?? 'default',
+            sessionId: options?.sessionId,
+            newSession: options?.newSession,
+        }),
         signal,
     })
     if (!res.ok) {

@@ -102,6 +102,32 @@ html::-webkit-scrollbar-thumb:hover {
     background: var(--stone);
 }
 
+/* Thin scrollbar, hidden until hover — desktop parity with mobile auto-hide */
+.kami-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    scrollbar-gutter: stable;
+}
+.kami-scrollbar:hover {
+    scrollbar-color: rgba(212, 208, 196, 0.5) transparent;
+}
+.kami-scrollbar::-webkit-scrollbar {
+    width: 4px;
+}
+.kami-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+.kami-scrollbar::-webkit-scrollbar-thumb {
+    background: transparent;
+}
+.kami-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: rgba(212, 208, 196, 0.5);
+    border-radius: 3px;
+}
+.kami-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+    background: var(--stone);
+}
+
 body {
     font-family: var(--serif);
     background-color: var(--parchment);
@@ -466,27 +492,4 @@ body::before {
     font-family: var(--sans);
     font-size: 7.5pt;
     font-weight: 600;
-}
-
-/* ── Custom Scrollbar ─────────────────────────────────────── */
-.kami-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: var(--border-cream) transparent;
-}
-
-.kami-scrollbar::-webkit-scrollbar {
-    width: 5px;
-}
-
-.kami-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.kami-scrollbar::-webkit-scrollbar-thumb {
-    background: var(--border-cream);
-    border-radius: 3px;
-}
-
-.kami-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: var(--stone);
 }

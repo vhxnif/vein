@@ -101,6 +101,26 @@ export function annotateRefs(
 /** @deprecated Use annotateRefs instead */
 export const annotateNodeRefs = annotateRefs
 
+/** Generate consistent heading ID from React children. Must match _headingSlug in index.tsx. */
+// biome-ignore lint/suspicious/noExplicitAny: recursive ReactNode flatten
+function _headingId(children: any): string {
+    // biome-ignore lint/suspicious/noExplicitAny: recursive
+    const flatten = (node: any): string => {
+        if (typeof node === 'string') return node
+        if (Array.isArray(node)) return node.map(flatten).join('')
+        if (node && typeof node === 'object' && 'props' in node) {
+            return flatten(node.props.children)
+        }
+        return ''
+    }
+    return flatten(children)
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\u4e00-\u9fff]+/g, '-')
+        .replace(/^-+/, '')
+        .replace(/-+$/, '')
+}
+
 interface MarkdownProps {
     children: string
     /** Maps short docId (first 8 chars) → full docId for node reference lookup */
@@ -114,22 +134,34 @@ export function Markdown({ children, docIdMap }: MarkdownProps) {
                 remarkPlugins={[remarkGfm]}
                 components={{
                     h1: ({ children }) => (
-                        <h1 className="font-serif text-[16pt] font-medium text-near-black mt-8 mb-3 border-b border-cream pb-1">
+                        <h1
+                            id={_headingId(children)}
+                            className="font-serif text-[16pt] font-medium text-near-black mt-8 mb-3 border-b border-cream pb-1"
+                        >
                             {children}
                         </h1>
                     ),
                     h2: ({ children }) => (
-                        <h2 className="font-serif text-[13pt] font-medium text-near-black mt-6 mb-2">
+                        <h2
+                            id={_headingId(children)}
+                            className="font-serif text-[13pt] font-medium text-near-black mt-6 mb-2"
+                        >
                             {children}
                         </h2>
                     ),
                     h3: ({ children }) => (
-                        <h3 className="font-serif text-[11pt] font-medium text-near-black mt-5 mb-2">
+                        <h3
+                            id={_headingId(children)}
+                            className="font-serif text-[11pt] font-medium text-near-black mt-5 mb-2"
+                        >
                             {children}
                         </h3>
                     ),
                     h4: ({ children }) => (
-                        <h4 className="font-serif text-[10pt] font-semibold text-near-black mt-4 mb-1">
+                        <h4
+                            id={_headingId(children)}
+                            className="font-serif text-[10pt] font-semibold text-near-black mt-4 mb-1"
+                        >
                             {children}
                         </h4>
                     ),
