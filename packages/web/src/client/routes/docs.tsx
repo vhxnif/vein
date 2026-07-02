@@ -45,14 +45,22 @@ function DocsList() {
     const [searchInput, setSearchInput] = useState('')
     const [keyword, setKeyword] = useState('')
 
-    // Dynamic page size: fill ~1.5 viewports so pagination is visible without scrolling
+    // Dynamic page size: fill the viewport so pagination is visible without scrolling.
+    // Layout: md:py-[64pt] wrapper padding (~170px) + header (~200px) + pagination bar (~72px).
     const [pageSize] = useState(() => {
         if (typeof window === 'undefined') return 20
         if (window.innerWidth < 768) return 20
-        // Header ~200px, pagination bar ~60px; doc row ≈ 62px
-        const availH = window.innerHeight - 200 - 60
-        const rowH = 62
-        return Math.min(50, Math.max(8, Math.floor(availH / rowH)))
+        // md:py-[64pt] ≈ 170px, header ~200px, pagination bar ~72px; doc row: py-[8pt]*2(~21px) + single line ~22px ≈ 43px
+        const availH = window.innerHeight - 170 - 200 - 72
+        const rowH = 43
+        const result = Math.min(50, Math.max(3, Math.floor(availH / rowH)))
+        console.log('[pageSize calc]', {
+            innerHeight: window.innerHeight,
+            availH,
+            rowH,
+            pageSize: result,
+        })
+        return result
     })
 
     useEffect(() => {
@@ -262,32 +270,26 @@ function DocsList() {
                     {docs.map((doc) => (
                         <div
                             key={doc.id}
-                            className="flex items-center gap-2 px-[12pt] py-[12pt] -mx-[12pt] rounded-[6pt]
+                            className="flex items-center gap-2 px-[12pt] py-[8pt] -mx-[12pt] rounded-[6pt]
                                        hover:bg-sand/60 transition-colors group"
                         >
                             <Link
                                 to="/docs/$docId"
                                 params={{ docId: doc.id }}
-                                className="flex-1 min-w-0 no-underline"
+                                className="flex-1 min-w-0 no-underline flex items-center gap-2"
                             >
-                                <span className="font-serif text-[10pt] font-medium text-near-black leading-relaxed">
+                                <span className="w-1/2 flex-shrink-0 font-serif text-[10pt] font-medium text-near-black leading-relaxed truncate">
                                     {doc.title}
                                 </span>
-                                <div className="flex items-center gap-2 mt-1 font-sans text-[8pt] text-stone">
-                                    <span>
+                                <span className="w-1/2 flex items-center justify-end gap-2 font-sans text-[8pt] text-stone">
+                                    <span className="flex-shrink-0">
                                         {doc.nodeCount} section
                                         {doc.nodeCount !== 1 ? 's' : ''}
                                     </span>
-                                    {doc.sourcePath &&
-                                        doc.sourcePath !== 'unknown' && (
-                                            <span className="hidden sm:inline font-mono text-[7.5pt] truncate max-w-[240px]">
-                                                {doc.sourcePath}
-                                            </span>
-                                        )}
-                                    <span>
+                                    <span className="hidden sm:inline truncate">
                                         {doc.createdAt?.slice(0, 10) ?? ''}
                                     </span>
-                                </div>
+                                </span>
                             </Link>
                             <button
                                 type="button"
