@@ -34,6 +34,33 @@ function HomePage() {
     const [input, setInput] = useState('')
     const contentEndRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
+    const scrollContainerRef = useRef<HTMLDivElement>(null)
+    const [stickyQuery, setStickyQuery] = useState('')
+
+    // ── Scroll-aware sticky query header ─────────────────────
+    const handleScroll = useCallback(() => {
+        const container = scrollContainerRef.current
+        if (!container) return
+        const containerRect = container.getBoundingClientRect()
+        const threshold = containerRect.top + 60
+
+        let found = ''
+        for (const el of container.querySelectorAll('[data-turn-query]')) {
+            const rect = (el as HTMLElement).getBoundingClientRect()
+            if (rect.top <= threshold) {
+                found =
+                    (el as HTMLElement).getAttribute('data-turn-query') ?? ''
+            }
+        }
+        setStickyQuery(found)
+    }, [])
+
+    useEffect(() => {
+        const container = scrollContainerRef.current
+        if (!container) return
+        container.addEventListener('scroll', handleScroll, { passive: true })
+        return () => container.removeEventListener('scroll', handleScroll)
+    }, [handleScroll])
 
     const scrollToBottom = useCallback(() => {
         contentEndRef.current?.scrollIntoView({
@@ -103,58 +130,83 @@ function HomePage() {
 
                     {/* Conversation */}
                     <div
-                        className={`flex-1 min-h-0 overflow-y-auto px-4 pb-4 kami-scrollbar flex flex-col ${hasAnyContent || searching ? 'pt-6 md:pt-16' : ''}`}
+                        ref={scrollContainerRef}
+                        className="flex-1 min-h-0 overflow-y-auto kami-scrollbar relative flex flex-col"
                     >
-                        {!hasAnyContent && !searching && (
-                            <div className="flex-1 flex flex-col">
-                                {/* Top 50% — input sits at bottom of this, touching midline */}
-                                <div className="h-1/2 flex flex-col justify-end">
-                                    <div className="w-full max-w-[600px] mx-auto px-4">
-                                        <p className="font-serif text-[11pt] text-stone italic text-center mb-6">
-                                            Ask anything about your documents
-                                        </p>
-                                        <input
-                                            ref={inputRef}
-                                            type="text"
-                                            value={input}
-                                            onChange={(e) =>
-                                                setInput(e.currentTarget.value)
-                                            }
-                                            onKeyDown={handleKeyDown}
-                                            placeholder="Type your question..."
-                                            className="w-full bg-ivory ring-warm rounded-[8pt] px-[24pt] py-[16pt]
-                                                       font-serif text-[11pt] leading-relaxed text-near-black
-                                                       placeholder:text-stone outline-none
-                                                       ring-ink-focus transition-shadow"
-                                            disabled={searching}
-                                        />
-                                    </div>
-                                </div>
-                                {/* Bottom 50% — empty */}
-                                <div className="h-1/2" />
+                        {/* Sticky query header — shows the turn whose query has scrolled out of view */}
+                        <div
+                            className={`sticky top-0 z-10 bg-parchment/95 backdrop-blur-sm border-b border-cream/50 transition-opacity duration-150 ${stickyQuery ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                        >
+                            <div className="px-4 py-2 max-w-[780px] mx-auto">
+                                <p className="font-serif text-[13pt] font-semibold text-ink leading-snug truncate">
+                                    {stickyQuery}
+                                </p>
                             </div>
-                        )}
-                        {previousTurns.map((turn) => (
-                            <TurnBlock
-                                key={turn.query}
-                                query={turn.query}
-                                result={turn.result}
-                                timeline={turn.timeline}
-                                variant="previous"
-                            />
-                        ))}
-                        {query && (
-                            <TurnBlock
-                                query={query}
-                                result={result}
-                                timeline={timeline}
-                                searching={searching}
-                                error={error}
-                                elapsed={elapsed}
-                                variant="current"
-                            />
-                        )}
-                        <div ref={contentEndRef} />
+                        </div>
+
+                        <div
+                            className={`flex flex-col px-4 pb-4 ${hasAnyContent || searching ? 'pt-6 md:pt-16' : ''}`}
+                        >
+                            {!hasAnyContent && !searching && (
+                                <div className="flex-1 flex flex-col">
+                                    {/* Top 50% — input sits at bottom of this, touching midline */}
+                                    <div className="h-1/2 flex flex-col justify-end">
+                                        <div className="w-full max-w-[600px] mx-auto px-4">
+                                            <p className="font-serif text-[11pt] text-stone italic text-center mb-6">
+                                                Ask anything about your
+                                                documents
+                                            </p>
+                                            <input
+                                                ref={inputRef}
+                                                type="text"
+                                                value={input}
+                                                onChange={(e) =>
+                                                    setInput(
+                                                        e.currentTarget.value
+                                                    )
+                                                }
+                                                onKeyDown={handleKeyDown}
+                                                placeholder="Type your question..."
+                                                className="w-full bg-ivory ring-warm rounded-[8pt] px-[24pt] py-[16pt]
+                                                           font-serif text-[11pt] leading-relaxed text-near-black
+                                                           placeholder:text-stone outline-none
+                                                           ring-ink-focus transition-shadow"
+                                                disabled={searching}
+                                            />
+                                        </div>
+                                    </div>
+                                    {/* Bottom 50% — empty */}
+                                    <div className="h-1/2" />
+                                </div>
+                            )}
+                            {previousTurns.map((turn) => (
+                                <div
+                                    key={turn.query}
+                                    data-turn-query={turn.query}
+                                >
+                                    <TurnBlock
+                                        query={turn.query}
+                                        result={turn.result}
+                                        timeline={turn.timeline}
+                                        variant="previous"
+                                    />
+                                </div>
+                            ))}
+                            {query && (
+                                <div data-turn-query={query}>
+                                    <TurnBlock
+                                        query={query}
+                                        result={result}
+                                        timeline={timeline}
+                                        searching={searching}
+                                        error={error}
+                                        elapsed={elapsed}
+                                        variant="current"
+                                    />
+                                </div>
+                            )}
+                            <div ref={contentEndRef} />
+                        </div>
                     </div>
 
                     {/* Input (bottom, only when content exists) */}

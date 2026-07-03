@@ -121,5 +121,5 @@ export { mdToTree, renderDocOutline } from './tree/markdown_split.ts'
 export type { BaseDocNode, DocNode, TreeNode } from './tree/type.ts'
 
 // ── Utils ───────────────────────────────────────────────────────
-export { getErrorMessage, hash, md5, uuid } from './utils/common.ts'
+export { getErrorMessage, md5, uuid } from './utils/common.ts'
 export { segmentText } from './utils/segment.ts'

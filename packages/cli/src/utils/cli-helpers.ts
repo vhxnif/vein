@@ -1,10 +1,6 @@
 import process from 'node:process'
 import { getErrorMessage, modelKey } from '@vein/core'
 
-function pluralize(count: number, singular: string, plural: string): string {
-    return count === 1 ? singular : plural
-}
-
 function formatDuration(ms: number): string {
     if (ms < 1000) return `${ms}ms`
     if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
@@ -55,7 +51,6 @@ export {
     formatDuration,
     getErrorMessage,
     modelKey,
-    pluralize,
     VERDICT_COLOR,
     VERDICT_ICON,
 }
