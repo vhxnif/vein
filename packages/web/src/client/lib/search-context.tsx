@@ -159,6 +159,23 @@ function rebuildTurnsFromMessages(messages: any[]): TurnRecord[] {
         from: number,
         to: number
     ): TimelineBlock[] => {
+        // First pass: collect tool results by toolCallId
+        // Mirrors extractResultText() in core/ai/sub-agents/utils.ts
+        const toolResults = new Map<string, string>()
+        for (let i = from; i <= to; i++) {
+            const msg = msgs[i]
+            if (msg?.role !== 'toolResult') continue
+            const content = msg.content as
+                | Array<{ type: string; text?: string }>
+                | undefined
+            const text =
+                content
+                    ?.filter((c) => c.type === 'text')
+                    .map((c) => c.text ?? '')
+                    .join('') ?? ''
+            toolResults.set((msg.toolCallId as string) ?? '', text)
+        }
+
         const tl: TimelineBlock[] = []
         for (let i = from; i <= to; i++) {
             const msg = msgs[i]
@@ -170,6 +187,7 @@ function rebuildTurnsFromMessages(messages: any[]): TurnRecord[] {
                       thinking?: string
                       name?: string
                       id?: string
+                      arguments?: Record<string, unknown>
                   }>
                 | undefined
             if (!content) continue
@@ -181,17 +199,57 @@ function rebuildTurnsFromMessages(messages: any[]): TurnRecord[] {
                         text: block.thinking ?? '',
                     })
                 } else if (block.type === 'toolCall') {
+                    const resultText =
+                        toolResults.get(block.id ?? '') ?? ''
+                    // Mirrors formatSize() in core/ai/sub-agents/utils.ts
+                    const summary =
+                        resultText.length > 0
+                            ? resultText.length >= 1000
+                                ? `${(resultText.length / 1000).toFixed(1)}k chars`
+                                : `${resultText.length} chars`
+                            : undefined
                     tl.push({
                         type: 'tool',
                         id: block.id ?? randomUUID(),
                         name: block.name ?? '?',
-                        label: block.name ?? '?',
+                        label: _formatToolLabel(
+                            block.name ?? '?',
+                            block.arguments
+                        ),
                         status: 'done',
+                        summary,
                     })
                 }
             }
         }
         return tl
+    }
+
+    /** Generate a human-readable tool label from name + arguments.
+     *  Mirrors the backend toolMeta stepLabel() logic for each tool. */
+    function _formatToolLabel(
+        name: string,
+        args?: Record<string, unknown>
+    ): string {
+        if (!args) return name
+        if (name === 'searchDocs') {
+            const q = String(args.query ?? '')
+            return `Searching: "${q.slice(0, 36)}${q.length > 36 ? '...' : ''}"...`
+        }
+        if (name === 'getDocStructure') {
+            return 'Reading document structure...'
+        }
+        if (name === 'getDocNodeDetails') {
+            return `Reading node ${args.nodeId ?? '?'}...`
+        }
+        if (name === 'getReviewSource') {
+            const nid = String(args.nodeId ?? '').replace(/^0+/, '') || '?'
+            return `Verifying: ${args.docId ?? '?'}:${nid}...`
+        }
+        if (name === 'reviewResult') {
+            return 'Reviewing results...'
+        }
+        return name
     }
 
     // Collect doc ID map from tool call arguments (for hover tooltips)
