@@ -145,7 +145,7 @@ function HomePage() {
                         </div>
 
                         <div
-                            className={`flex flex-col px-4 pb-4 ${hasAnyContent || searching ? 'pt-6 md:pt-16' : ''}`}
+                            className={`flex flex-col px-4 pb-4 min-h-full ${hasAnyContent || searching ? 'pt-6 md:pt-16' : ''}`}
                         >
                             {!hasAnyContent && !searching && (
                                 <div className="flex-1 flex flex-col">
@@ -343,41 +343,41 @@ function OutlinePanel({
         return () => observer.disconnect()
     }, [groups])
 
-    if (groups.length === 0) return null
-
     return (
         <nav className="hidden md:block w-[170px] flex-shrink-0 h-dvh md:h-screen overflow-y-auto pt-10 pl-5 pr-3 kami-scrollbar">
-            <div className="sticky top-0">
-                <p className="font-sans text-[7pt] font-semibold text-stone/60 uppercase tracking-wide mb-3">
-                    Outline
-                </p>
-                {groups.map((group) => (
-                    <div key={group.query} className="mb-4">
-                        <p className="font-sans text-[6.5pt] font-medium text-stone/40 uppercase tracking-wide mb-1.5 truncate">
-                            {group.query.slice(0, 40)}
-                        </p>
-                        {group.items.map((item) => (
-                            <a
-                                key={item.id}
-                                href={`#${item.id}`}
-                                onClick={(e) => {
-                                    e.preventDefault()
-                                    document
-                                        .getElementById(item.id)
-                                        ?.scrollIntoView({ behavior: 'smooth' })
-                                }}
-                                className={`block font-sans text-[7pt] leading-relaxed py-0.5 truncate transition-colors hover:text-ink
-                                    ${item.id === activeId ? 'text-ink font-medium' : 'text-stone/60'}`}
-                                style={{
-                                    paddingLeft: `${8 + (item.level - 1) * 8}pt`,
-                                }}
-                            >
-                                {item.text}
-                            </a>
-                        ))}
-                    </div>
-                ))}
-            </div>
+            {groups.length > 0 && (
+                <div className="sticky top-0">
+                    <p className="font-sans text-[7pt] font-semibold text-stone/60 uppercase tracking-wide mb-3">
+                        Outline
+                    </p>
+                    {groups.map((group) => (
+                        <div key={group.query} className="mb-4">
+                            <p className="font-sans text-[6.5pt] font-medium text-stone/40 uppercase tracking-wide mb-1.5 truncate">
+                                {group.query.slice(0, 40)}
+                            </p>
+                            {group.items.map((item) => (
+                                <a
+                                    key={item.id}
+                                    href={`#${item.id}`}
+                                    onClick={(e) => {
+                                        e.preventDefault()
+                                        document
+                                            .getElementById(item.id)
+                                            ?.scrollIntoView({ behavior: 'smooth' })
+                                    }}
+                                    className={`block font-sans text-[7pt] leading-relaxed py-0.5 truncate transition-colors hover:text-ink
+                                        ${item.id === activeId ? 'text-ink font-medium' : 'text-stone/60'}`}
+                                    style={{
+                                        paddingLeft: `${8 + (item.level - 1) * 8}pt`,
+                                    }}
+                                >
+                                    {item.text}
+                                </a>
+                            ))}
+                        </div>
+                    ))}
+                </div>
+            )}
         </nav>
     )
 }
@@ -401,64 +401,44 @@ function SessionSidebar({
     onNew: () => void
 }) {
     return (
-        <aside className="hidden md:flex flex-col w-[200px] flex-shrink-0 border-r border-cream/40 bg-parchment h-screen overflow-y-auto kami-scrollbar">
-            {/* Project name */}
-            <div className="px-4 pt-6 pb-3">
-                {project ? (
-                    <h2 className="font-sans text-[8pt] font-medium text-stone leading-snug truncate">
-                        {project}
-                    </h2>
-                ) : (
-                    <p className="font-sans text-[7pt] text-stone/60">
-                        No project
-                    </p>
-                )}
-            </div>
+        <aside className="hidden md:flex flex-col w-[170px] flex-shrink-0 h-screen overflow-y-auto pt-10 pl-5 pr-3 kami-scrollbar">
+            <p className="font-sans text-[7pt] font-semibold text-stone/60 uppercase tracking-wide mb-3">
+                Sessions
+            </p>
 
-            {/* Session list */}
-            <div className="flex-1 px-2">
-                {sessions.length === 0 ? (
-                    <p className="px-2 font-sans text-[7pt] text-stone/50">
-                        No sessions yet
-                    </p>
-                ) : (
-                    sessions.map((s) => (
-                        <button
-                            key={s.sessionId}
-                            type="button"
-                            onClick={() => onSwitch(s.sessionId)}
-                            className={`w-full text-left px-2 py-1.5 rounded-[4pt] mb-0.5 transition-colors hover:bg-sand/50
-                                ${s.sessionId === currentId ? 'bg-sand/40' : ''}`}
-                        >
-                            <div
-                                className={`font-sans text-[7.5pt] leading-snug truncate ${
-                                    s.sessionId === currentId
-                                        ? 'text-ink font-medium'
-                                        : 'text-stone/80'
-                                }`}
-                            >
-                                {s.summary.slice(0, 45)}
-                            </div>
-                            <div className="font-sans text-[6.5pt] text-stone/50 mt-0.5">
-                                {s.queryCount} quer
-                                {s.queryCount === 1 ? 'y' : 'ies'}
-                                {' · '}
-                                {_formatSessionTime(s.updatedAt)}
-                            </div>
-                        </button>
-                    ))
-                )}
-            </div>
+            {sessions.length === 0 ? (
+                <p className="font-sans text-[7pt] text-stone/50">
+                    No sessions yet
+                </p>
+            ) : (
+                sessions.map((s) => (
+                    <div
+                        key={s.sessionId}
+                        onClick={() => onSwitch(s.sessionId)}
+                        className={`cursor-pointer transition-colors hover:text-ink mb-2 ${
+                            s.sessionId === currentId
+                                ? 'text-ink font-medium'
+                                : 'text-stone/60'
+                        }`}
+                    >
+                        <p className="font-sans text-[7pt] leading-snug truncate">
+                            {s.summary.slice(0, 50)}
+                        </p>
+                        <p className="font-sans text-[6.5pt] text-stone/40 leading-snug">
+                            {s.queryCount} quer
+                            {s.queryCount === 1 ? 'y' : 'ies'}
+                            {' · '}
+                            {_formatSessionTime(s.updatedAt)}
+                        </p>
+                    </div>
+                ))
+            )}
 
-            {/* New session button */}
-            <div className="px-2 pb-4 pt-2 border-t border-cream/30 mt-2">
-                <button
-                    type="button"
-                    onClick={onNew}
-                    className="w-full text-left px-2 py-1.5 rounded-[4pt] font-sans text-[7pt] text-stone/70 hover:text-ink hover:bg-sand/50 transition-colors"
-                >
-                    + New Session
-                </button>
+            <div
+                onClick={onNew}
+                className="font-sans text-[7pt] text-stone/60 hover:text-ink cursor-pointer transition-colors mt-3"
+            >
+                + New Session
             </div>
         </aside>
     )
