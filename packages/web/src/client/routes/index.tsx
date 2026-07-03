@@ -364,7 +364,7 @@ function OutlinePanel({
     }, [groups])
 
     return (
-        <nav className="hidden md:block w-[170px] flex-shrink-0 h-dvh md:h-screen overflow-y-auto pt-10 pl-5 pr-3 no-scrollbar">
+        <nav className="hidden md:block w-[170px] flex-shrink-0 self-start h-[calc(100dvh-120px)] overflow-y-auto mt-10 mb-20 pl-5 pr-3 no-scrollbar">
             {groups.length > 0 && (
                 <div className="sticky top-0">
                     <p className="font-sans text-[7pt] font-semibold text-stone/60 uppercase tracking-wide mb-3">
@@ -383,7 +383,9 @@ function OutlinePanel({
                                         e.preventDefault()
                                         document
                                             .getElementById(item.id)
-                                            ?.scrollIntoView({ behavior: 'smooth' })
+                                            ?.scrollIntoView({
+                                                behavior: 'smooth',
+                                            })
                                     }}
                                     className={`block font-sans text-[7pt] leading-relaxed py-0.5 truncate transition-colors hover:text-ink
                                         ${item.id === activeId ? 'text-ink font-medium' : 'text-stone/60'}`}
@@ -403,7 +405,6 @@ function OutlinePanel({
 }
 
 function SessionSidebar({
-    project,
     sessions,
     currentId,
     onSwitch,
@@ -421,45 +422,51 @@ function SessionSidebar({
     onNew: () => void
 }) {
     return (
-        <aside className="hidden md:flex flex-col w-[170px] flex-shrink-0 h-screen overflow-y-auto pt-10 pl-5 pr-3 no-scrollbar">
-            <p className="font-sans text-[7pt] font-semibold text-stone/60 uppercase tracking-wide mb-3">
-                Sessions
-            </p>
-
-            {sessions.length === 0 ? (
-                <p className="font-sans text-[7pt] text-stone/50">
-                    No sessions yet
+        <aside className="hidden md:flex flex-col w-[170px] flex-shrink-0 self-start h-[calc(100dvh-120px)] mt-10 mb-20 pl-5 pr-3">
+            {/* Scrollable session list */}
+            <div className="flex-1 overflow-y-auto no-scrollbar min-h-0">
+                <p className="font-sans text-[7pt] font-semibold text-stone/60 uppercase tracking-wide mb-3">
+                    Sessions
                 </p>
-            ) : (
-                sessions.map((s) => (
-                    <div
-                        key={s.sessionId}
-                        onClick={() => onSwitch(s.sessionId)}
-                        className={`cursor-pointer transition-colors hover:text-ink mb-2 ${
-                            s.sessionId === currentId
-                                ? 'text-ink font-medium'
-                                : 'text-stone/60'
-                        }`}
-                    >
-                        <p className="font-sans text-[7pt] leading-snug truncate">
-                            {s.summary.slice(0, 50)}
-                        </p>
-                        <p className="font-sans text-[6.5pt] text-stone/40 leading-snug">
-                            {s.queryCount} quer
-                            {s.queryCount === 1 ? 'y' : 'ies'}
-                            {' · '}
-                            {_formatSessionTime(s.updatedAt)}
-                        </p>
-                    </div>
-                ))
-            )}
 
-            <div
+                {sessions.length === 0 ? (
+                    <p className="font-sans text-[7pt] text-stone/50">
+                        No sessions yet
+                    </p>
+                ) : (
+                    sessions.map((s) => (
+                        <button
+                            key={s.sessionId}
+                            type="button"
+                            onClick={() => onSwitch(s.sessionId)}
+                            className={`text-left transition-colors hover:text-ink mb-2 w-full ${
+                                s.sessionId === currentId
+                                    ? 'text-ink font-medium'
+                                    : 'text-stone/60'
+                            }`}
+                        >
+                            <p className="font-sans text-[7pt] leading-snug truncate">
+                                {s.summary.slice(0, 50)}
+                            </p>
+                            <p className="font-sans text-[6.5pt] text-stone/40 leading-snug">
+                                {s.queryCount} quer
+                                {s.queryCount === 1 ? 'y' : 'ies'}
+                                {' · '}
+                                {_formatSessionTime(s.updatedAt)}
+                            </p>
+                        </button>
+                    ))
+                )}
+            </div>
+
+            {/* Fixed bottom — always visible */}
+            <button
+                type="button"
                 onClick={onNew}
-                className="font-sans text-[7pt] text-stone/60 hover:text-ink cursor-pointer transition-colors mt-3"
+                className="font-sans text-[7pt] text-stone/60 hover:text-ink text-left transition-colors mt-3 flex-shrink-0 w-full"
             >
                 + New Session
-            </div>
+            </button>
         </aside>
     )
 }
@@ -615,7 +622,6 @@ function TurnBlock({
     timeline,
     searching,
     error,
-    elapsed,
     variant,
 }: {
     query: string
@@ -648,9 +654,6 @@ function TurnBlock({
     const lastIsText = lastBlock?.type === 'text'
     const processBlocks = lastIsText ? timeline.slice(0, -1) : timeline
     const hasProcessContent = processBlocks.length > 0
-    const runningCount = timeline.filter(
-        (b) => b.type === 'tool' && b.status === 'running'
-    ).length
     const isPrevious = variant === 'previous'
 
     const handleExport = useCallback(async () => {

@@ -199,8 +199,7 @@ function rebuildTurnsFromMessages(messages: any[]): TurnRecord[] {
                         text: block.thinking ?? '',
                     })
                 } else if (block.type === 'toolCall') {
-                    const resultText =
-                        toolResults.get(block.id ?? '') ?? ''
+                    const resultText = toolResults.get(block.id ?? '') ?? ''
                     // Mirrors formatSize() in core/ai/sub-agents/utils.ts
                     const summary =
                         resultText.length > 0

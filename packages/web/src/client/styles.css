@@ -137,7 +137,8 @@ html::-webkit-scrollbar-thumb:hover {
     display: none;
 }
 
-html, body {
+html,
+body {
     scrollbar-width: none;
     -ms-overflow-style: none;
 }
