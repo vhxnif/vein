@@ -364,7 +364,7 @@ function OutlinePanel({
     }, [groups])
 
     return (
-        <nav className="hidden md:block w-[170px] flex-shrink-0 h-dvh md:h-screen overflow-y-auto pt-10 pl-5 pr-3 kami-scrollbar">
+        <nav className="hidden md:block w-[170px] flex-shrink-0 h-dvh md:h-screen overflow-y-auto pt-10 pl-5 pr-3 no-scrollbar">
             {groups.length > 0 && (
                 <div className="sticky top-0">
                     <p className="font-sans text-[7pt] font-semibold text-stone/60 uppercase tracking-wide mb-3">
@@ -421,7 +421,7 @@ function SessionSidebar({
     onNew: () => void
 }) {
     return (
-        <aside className="hidden md:flex flex-col w-[170px] flex-shrink-0 h-screen overflow-y-auto pt-10 pl-5 pr-3 kami-scrollbar">
+        <aside className="hidden md:flex flex-col w-[170px] flex-shrink-0 h-screen overflow-y-auto pt-10 pl-5 pr-3 no-scrollbar">
             <p className="font-sans text-[7pt] font-semibold text-stone/60 uppercase tracking-wide mb-3">
                 Sessions
             </p>

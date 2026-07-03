@@ -80,7 +80,7 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
     return (
         <div
             ref={tooltipRef}
-            className="fixed z-50 max-h-[280px] overflow-y-auto kami-scrollbar
+            className="fixed z-50 max-h-[280px] overflow-y-auto no-scrollbar
                        bg-parchment border border-ink/20 rounded-[8pt] shadow-lg p-4"
             style={{
                 top: `${top}px`,
