@@ -52,7 +52,7 @@ function DocsList() {
         if (window.innerWidth < 768) return 20
         // md:py-[64pt] ≈ 170px, header ~200px, pagination bar ~72px; doc row: py-[8pt]*2(~21px) + single line ~22px ≈ 43px
         const availH = window.innerHeight - 170 - 200 - 72
-        const rowH = 43
+        const rowH = 28
         const result = Math.min(50, Math.max(3, Math.floor(availH / rowH)))
         console.log('[pageSize calc]', {
             innerHeight: window.innerHeight,
@@ -270,7 +270,7 @@ function DocsList() {
                     {docs.map((doc) => (
                         <div
                             key={doc.id}
-                            className="flex items-center gap-2 px-[12pt] py-[8pt] -mx-[12pt] rounded-[6pt]
+                            className="flex items-center gap-2 px-[12pt] py-[4pt] -mx-[12pt] rounded-[6pt]
                                        hover:bg-sand/60 transition-colors group"
                         >
                             <Link
@@ -278,10 +278,13 @@ function DocsList() {
                                 params={{ docId: doc.id }}
                                 className="flex-1 min-w-0 no-underline flex items-center gap-2"
                             >
-                                <span className="w-1/2 flex-shrink-0 font-serif text-[10pt] font-medium text-near-black leading-relaxed truncate">
+                                <span className="flex-1 font-serif text-[10pt] font-medium text-near-black leading-snug truncate">
                                     {doc.title}
                                 </span>
-                                <span className="w-1/2 flex items-center justify-end gap-2 font-sans text-[8pt] text-stone">
+                                <span className="hidden md:block flex-1 font-sans text-[8pt] text-stone/60 leading-snug truncate">
+                                    {doc.sourcePath}
+                                </span>
+                                <span className="flex-shrink-0 flex items-center gap-2 font-sans text-[8pt] text-stone">
                                     <span className="flex-shrink-0">
                                         {doc.nodeCount} section
                                         {doc.nodeCount !== 1 ? 's' : ''}
