@@ -48,8 +48,12 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
 
     // Position relative to anchor, clamped to viewport
     const rect = anchorEl?.getBoundingClientRect()
-    const tooltipWidth = Math.min(420, window.innerWidth - 16)
-    const margin = 8
+    // Mobile: narrower with more margin so borders are clearly visible
+    const isMobile = window.innerWidth < 768
+    const tooltipWidth = isMobile
+        ? Math.min(360, window.innerWidth - 48)
+        : Math.min(420, window.innerWidth - 16)
+    const margin = isMobile ? 24 : 8
 
     // Horizontal: clamp left so tooltip doesn't overflow viewport edges
     let left: number
@@ -81,7 +85,7 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
         <div
             ref={tooltipRef}
             className="fixed z-50 max-h-[280px] overflow-y-auto no-scrollbar
-                       bg-parchment border border-ink/20 rounded-[8pt] shadow-lg p-4"
+                       bg-ivory border border-ink/30 rounded-[8pt] shadow-lg p-4"
             style={{
                 top: `${top}px`,
                 left: `${left}px`,
@@ -96,7 +100,9 @@ export function NodeTooltip({ fullDocId, nodeId, anchorEl }: NodeTooltipProps) {
             )}
 
             {error && (
-                <div className="font-sans text-[8.5pt] text-error">{error}</div>
+                <div className="font-sans text-[8.5pt] text-error break-words">
+                    {error}
+                </div>
             )}
 
             {node && !loading && (

@@ -131,11 +131,11 @@ function HomePage() {
                     {/* Conversation */}
                     <div
                         ref={scrollContainerRef}
-                        className="flex-1 min-h-0 overflow-y-auto no-scrollbar relative flex flex-col"
+                        className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col touch-pan-y"
                     >
-                        {/* Sticky query header — shows the turn whose query has scrolled out of view */}
+                        {/* Sticky query header — desktop only */}
                         <div
-                            className={`sticky top-0 z-10 bg-parchment/95 backdrop-blur-sm border-b border-cream/50 transition-opacity duration-150 ${stickyQuery ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                            className={`hidden md:block sticky top-0 z-10 bg-parchment/95 backdrop-blur-sm border-b border-cream/50 transition-opacity duration-150 ${stickyQuery ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                         >
                             <div className="px-4 py-2">
                                 <p className="font-serif text-[13pt] font-semibold text-ink leading-snug truncate">
@@ -145,7 +145,7 @@ function HomePage() {
                         </div>
 
                         <div
-                            className={`flex flex-col px-4 pb-4 min-h-full ${hasAnyContent || searching ? 'pt-6 md:pt-16' : ''}`}
+                            className={`flex flex-col px-4 pb-4 min-h-full min-w-0 ${hasAnyContent || searching ? 'pt-6 md:pt-16' : ''}`}
                         >
                             {!hasAnyContent && !searching && (
                                 <div className="flex-1 flex flex-col">
@@ -567,36 +567,38 @@ function SessionSwitcher({
                 </svg>
             </button>
             {open && (
-                <div className="absolute top-full right-0 mt-1 w-64 bg-ivory ring-warm rounded-[8pt] py-1 px-1 z-50 shadow-sm max-h-[300px] overflow-y-auto">
-                    {sessions.length === 0 ? (
-                        <div className="px-3 py-3 font-sans text-[8pt] text-stone text-center">
-                            No sessions yet
-                        </div>
-                    ) : (
-                        sessions.map((s) => (
-                            <button
-                                key={s.sessionId}
-                                type="button"
-                                onClick={() => {
-                                    onSwitch(s.sessionId)
-                                    setOpen(false)
-                                }}
-                                className={`w-full text-left px-3 py-2 rounded-[4pt] transition-colors hover:bg-sand
-                                    ${s.sessionId === currentId ? 'text-ink' : 'text-stone'}`}
-                            >
-                                <div className="font-serif text-[9pt] leading-snug truncate">
-                                    {s.summary.slice(0, 60)}
-                                </div>
-                                <div className="font-sans text-[7pt] text-stone/70 mt-0.5">
-                                    {s.queryCount} quer
-                                    {s.queryCount === 1 ? 'y' : 'ies'}
-                                    {' · '}
-                                    {_formatSessionTime(s.updatedAt)}
-                                </div>
-                            </button>
-                        ))
-                    )}
-                    <div className="border-t border-cream/50 mt-1 pt-1">
+                <div className="absolute top-full right-0 mt-1 w-64 bg-ivory ring-warm rounded-[8pt] z-50 shadow-sm flex flex-col max-h-[300px]">
+                    <div className="flex-1 overflow-y-auto px-1 pt-1 pb-0">
+                        {sessions.length === 0 ? (
+                            <div className="px-3 py-3 font-sans text-[8pt] text-stone text-center">
+                                No sessions yet
+                            </div>
+                        ) : (
+                            sessions.map((s) => (
+                                <button
+                                    key={s.sessionId}
+                                    type="button"
+                                    onClick={() => {
+                                        onSwitch(s.sessionId)
+                                        setOpen(false)
+                                    }}
+                                    className={`w-full text-left px-3 py-2 rounded-[4pt] transition-colors hover:bg-sand
+                                        ${s.sessionId === currentId ? 'text-ink' : 'text-stone'}`}
+                                >
+                                    <div className="font-serif text-[9pt] leading-snug truncate">
+                                        {s.summary.slice(0, 60)}
+                                    </div>
+                                    <div className="font-sans text-[7pt] text-stone/70 mt-0.5">
+                                        {s.queryCount} quer
+                                        {s.queryCount === 1 ? 'y' : 'ies'}
+                                        {' · '}
+                                        {_formatSessionTime(s.updatedAt)}
+                                    </div>
+                                </button>
+                            ))
+                        )}
+                    </div>
+                    <div className="border-t border-cream/50 p-1 flex-shrink-0">
                         <button
                             type="button"
                             onClick={() => {
