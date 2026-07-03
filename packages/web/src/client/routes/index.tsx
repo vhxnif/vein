@@ -131,13 +131,13 @@ function HomePage() {
                     {/* Conversation */}
                     <div
                         ref={scrollContainerRef}
-                        className="flex-1 min-h-0 overflow-y-auto kami-scrollbar relative flex flex-col"
+                        className="flex-1 min-h-0 overflow-y-auto no-scrollbar relative flex flex-col"
                     >
                         {/* Sticky query header — shows the turn whose query has scrolled out of view */}
                         <div
                             className={`sticky top-0 z-10 bg-parchment/95 backdrop-blur-sm border-b border-cream/50 transition-opacity duration-150 ${stickyQuery ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                         >
-                            <div className="px-4 py-2 max-w-[780px] mx-auto">
+                            <div className="px-4 py-2">
                                 <p className="font-serif text-[13pt] font-semibold text-ink leading-snug truncate">
                                     {stickyQuery}
                                 </p>

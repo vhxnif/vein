@@ -128,6 +128,15 @@ html::-webkit-scrollbar-thumb:hover {
     background: var(--stone);
 }
 
+/* Hide scrollbar but keep scroll functionality (overflow-y:scroll/auto still works) */
+.no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
 body {
     font-family: var(--serif);
     background-color: var(--parchment);
