@@ -212,6 +212,26 @@ function HomePage() {
                     {/* Input (bottom, only when content exists) */}
                     {hasAnyContent && (
                         <div className="flex-shrink-0 px-4 pb-6 pt-3">
+                            <div
+                                className={`h-6 mb-2 flex items-center gap-2 transition-opacity duration-200 ${searching ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                            >
+                                <RunCat size={16} />
+                                <span className="font-sans text-[8pt] text-olive">
+                                    {(() => {
+                                        const running = timeline.filter(
+                                            (b) =>
+                                                b.type === 'tool' &&
+                                                b.status === 'running'
+                                        ).length
+                                        const last = timeline.at(-1)
+                                        if (running > 0)
+                                            return `${running} tool${running > 1 ? 's' : ''} running`
+                                        if (last?.type === 'thinking')
+                                            return 'Thinking...'
+                                        return 'Streaming...'
+                                    })()}
+                                </span>
+                            </div>
                             <input
                                 ref={inputRef}
                                 type="text"
@@ -663,36 +683,10 @@ function TurnBlock({
             </div>
 
             {searching && timeline.length > 0 && (
-                <div className="mb-4">
-                    <div className="space-y-1">
-                        {timeline.map((block) => (
-                            <TimelineBlockView key={block.id} block={block} />
-                        ))}
-                    </div>
-                    <div className="flex items-center gap-2 mt-3">
-                        <RunCat size={16} />
-                        <span className="font-sans text-[8pt] text-olive">
-                            {runningCount > 0
-                                ? `${runningCount} tool${runningCount > 1 ? 's' : ''} running`
-                                : lastBlock?.type === 'thinking'
-                                  ? 'Thinking...'
-                                  : 'Streaming...'}
-                        </span>
-                        {elapsed !== undefined && (
-                            <span className="font-mono text-[8pt] text-stone tabular-nums ml-auto">
-                                {elapsed.toFixed(1)}s
-                            </span>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {searching && timeline.length === 0 && (
-                <div className="flex items-center gap-3 mb-4">
-                    <RunCat size={24} />
-                    <span className="font-sans text-[9pt] text-olive">
-                        Searching...
-                    </span>
+                <div className="mb-4 space-y-1">
+                    {timeline.map((block) => (
+                        <TimelineBlockView key={block.id} block={block} />
+                    ))}
                 </div>
             )}
 
