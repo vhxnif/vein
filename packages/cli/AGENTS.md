@@ -8,6 +8,7 @@
 
 - Import only from `@vein/core` single entry (root contract)
 - Commands in `command/` each export `register(program: Command)` — new subcommands follow this pattern
+- `--project` flag is resolved centrally in `vein.ts` via `preAction` hook. Commands must not parse or handle it themselves; `resolveProjectRoot()` and `setupProjectModel()` are already configured before the command action runs
 
 ## Coding Conventions
 

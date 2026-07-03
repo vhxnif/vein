@@ -25,6 +25,15 @@ Meta lives alongside `create*Tool()` in the same file. No separate registry. If 
 
 `beforeToolCall` is async — `tool_execution_start` may fire before it resolves. First tool start log shows `stepCount: 0`. Budget enforcement (synchronous inside `beforeToolCall`) is unaffected.
 
+### Store / DB
+
+Two database clients coexist; using the wrong one breaks transactions or raw SQL:
+
+- **`db`** — Drizzle ORM proxy (lazy singleton, resolves project root at call time). Use for ORM queries, `onConflictDoUpdate`, `onConflictDoNothing`, Drizzle `sql` templates.
+- **`getRawClient()`** — Raw SQL wrapper around better-sqlite3. Use for transactions (`BEGIN`/`COMMIT`/`ROLLBACK`), `json_extract`, manual `?` placeholders.
+
+**Transactions must use `getRawClient()`** — `db` is a Proxy over Drizzle and cannot execute raw `BEGIN`/`COMMIT`.
+
 ## Traps & Non-Obvious Behaviors
 
 ### DeepSeek
@@ -45,3 +54,15 @@ Meta lives alongside `create*Tool()` in the same file. No separate registry. If 
 ### Template Literal Trap
 
 Backtick template literals containing backticks (`` `ref reactive` ``) prematurely close the template. Use guillemets (「」) for code examples inside prompt strings.
+
+## Safety Rails
+
+### NEVER
+
+- Use `db` for raw `BEGIN`/`COMMIT`/`ROLLBACK` transactions
+- Use Drizzle `sql` tagged templates inside `getRawClient().execute()` — raw wrapper expects `?` placeholders, not Drizzle SQL fragments
+
+### ALWAYS
+
+- Use `getRawClient()` for multi-statement transactions (see root contract for `BEGIN/COMMIT` rule)
+- Use `db` for Drizzle ORM operations (`insert`, `update`, `delete`, `select`)
