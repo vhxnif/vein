@@ -35,12 +35,13 @@ import { docsRouter } from './routes/documents.ts'
 import { historyRouter } from './routes/history.ts'
 // ── API routes ─────────────────────────────────────────────────
 import { modelsRouter, projectsRouter } from './routes/projects.ts'
-import { searchRouter } from './routes/search.ts'
+import { searchRouter, sessionCrudRouter } from './routes/search.ts'
 
 app.route('/api/projects', projectsRouter)
 app.route('/api/models', modelsRouter)
 app.route('/api/projects/current/documents', docsRouter)
 app.route('/api/projects/current/search', searchRouter)
+app.route('/api/projects/current/sessions', sessionCrudRouter)
 app.route('/api/projects/current/history', historyRouter)
 
 // Health check

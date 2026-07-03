@@ -28,19 +28,6 @@ export function Layout({ children }: { children: ReactNode }) {
                         <path d="M21 21l-4.35-4.35" />
                     </svg>
                 </SidebarIcon>
-                <SidebarIcon href="/history" label="History">
-                    <svg
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                    >
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12,6 12,12 16,14" />
-                    </svg>
-                </SidebarIcon>
                 <SidebarIcon href="/docs" label="Docs">
                     <svg
                         width="18"
@@ -73,7 +60,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </aside>
 
             {/* Main content — scrollable on mobile, normal flow on desktop */}
-            <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden md:overflow-visible md:pl-[48px]">
+            <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden no-scrollbar md:overflow-visible md:pl-[48px]">
                 {children}
             </main>
 
@@ -96,19 +83,6 @@ export function Layout({ children }: { children: ReactNode }) {
                     >
                         <circle cx="11" cy="11" r="8" />
                         <path d="M21 21l-4.35-4.35" />
-                    </svg>
-                </MobileTab>
-                <MobileTab href="/history" label="History">
-                    <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                    >
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12,6 12,12 16,14" />
                     </svg>
                 </MobileTab>
                 <MobileTab href="/docs" label="Docs">

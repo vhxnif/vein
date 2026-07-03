@@ -20,11 +20,11 @@ export function NodeTooltipContent({ nodeId, node }: NodeTooltipContentProps) {
     return (
         <>
             {/* Header */}
-            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-ink/15">
+            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-ink/15 min-w-0">
                 <span className="font-mono text-[7pt] bg-ink/10 px-1.5 py-0.5 rounded text-ink shrink-0">
                     {nodeId}
                 </span>
-                <span className="font-serif text-[10pt] font-medium text-near-black leading-snug">
+                <span className="font-serif text-[10pt] font-medium text-near-black leading-snug break-words min-w-0">
                     {node.docName}
                 </span>
             </div>
@@ -49,7 +49,7 @@ export function NodeTooltipContent({ nodeId, node }: NodeTooltipContentProps) {
                             </h3>
                         ),
                         p: ({ children }) => (
-                            <p className="font-serif text-[9pt] leading-relaxed text-near-black mb-1.5">
+                            <p className="font-serif text-[9pt] leading-relaxed text-near-black mb-1.5 break-words">
                                 {children}
                             </p>
                         ),
@@ -64,12 +64,12 @@ export function NodeTooltipContent({ nodeId, node }: NodeTooltipContentProps) {
                             </ol>
                         ),
                         li: ({ children }) => (
-                            <li className="font-serif text-[9pt] leading-relaxed text-near-black">
+                            <li className="font-serif text-[9pt] leading-relaxed text-near-black break-words">
                                 {children}
                             </li>
                         ),
                         blockquote: ({ children }) => (
-                            <blockquote className="border-l-2 border-ink/20 pl-3 italic text-stone my-1.5">
+                            <blockquote className="border-l-2 border-ink/20 pl-3 italic text-stone my-1.5 break-words">
                                 {children}
                             </blockquote>
                         ),
@@ -89,7 +89,7 @@ export function NodeTooltipContent({ nodeId, node }: NodeTooltipContentProps) {
                             )
                         },
                         pre: ({ children }) => (
-                            <pre className="bg-ivory border border-cream/50 rounded-[4pt] p-2 my-1.5 overflow-x-auto font-mono text-[8pt] leading-relaxed">
+                            <pre className="bg-ivory border border-cream/50 rounded-[4pt] p-2 my-1.5 overflow-x-auto max-w-full font-mono text-[8pt] leading-relaxed">
                                 {children}
                             </pre>
                         ),

@@ -674,7 +674,7 @@ body::before { opacity: 0.015 !important; }
 
 ${capturedHtml}
 
-<div id="ref-tooltip" class="fixed z-50 max-h-[280px] overflow-y-auto kami-scrollbar bg-parchment border border-ink/20 rounded-[8pt] shadow-lg p-4" style="display:none"></div>
+<div id="ref-tooltip" class="fixed z-50 max-h-[280px] overflow-y-auto no-scrollbar bg-parchment border border-ink/20 rounded-[8pt] shadow-lg p-4" style="display:none"></div>
 
 <script>
 (function() {

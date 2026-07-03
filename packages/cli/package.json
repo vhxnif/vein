@@ -17,9 +17,7 @@
         "commander": "^14.0.3",
         "ora": "^9.4.1"
     },
-    "devDependencies": {
-        "esbuild": "^0.25.12"
-    },
+    "devDependencies": {},
     "peerDependencies": {
         "typescript": "^5"
     }

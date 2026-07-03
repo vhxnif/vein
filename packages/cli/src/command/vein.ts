@@ -9,6 +9,7 @@ import { register as registerHistory } from './history.command.ts'
 import { register as registerMarkdown } from './markdown.command.ts'
 import { register as registerNew } from './new.command.ts'
 import { register as registerProjects } from './projects.command.ts'
+import { register as registerSessions } from './sessions.command.ts'
 import { register as registerWeb } from './web.command.ts'
 
 const vein = new Command()
@@ -23,6 +24,7 @@ registerNew(vein)
 registerMarkdown(vein)
 registerAsk(vein)
 registerHistory(vein)
+registerSessions(vein)
 registerConfig(vein)
 registerBrowse(vein)
 registerWeb(vein)

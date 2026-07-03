@@ -1,9 +1,12 @@
-import type { HistoryTimelineBlock } from '@vein/core'
+import type { LibrarianResult, LibrarianSession } from '@vein/core'
 import {
+    createSession,
     loadProjectConfig,
+    persistSession,
+    resolveDocNames,
     resolveProjectRoot,
-    saveSearchHistory,
-    searchDocuments,
+    resumeLatestSession,
+    resumeSession,
 } from '@vein/core'
 import { Hono } from 'hono'
 
@@ -16,7 +19,7 @@ const searchRouter = new Hono()
 //   { "type": "text_delta", "delta": "..." }
 //   { "type": "tool_call_start", "toolCallId": "...", "toolName": "...", "label": "..." }
 //   { "type": "tool_call_end", "toolCallId": "...", "toolName": "...", "summary": "..." }
-//   { "type": "done", "content": "...", "review": {...}, ... }
+//   { "type": "done", "content": "...", "review": {...}, "sessionId": "..." }
 //   { "type": "error", "message": "..." }
 searchRouter.post('/', async (c) => {
     const root = resolveProjectRoot()
@@ -28,6 +31,9 @@ searchRouter.post('/', async (c) => {
     const body = await c.req.json()
     const query = body.q as string
     if (!query) return c.json({ error: 'Missing query' }, 400)
+
+    const sessionId = body.sessionId as string | undefined
+    const newSession = body.newSession as boolean | undefined
 
     const startedAt = performance.now()
 
@@ -51,14 +57,50 @@ searchRouter.post('/', async (c) => {
             }
             signal.addEventListener('abort', onAbort, { once: true })
 
-            // Capture timeline blocks for history
-            const timeline: HistoryTimelineBlock[] = []
+            // Track running tools for end-callback matching
+            type StreamBlock = {
+                type: 'thinking' | 'text' | 'tool'
+                text?: string
+                name?: string
+                label?: string
+                summary?: string
+            }
+            const timeline: StreamBlock[] = []
 
-            try {
-                const result = await searchDocuments(query, {
+            // Resolve or create session
+            let session: LibrarianSession
+            if (sessionId) {
+                try {
+                    session = await resumeSession(root, sessionId, {
+                        reviewerModel: config.reviewer,
+                        thinkingLevel: config.thinkingLevel,
+                    })
+                } catch {
+                    send({
+                        type: 'error',
+                        message: `Session not found: ${sessionId}`,
+                    })
+                    cleanup()
+                    return
+                }
+            } else if (newSession) {
+                session = createSession({
                     reviewerModel: config.reviewer,
                     thinkingLevel: config.thinkingLevel,
+                })
+            } else {
+                session = await resumeLatestSession(root, {
+                    reviewerModel: config.reviewer,
+                    thinkingLevel: config.thinkingLevel,
+                })
+            }
+
+            let result: LibrarianResult
+            try {
+                result = await session.ask(query, undefined, {
                     signal,
+                    thinkingLevel: config.thinkingLevel,
+                    reviewerModel: config.reviewer,
                     onThinkingDelta: (delta) => {
                         if (!aborted) {
                             send({ type: 'thinking_delta', delta })
@@ -110,7 +152,6 @@ searchRouter.post('/', async (c) => {
                                 toolName,
                                 summary,
                             })
-                            // Find the last matching tool block and add summary
                             for (let i = timeline.length - 1; i >= 0; i--) {
                                 const b = timeline[i]!
                                 if (
@@ -130,19 +171,19 @@ searchRouter.post('/', async (c) => {
 
                 const elapsedMs = Math.round(performance.now() - startedAt)
 
-                // Save to history (best-effort)
-                if (root) {
-                    saveSearchHistory(
-                        root,
-                        query,
-                        result,
-                        elapsedMs,
-                        result.review ? 'review' : 'quick',
-                        timeline
-                    ).catch(() => {
-                        /* ignore */
-                    })
+                // Resolve doc names for the client
+                let docNames: Record<string, string> = {}
+                try {
+                    const map = await resolveDocNames(result.trace)
+                    docNames = Object.fromEntries(map)
+                } catch {
+                    // best-effort
                 }
+
+                // Persist session for multi-turn
+                persistSession(root, session).catch(() => {
+                    /* best-effort */
+                })
 
                 send({
                     type: 'done',
@@ -151,9 +192,8 @@ searchRouter.post('/', async (c) => {
                     reviewElapsedMs: result.reviewElapsedMs,
                     elapsedMs,
                     trace: result.trace,
-                    docNames: result.docNames
-                        ? Object.fromEntries(result.docNames)
-                        : undefined,
+                    sessionId: session.sessionId,
+                    docNames,
                 })
             } catch (err) {
                 if (aborted) return
@@ -163,6 +203,10 @@ searchRouter.post('/', async (c) => {
                         err instanceof Error ? err.message : 'Search failed',
                 })
             } finally {
+                cleanup()
+            }
+
+            function cleanup() {
                 signal.removeEventListener('abort', onAbort)
                 try {
                     controller.close()
@@ -179,3 +223,61 @@ searchRouter.post('/', async (c) => {
 })
 
 export { searchRouter }
+
+// ── Session CRUD ───────────────────────────────────────────────
+import { deleteSession, listSessionIds, loadSession } from '@vein/core'
+
+const sessionCrudRouter = new Hono()
+
+// GET /api/projects/current/sessions/latest — load latest session
+sessionCrudRouter.get('/latest', async (c) => {
+    const root = resolveProjectRoot()
+    if (!root) return c.json({ error: 'No project selected' }, 400)
+    const { loadLatestSession } = await import('@vein/core')
+    const snap = await loadLatestSession(root)
+    if (!snap) return c.json({ session: null })
+    return c.json({ session: snap })
+})
+
+// GET /api/projects/current/sessions — list all sessions with metadata
+sessionCrudRouter.get('/', async (c) => {
+    const root = resolveProjectRoot()
+    if (!root) return c.json({ error: 'No project selected' }, 400)
+    const ids = await listSessionIds(root)
+    const sessions = await Promise.all(
+        ids.map(async (id) => {
+            const snap = await loadSession(root, id)
+            return snap
+                ? {
+                      sessionId: snap.sessionId,
+                      summary: snap.summary,
+                      queryCount: snap.queryCount,
+                      updatedAt: snap.updatedAt,
+                  }
+                : null
+        })
+    )
+    return c.json({ sessions: sessions.filter(Boolean) })
+})
+
+// GET /api/projects/current/sessions/:id — load a session
+sessionCrudRouter.get('/:id', async (c) => {
+    const root = resolveProjectRoot()
+    if (!root) return c.json({ error: 'No project selected' }, 400)
+    const id = c.req.param('id')
+    const snap = await loadSession(root, id)
+    if (!snap) return c.json({ error: 'Session not found' }, 404)
+    return c.json(snap)
+})
+
+// DELETE /api/projects/current/sessions/:id — delete a session
+sessionCrudRouter.delete('/:id', async (c) => {
+    const root = resolveProjectRoot()
+    if (!root) return c.json({ error: 'No project selected' }, 400)
+    const id = c.req.param('id')
+    const deleted = await deleteSession(root, id)
+    if (!deleted) return c.json({ error: 'Session not found' }, 404)
+    return c.json({ ok: true })
+})
+
+export { sessionCrudRouter }

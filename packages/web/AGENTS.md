@@ -13,6 +13,7 @@
 - `routes/`: Hono sub-routers mounted at `/api/projects`, `/api/projects/current/*`
 - `client/`: React SPA (TanStack Router + Query), Vite-build into `dist/client/`
 - Static root: server probes two paths (dev `../../dist/client`, prod `../client`) — see `staticRoot` in `server.ts`
+- API client (`lib/api.ts`) auto-injects `X-Vein-Project` header AND `project` query param (from localStorage) on every request. New backend endpoints must read the project via `projectMiddleware`; new frontend API helpers must use `h()` / `u()` from `api.ts`.
 
 ## Design System
 

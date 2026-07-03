@@ -1,15 +1,13 @@
 import process from 'node:process'
 import { intro, note, outro, text } from '@clack/prompts'
-import type {
-    HistoryTimelineBlock,
-    LibrarianResult,
-    SearchResult,
-} from '@vein/core'
+import type { LibrarianResult, LibrarianSession } from '@vein/core'
 import {
     logger,
+    persistSession,
+    resolveDocNames,
     resolveProjectRoot,
-    saveSearchHistory,
-    searchDocuments,
+    resumeLatestSession,
+    resumeSession,
     setupProjectModel,
 } from '@vein/core'
 import type { Command } from 'commander'
@@ -62,6 +60,11 @@ export function register(program: Command) {
             'disable interactive prompt, output JSON'
         )
         .option('-t, --trace', 'show retrieval trace in output')
+        .option(
+            '--new-session',
+            'start a new session instead of using the latest'
+        )
+        .option('--session <id>', 'resume a specific session by ID')
         .action(
             async (
                 queryArg?: string,
@@ -69,10 +72,14 @@ export function register(program: Command) {
                     noInteractive?: boolean
                     interactive?: boolean
                     trace?: boolean
+                    newSession?: boolean
+                    session?: string
                 }
             ) => {
                 const interactive = options?.interactive ?? true
                 const showTrace = options?.trace ?? false
+                const useNewSession = options?.newSession ?? false
+                const specificSessionId = options?.session
 
                 const config = await setupProjectModel()
                 if (!config) {
@@ -117,8 +124,55 @@ export function register(program: Command) {
                     query = queryArg
                 }
 
-                const sessionId = crypto.randomUUID().slice(0, 8)
-                log.info({ sessionId, query, content: 'Ask session start' })
+                // ── Session: use latest, specific, or new ─────────
+                const projectRoot = resolveProjectRoot()
+                let session: LibrarianSession
+                if (specificSessionId && projectRoot) {
+                    try {
+                        session = await resumeSession(
+                            projectRoot,
+                            specificSessionId,
+                            {
+                                reviewerModel: config.reviewer,
+                                thinkingLevel: config.thinkingLevel,
+                            }
+                        )
+                        log.info({
+                            sessionId: specificSessionId,
+                            content: 'Resumed session',
+                        })
+                    } catch {
+                        if (!interactive) {
+                            console.error(
+                                JSON.stringify({
+                                    error: `Session not found: ${specificSessionId}`,
+                                })
+                            )
+                            process.exit(1)
+                        }
+                        outro(`Session "${specificSessionId}" not found`)
+                        return
+                    }
+                } else if (!useNewSession && projectRoot) {
+                    session = await resumeLatestSession(projectRoot, {
+                        reviewerModel: config.reviewer,
+                        thinkingLevel: config.thinkingLevel,
+                    })
+                } else {
+                    session = await resumeLatestSession(
+                        projectRoot ?? process.cwd(),
+                        {
+                            reviewerModel: config.reviewer,
+                            thinkingLevel: config.thinkingLevel,
+                        }
+                    )
+                }
+
+                log.info({
+                    sessionId: session.sessionId,
+                    query,
+                    content: 'Ask session start',
+                })
 
                 // ── ora spinner (stderr, won't conflict with stdout text) ─
                 const s: Ora | undefined = interactive
@@ -157,11 +211,12 @@ export function register(program: Command) {
 
                 const startedAt = performance.now()
 
-                let result: SearchResult
+                let result: LibrarianResult
                 try {
-                    result = await searchDocuments(query, {
-                        reviewerModel: config.reviewer,
+                    result = await session.ask(query, undefined, {
+                        signal: undefined,
                         thinkingLevel: config.thinkingLevel,
+                        reviewerModel: config.reviewer,
                         onToolCallStart: (toolCallId, _toolName, label) => {
                             if (!interactive) return
                             toolCount++
@@ -246,6 +301,14 @@ export function register(program: Command) {
                     return
                 }
 
+                // Resolve doc names for trace display
+                let docNames = new Map<string, string>()
+                try {
+                    docNames = await resolveDocNames(result.trace)
+                } catch {
+                    // best-effort
+                }
+
                 // Final spacing after streaming
                 stopSpinner()
                 if (state.phase === 'text' || state.phase === 'thinking') {
@@ -257,37 +320,22 @@ export function register(program: Command) {
                 const elapsedMs = Math.round(performance.now() - startedAt)
                 const elapsed = formatDuration(elapsedMs)
 
-                const projectRoot = resolveProjectRoot()
+                // Persist session state for multi-turn
                 if (projectRoot) {
-                    const timeline: HistoryTimelineBlock[] = result.trace.map(
-                        (s) => ({
-                            type: 'tool' as const,
-                            name: s.tool,
-                            label: s.tool,
-                            summary: s.resultSummary,
-                        })
-                    )
-                    saveSearchHistory(
-                        projectRoot,
-                        query,
-                        result,
-                        elapsedMs,
-                        result.review ? 'review' : 'quick',
-                        timeline
-                    ).catch((err) =>
-                        log.warn({
-                            err,
-                            content: 'Failed to save ask history',
-                        })
+                    persistSession(projectRoot, session).catch((err) =>
+                        log.warn({ err, content: 'Failed to persist session' })
                     )
                 }
 
                 if (!interactive) {
                     console.log(
                         JSON.stringify({
-                            ...result,
-                            elapsedMs,
+                            sessionId: session.sessionId,
+                            content: result.content,
+                            trace: result.trace,
+                            review: result.review,
                             reviewElapsedMs: result.reviewElapsedMs,
+                            elapsedMs,
                         })
                     )
                     return
@@ -332,11 +380,11 @@ export function register(program: Command) {
                 }
 
                 if (showTrace && result.trace.length > 0) {
-                    note(formatTrace(result, result.docNames))
+                    note(formatTrace(result, docNames))
                 }
 
                 log.info({
-                    sessionId,
+                    sessionId: session.sessionId,
                     query,
                     elapsedMs,
                     verdict: result.review?.verdict,

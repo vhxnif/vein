@@ -14,8 +14,4 @@ function md5(content: string) {
     return createHash('md5').update(content).digest('hex')
 }
 
-function hash(content: string): string {
-    return createHash('sha256').update(content).digest('hex')
-}
-
-export { getErrorMessage, hash, md5, uuid }
+export { getErrorMessage, md5, uuid }

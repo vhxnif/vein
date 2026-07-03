@@ -127,7 +127,7 @@ const SEARCH_DOCS_META: ToolMeta = {
 
 // ── Tool assembly ─────────────────────────────────────────────
 
-function buildTools(
+export function buildTools(
     onStep?: (label: string) => void,
     reviewerModel?: ModelProvider
 ): { tools: any[]; toolMeta: Record<string, ToolMeta> } {
@@ -370,7 +370,7 @@ function sanitizeAnswer(content: string): string {
 
 // ── Agent construction ────────────────────────────────────────
 
-function createLibrarianAgent(
+export function createLibrarianAgent(
     systemPrompt: string,
     tools: any[],
     opts?: {
@@ -415,7 +415,7 @@ function createLibrarianAgent(
 
 // ── Event instrumentation ─────────────────────────────────────
 
-function installAgentInstrumentation(
+export function installAgentInstrumentation(
     agent: Agent,
     toolMeta: Record<string, ToolMeta>,
     onStep: ((label: string) => void) | undefined,
@@ -518,7 +518,7 @@ function installAgentInstrumentation(
 
 // ── Result extraction ─────────────────────────────────────────
 
-function extractFinalResult(
+export function extractFinalResult(
     messages: AgentMessage[],
     toolTimings: Map<string, number>,
     toolMeta: Record<string, ToolMeta>
@@ -558,9 +558,11 @@ function extractFinalResult(
     return { content, trace, review, reviewElapsedMs }
 }
 
+export const LIBRARIAN_PROMPT = PROMPT
+
 // ── Options ───────────────────────────────────────────────────
 
-type Option = {
+export type LibrarianOption = {
     reviewerModel?: ModelProvider
     signal?: AbortSignal
     thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
@@ -583,7 +585,7 @@ type Option = {
 async function librarian(
     msg: string,
     onStep?: (label: string) => void,
-    opts?: Option
+    opts?: LibrarianOption
 ): Promise<LibrarianResult> {
     const { tools, toolMeta } = buildTools(onStep, opts?.reviewerModel)
     const agent = createLibrarianAgent(PROMPT, tools, opts)
