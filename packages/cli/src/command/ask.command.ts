@@ -2,6 +2,7 @@ import process from 'node:process'
 import { intro, note, outro, text } from '@clack/prompts'
 import type { LibrarianResult, LibrarianSession } from '@vein/core'
 import {
+    createSession,
     logger,
     persistSession,
     resolveDocNames,
@@ -158,6 +159,11 @@ export function register(program: Command) {
                         reviewerModel: config.reviewer,
                         thinkingLevel: config.thinkingLevel,
                     })
+                } else if (useNewSession) {
+                    session = createSession({
+                        reviewerModel: config.reviewer,
+                        thinkingLevel: config.thinkingLevel,
+                    })
                 } else {
                     session = await resumeLatestSession(
                         projectRoot ?? process.cwd(),
@@ -226,7 +232,6 @@ export function register(program: Command) {
                                 s!.text = `${label} (${runningTools} running)`
                             } else {
                                 stopSpinner()
-                                process.stdout.write('\n')
                                 s?.start('Working...')
                             }
                         },
@@ -239,16 +244,13 @@ export function register(program: Command) {
                                 ? `${label} → ${summary}`
                                 : summary
                             if (state.phase === 'tools') {
-                                s!.stop()
                                 process.stdout.write(
                                     `  ${colorize('✓', '\x1b[32m')} ${display}\n`
                                 )
                                 if (runningTools > 0) {
-                                    s!.start(
-                                        `${runningTools} tool${runningTools > 1 ? 's' : ''} running`
-                                    )
+                                    s!.text = `${runningTools} tool${runningTools > 1 ? 's' : ''} running`
                                 } else {
-                                    s!.start('Generating answer...')
+                                    s!.text = 'Generating answer...'
                                 }
                             } else {
                                 stopSpinner()
@@ -346,10 +348,10 @@ export function register(program: Command) {
                 const summary =
                     toolCount > 0
                         ? colorize(
-                              `Retrieval: ${toolCount} tool${toolCount !== 1 ? 's' : ''} · ${elapsed}`,
+                              `Retrieval: ${toolCount} tool${toolCount !== 1 ? 's' : ''} · ${elapsed} · session ${session.sessionId}`,
                               '\x1b[90m'
                           )
-                        : `Done · ${elapsed}`
+                        : `Done · ${elapsed} · session ${session.sessionId}`
                 if (state.phase === 'text' || state.phase === 'thinking') {
                     console.log(`\n${summary}`)
                 } else {
