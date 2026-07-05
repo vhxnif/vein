@@ -1,5 +1,5 @@
 // ── AI ──────────────────────────────────────────────────────────
-export type { ContextDef, ToolDef } from './ai/base.ts'
+export type { AgentMessage, ContextDef, ToolDef } from './ai/base.ts'
 export {
     call,
     createSummarizer,
