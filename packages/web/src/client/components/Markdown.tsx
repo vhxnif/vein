@@ -103,7 +103,7 @@ export const annotateNodeRefs = annotateRefs
 
 /** Generate consistent heading ID from React children. Must match _headingSlug in index.tsx. */
 // biome-ignore lint/suspicious/noExplicitAny: recursive ReactNode flatten
-function _headingId(children: any): string {
+function _headingId(children: any, prefix?: string): string {
     // biome-ignore lint/suspicious/noExplicitAny: recursive
     const flatten = (node: any): string => {
         if (typeof node === 'string') return node
@@ -113,21 +113,33 @@ function _headingId(children: any): string {
         }
         return ''
     }
-    return flatten(children)
+    const slug = flatten(children)
         .toLowerCase()
         .trim()
         .replace(/[^\w\u4e00-\u9fff]+/g, '-')
         .replace(/^-+/, '')
         .replace(/-+$/, '')
+    return prefix ? `${prefix}-${slug}` : slug
 }
 
 interface MarkdownProps {
     children: string
     /** Maps short docId (first 8 chars) → full docId for node reference lookup */
     docIdMap?: Map<string, string>
+    /** Prefix for heading IDs to ensure uniqueness across turns */
+    headingPrefix?: string
 }
 
-export function Markdown({ children, docIdMap }: MarkdownProps) {
+export function Markdown({ children, docIdMap, headingPrefix }: MarkdownProps) {
+    const seen = new Map<string, number>()
+    // biome-ignore lint/suspicious/noExplicitAny: matches _headingId signature
+    const makeId = (nodeChildren: any) => {
+        const base = _headingId(nodeChildren, headingPrefix)
+        const count = (seen.get(base) ?? 0) + 1
+        seen.set(base, count)
+        return count > 1 ? `${base}-${count}` : base
+    }
+
     return (
         <div className="markdown-body">
             <ReactMarkdown
@@ -135,7 +147,7 @@ export function Markdown({ children, docIdMap }: MarkdownProps) {
                 components={{
                     h1: ({ children }) => (
                         <h1
-                            id={_headingId(children)}
+                            id={makeId(children)}
                             className="font-serif text-[16pt] font-medium text-near-black mt-8 mb-3 border-b border-cream pb-1"
                         >
                             {children}
@@ -143,7 +155,7 @@ export function Markdown({ children, docIdMap }: MarkdownProps) {
                     ),
                     h2: ({ children }) => (
                         <h2
-                            id={_headingId(children)}
+                            id={makeId(children)}
                             className="font-serif text-[13pt] font-medium text-near-black mt-6 mb-2"
                         >
                             {children}
@@ -151,7 +163,7 @@ export function Markdown({ children, docIdMap }: MarkdownProps) {
                     ),
                     h3: ({ children }) => (
                         <h3
-                            id={_headingId(children)}
+                            id={makeId(children)}
                             className="font-serif text-[11pt] font-medium text-near-black mt-5 mb-2"
                         >
                             {children}
@@ -159,7 +171,7 @@ export function Markdown({ children, docIdMap }: MarkdownProps) {
                     ),
                     h4: ({ children }) => (
                         <h4
-                            id={_headingId(children)}
+                            id={makeId(children)}
                             className="font-serif text-[10pt] font-semibold text-near-black mt-4 mb-1"
                         >
                             {children}

@@ -179,7 +179,7 @@ function HomePage() {
                                     <div className="h-1/2" />
                                 </div>
                             )}
-                            {previousTurns.map((turn) => (
+                            {previousTurns.map((turn, i) => (
                                 <div
                                     key={turn.query}
                                     data-turn-query={turn.query}
@@ -189,6 +189,7 @@ function HomePage() {
                                         result={turn.result}
                                         timeline={turn.timeline}
                                         variant="previous"
+                                        turnIndex={i}
                                     />
                                 </div>
                             ))}
@@ -202,6 +203,7 @@ function HomePage() {
                                         error={error}
                                         elapsed={elapsed}
                                         variant="current"
+                                        turnIndex={previousTurns.length}
                                     />
                                 </div>
                             )}
@@ -282,12 +284,13 @@ function _formatSessionTime(ts: number): string {
 type OutlineItem = { level: number; text: string; id: string }
 
 /** Generate consistent heading ID from plain text. Must match _headingId in Markdown.tsx. */
-function _headingSlug(text: string): string {
-    return text
+function _headingSlug(text: string, turnIndex?: number): string {
+    const slug = text
         .toLowerCase()
         .replace(/[^\w\u4e00-\u9fff]+/g, '-')
         .replace(/^-+/, '')
         .replace(/-+$/, '')
+    return turnIndex !== undefined ? `t${turnIndex}-${slug}` : slug
 }
 
 /** Strip inline markdown formatting for plain-text display. */
@@ -303,16 +306,21 @@ function _stripMarkdown(text: string): string {
         .trim()
 }
 
-function parseOutline(markdown: string): OutlineItem[] {
+function parseOutline(markdown: string, turnIndex: number): OutlineItem[] {
     const items: OutlineItem[] = []
+    const seen = new Map<string, number>()
     const re = /^(#{1,3})\s+(.+)$/gm
     for (const m of markdown.matchAll(re)) {
         const level = m[1]!.length
         const text = m[2]!.trim()
+        const base = _headingSlug(text, turnIndex)
+        const count = (seen.get(base) ?? 0) + 1
+        seen.set(base, count)
+        const id = count > 1 ? `${base}-${count}` : base
         items.push({
             level,
             text: _stripMarkdown(text),
-            id: _headingSlug(text),
+            id,
         })
     }
     return items
@@ -331,37 +339,20 @@ function OutlinePanel({
 }) {
     const groups = useMemo(() => {
         const result: OutlineGroup[] = []
-        for (const turn of previousTurns) {
-            const items = parseOutline(turn.result.content)
-            if (items.length > 0) result.push({ query: turn.query, items })
+        for (let i = 0; i < previousTurns.length; i++) {
+            const items = parseOutline(previousTurns[i]!.result.content, i)
+            if (items.length > 0)
+                result.push({ query: previousTurns[i]!.query, items })
         }
         if (currentResult) {
-            const items = parseOutline(currentResult.content)
+            const items = parseOutline(
+                currentResult.content,
+                previousTurns.length
+            )
             if (items.length > 0) result.push({ query: currentQuery, items })
         }
         return result
     }, [previousTurns, currentResult, currentQuery])
-
-    const [activeId, setActiveId] = useState<string | null>(null)
-
-    // Observe all heading elements across all turns
-    useEffect(() => {
-        const allItems = groups.flatMap((g) => g.items)
-        if (allItems.length === 0) return
-        const observer = new IntersectionObserver(
-            (entries) => {
-                for (const e of entries) {
-                    if (e.isIntersecting) setActiveId(e.target.id)
-                }
-            },
-            { rootMargin: '-80px 0px -60% 0px' }
-        )
-        for (const item of allItems) {
-            const el = document.getElementById(item.id)
-            if (el) observer.observe(el)
-        }
-        return () => observer.disconnect()
-    }, [groups])
 
     return (
         <nav className="hidden md:block w-[170px] flex-shrink-0 self-start h-[calc(100dvh-120px)] overflow-y-auto mt-10 mb-20 pl-5 pr-3 no-scrollbar">
@@ -388,8 +379,7 @@ function OutlinePanel({
                                                 block: 'center',
                                             })
                                     }}
-                                    className={`block font-sans text-[7pt] leading-relaxed py-0.5 truncate transition-colors hover:text-ink
-                                        ${item.id === activeId ? 'text-ink font-medium' : 'text-stone/60'}`}
+                                    className="block font-sans text-[7pt] leading-relaxed py-0.5 truncate transition-colors hover:text-ink text-stone/60"
                                     style={{
                                         paddingLeft: `${8 + (item.level - 1) * 8}pt`,
                                     }}
@@ -626,6 +616,7 @@ function TurnBlock({
     searching,
     error,
     variant,
+    turnIndex,
 }: {
     query: string
     result: SearchResult | null
@@ -634,6 +625,7 @@ function TurnBlock({
     error?: string | null
     elapsed?: number
     variant: 'previous' | 'current'
+    turnIndex: number
 }) {
     const { project } = useProject()
     const [exporting, setExporting] = useState(false)
@@ -731,7 +723,10 @@ function TurnBlock({
                         </details>
                     )}
                     <div style={{ animation: 'fadeIn 300ms ease' }}>
-                        <Markdown docIdMap={docIdMap}>
+                        <Markdown
+                            docIdMap={docIdMap}
+                            headingPrefix={`t${turnIndex}`}
+                        >
                             {annotatedContent}
                         </Markdown>
                     </div>
