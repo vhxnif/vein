@@ -385,6 +385,7 @@ function OutlinePanel({
                                             .getElementById(item.id)
                                             ?.scrollIntoView({
                                                 behavior: 'smooth',
+                                                block: 'center',
                                             })
                                     }}
                                     className={`block font-sans text-[7pt] leading-relaxed py-0.5 truncate transition-colors hover:text-ink
