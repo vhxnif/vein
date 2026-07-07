@@ -34,7 +34,7 @@ function formatTrace(
             const num = String(i + 1).padStart(2, ' ')
             const tool = s.tool
             let detail = s.resultSummary
-            if (tool === 'getDocStructure' || tool === 'getDocNodeDetails') {
+            if (tool === 'getNodeSummary' || tool === 'getDocNodeDetails') {
                 const a = s.args as { docId?: string; nodeId?: string }
                 const name =
                     (a.docId && docNames.get(a.docId)) ||

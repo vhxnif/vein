@@ -100,6 +100,7 @@ export {
     getDoc,
     getDocCount,
     getDocFtsSummary,
+    getDocOutlines,
     getDocsPaginated,
     getDocumentDetail,
     getFullTree,
@@ -111,6 +112,7 @@ export {
     listDocuments,
     purgeModelCache,
     setCachedResponse,
+    searchDocsByKeyword,
     updateDocFts,
     updateDocMetadata,
 } from './store/index.ts'

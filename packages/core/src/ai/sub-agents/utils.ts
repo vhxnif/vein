@@ -1,5 +1,5 @@
-import { getFullTree, getNodeDetails } from '../../store/index.ts'
-import type { BaseDocNode, TreeNode } from '../../tree/type.ts'
+import { getNodeDetails } from '../../store/index.ts'
+import type { BaseDocNode } from '../../tree/type.ts'
 import { Type } from '../base.ts'
 import type { ToolCtx } from '../types.ts'
 
@@ -11,35 +11,6 @@ export function ellipsis(s: string, max: number): string {
 export function formatSize(chars: number): string {
     if (chars >= 1000) return `${(chars / 1000).toFixed(1)}k chars`
     return `${chars} chars`
-}
-
-export function renderDocStructure(
-    nodes: TreeNode<BaseDocNode>[],
-    indent = 0
-): string {
-    const pad = '  '.repeat(indent)
-    const lines: string[] = []
-    for (const node of nodes) {
-        const id = node.nodeId.split('_')[0]
-        const v = node.value
-        const isLeaf = node.nodes.length === 0
-        lines.push(`${pad}${id} ${v.title}`)
-        if (isLeaf && v.summary) {
-            lines.push(`${pad}  ${v.summary}`)
-        } else if (!isLeaf) {
-            lines.push(`${pad}  (目录)`)
-            if (v.prefixSummary) {
-                lines.push(`${pad}  ${v.prefixSummary}`)
-            }
-            lines.push(
-                renderDocStructure(
-                    node.nodes as TreeNode<BaseDocNode>[],
-                    indent + 1
-                )
-            )
-        }
-    }
-    return lines.join('\n')
 }
 
 /** Extract text content from a tool result, joining all text parts. */
@@ -56,24 +27,47 @@ export function extractResultText(
 // ── Shared tool factories ─────────────────────────────────────
 
 /**
- * Creates a `getDocStructure` tool for document sub-agents.
- * Returns the full document tree rendered as indented text.
+ * Creates a `getNodeSummary` tool for document sub-agents.
+ * Strips redundant heading from summary and truncates if same as full text.
  */
 // biome-ignore lint/suspicious/noExplicitAny: AgentTool type constraints
-export function makeGetDocStructure({ cached, ok, tool }: ToolCtx): any {
+export function makeGetNodeSummary({ cached, ok, tool }: ToolCtx): any {
     return {
-        name: 'getDocStructure',
-        description: '获取文档结构（含标题和摘要），返回缩进树形文本。',
+        name: 'getNodeSummary',
+        description:
+            '获取节点摘要用于快速判断相关性。',
         parameters: Type.Object({
             docId: Type.String({ description: '文章Id' }),
+            nodeId: Type.String({ description: '文章节点Id' }),
         }),
         execute: tool(async (_: unknown, p: unknown) => {
-            const { docId } = p as { docId: string }
+            const { docId, nodeId } = p as { docId: string; nodeId: string }
             const result = await cached(
-                `getDocStructure:${docId}`,
+                `getNodeSummary:${docId}:${nodeId}`,
                 async () => {
-                    const tree = await getFullTree<BaseDocNode>(`${docId}`)
-                    return renderDocStructure(tree)
+                    const d = await getNodeDetails<BaseDocNode>(
+                        `${nodeId}_${docId}`
+                    )
+                    if (!d) return '(node not found)'
+                    const title = d.title || 'Untitled'
+                    const text = d.text || ''
+                    // Use summary if it's meaningfully shorter than full text,
+                    // otherwise take first ~200 chars of text.
+                    const raw =
+                        (d.summary && d.summary.length < text.length * 0.7
+                            ? d.summary
+                            : (d.prefixSummary &&
+                                  d.prefixSummary.length < text.length * 0.7
+                              ? d.prefixSummary
+                              : '')) ||
+                        text.slice(0, 200) +
+                            (text.length > 200 ? '...' : '')
+                    // Strip redundant ## Title heading
+                    const cleaned = raw
+                        .replace(/^#{1,2}\s+[^\n]+\n+/s, '')
+                        .replace(/\n+/g, ' ')
+                        .trim()
+                    return `> **${title}** — ${cleaned}`
                 }
             )
             return ok(result)
@@ -83,13 +77,13 @@ export function makeGetDocStructure({ cached, ok, tool }: ToolCtx): any {
 
 /**
  * Creates a `getDocNodeDetails` tool for document sub-agents.
- * Returns the full text of a single document node.
+ * Returns the node content as markdown. Strips duplicate heading from text.
  */
 // biome-ignore lint/suspicious/noExplicitAny: AgentTool type constraints
 export function makeGetDocNodeDetails({ cached, ok, tool }: ToolCtx): any {
     return {
         name: 'getDocNodeDetails',
-        description: '获取文章节点详细原文',
+        description: '获取文章节点详细原文，返回 Markdown 格式。',
         parameters: Type.Object({
             docId: Type.String({ description: '文章Id' }),
             nodeId: Type.String({ description: '文章节点Id' }),
@@ -102,7 +96,15 @@ export function makeGetDocNodeDetails({ cached, ok, tool }: ToolCtx): any {
                     const d = await getNodeDetails<BaseDocNode>(
                         `${nodeId}_${docId}`
                     )
-                    return d?.text ?? ''
+                    if (!d) return '(node not found)'
+                    const title = d.title || 'Untitled'
+                    let text = d.text || ''
+                    // Strip leading heading if it duplicates title
+                    const m = text.match(/^#{1,2}\s+([^\n]+)/)
+                    if (m && m[1]?.trim() === title) {
+                        text = text.slice(m[0].length).replace(/^\n+/, '')
+                    }
+                    return `# ${title}\n\n${text}`
                 }
             )
             return ok(result)
