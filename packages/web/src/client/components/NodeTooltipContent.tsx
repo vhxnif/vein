@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown'
+import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 import type { NodeInfo } from '../lib/api.ts'
 
@@ -32,6 +33,7 @@ export function NodeTooltipContent({ nodeId, node }: NodeTooltipContentProps) {
             <div className="text-[9pt] leading-relaxed text-near-black">
                 <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeRaw]}
                     components={{
                         h1: ({ children }) => (
                             <h1 className="font-serif text-[10pt] font-medium text-near-black mt-2 mb-1">
@@ -110,6 +112,26 @@ export function NodeTooltipContent({ nodeId, node }: NodeTooltipContentProps) {
                         ),
                         em: ({ children }) => (
                             <em className="italic">{children}</em>
+                        ),
+                        table: ({ children }) => (
+                            <div className="overflow-x-auto max-w-full my-1.5">
+                                <table className="w-full text-left border-collapse">
+                                    {children}
+                                </table>
+                            </div>
+                        ),
+                        thead: ({ children }) => <thead>{children}</thead>,
+                        tbody: ({ children }) => <tbody>{children}</tbody>,
+                        tr: ({ children }) => <tr>{children}</tr>,
+                        th: ({ children }) => (
+                            <th className="font-sans text-[7pt] font-semibold text-stone border-b border-cream py-1 px-1.5">
+                                {children}
+                            </th>
+                        ),
+                        td: ({ children }) => (
+                            <td className="font-serif text-[8pt] text-near-black border-b border-cream/50 py-1 px-1.5 break-words">
+                                {children}
+                            </td>
                         ),
                         hr: () => <hr className="border-cream/30 my-2" />,
                         img: ({ src, alt }) => (

@@ -1,19 +1,18 @@
-import { createElement, type ReactNode, useMemo } from 'react'
+import type { Link } from 'mdast'
+import { createElement, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
+import remarkParse from 'remark-parse'
+import { unified } from 'unified'
+import { visit } from 'unist-util-visit'
 import { DocTooltipContent } from '../components/DocTooltipContent.tsx'
-import {
-    annotateRefs,
-    Markdown,
-    resolveDocId,
-} from '../components/Markdown.tsx'
+import { Markdown } from '../components/Markdown.tsx'
 import { NodeTooltipContent } from '../components/NodeTooltipContent.tsx'
 import type { SharedTimelineBlock } from '../components/TimelineBlockView.tsx'
 import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
 import type { DocInfo, NodeInfo } from './api.ts'
 import { fetchDocument, fetchNode } from './api.ts'
-
-// ── Types ──────────────────────────────────────────────────────
+import { refsPlugin } from './remark-refs.ts'
 
 export interface ExportOptions {
     query: string
@@ -76,11 +75,8 @@ export async function exportResultAsHtml(
     // 3. Collect all CSS from the current page (Tailwind + Kami component styles)
     const css = await collectAllCss()
 
-    // 4. Extract node and doc references from the ANNOTATED content for tooltip data.
-    //    Must use annotated content because the raw markdown may contain bare
-    //    (unbracketed) references that extractRefs doesn't handle directly.
-    const annotatedContent = annotateRefs(content, docIdMap)
-    const { nodeRefs, docRefs } = extractRefs(annotatedContent, docIdMap)
+    // 4. Extract node and doc references from raw content for tooltip data.
+    const { nodeRefs, docRefs } = extractRefs(content, docIdMap)
     const [nodeDataMap, docDataMap] = await Promise.all([
         fetchNodeData(nodeRefs),
         fetchDocData(docRefs),
@@ -198,11 +194,6 @@ function ExportPreview({
     mode,
     project,
 }: ExportPreviewProps) {
-    const annotatedContent = useMemo(
-        () => annotateRefs(content, docIdMap),
-        [content, docIdMap]
-    )
-
     const hasProcessContent = processBlocks.length > 0
     const toolCount = processBlocks.filter((b) => b.type === 'tool').length
     const hasThinking = processBlocks.some((b) => b.type === 'thinking')
@@ -274,7 +265,7 @@ function ExportPreview({
         createElement(Markdown, {
             docIdMap,
             // biome-ignore lint/correctness/noChildrenProp: canonical 3rd-arg conflicts with TS overload
-            children: annotatedContent,
+            children: content,
         }),
         // Review
         review &&
@@ -354,7 +345,8 @@ interface DocRef {
 }
 
 /**
- * Find all node:// and doc:// references in annotated markdown content.
+ * Parse markdown with the refsPlugin and walk the AST to collect
+ * all node/doc link references. Same parsing logic as the renderer.
  */
 function extractRefs(
     content: string,
@@ -365,61 +357,35 @@ function extractRefs(
     const nodeRefs: NodeRef[] = []
     const docRefs: DocRef[] = []
 
-    // Match markdown links with node:// protocol.
-    const nodeRe = /\[.*?\]\(node:\/\/([a-f0-9]+)\/(\d+)\)/g
-    let m: RegExpExecArray | null
-    m = nodeRe.exec(content)
-    while (m !== null) {
-        const rawDocId = m[1] ?? ''
-        const fullDocId = resolveDocId(rawDocId, docIdMap)
-        const nodeId = m[2] ?? ''
-        const key = `${fullDocId}:${nodeId}`
-        if (!seenNodes.has(key)) {
-            seenNodes.add(key)
-            nodeRefs.push({ fullDocId, nodeId })
-        }
-        m = nodeRe.exec(content)
+    if (!docIdMap || docIdMap.size === 0) {
+        return { nodeRefs, docRefs }
     }
 
-    // Also match bare `[XXXXXXXX:YYYY]` patterns (safety net for node refs).
-    const bareNodeRe = /\[([a-f0-9]{8,}):(\d{2,5})\](?!\()/g
-    m = bareNodeRe.exec(content)
-    while (m !== null) {
-        const rawDocId = m[1] ?? ''
-        const nodeId = m[2] ?? ''
-        const fullDocId = resolveDocId(rawDocId, docIdMap)
-        const key = `${fullDocId}:${nodeId}`
-        if (!seenNodes.has(key)) {
-            seenNodes.add(key)
-            nodeRefs.push({ fullDocId, nodeId })
-        }
-        m = bareNodeRe.exec(content)
-    }
+    try {
+        const processor = unified()
+            .use(remarkParse)
+            .use(refsPlugin, { docIdMap })
+        const tree = processor.runSync(processor.parse(content))
 
-    // Match markdown links with doc:// protocol.
-    const docRe = /\[.*?\]\(doc:\/\/([a-f0-9]+)\)/g
-    m = docRe.exec(content)
-    while (m !== null) {
-        const rawDocId = m[1] ?? ''
-        const fullDocId = resolveDocId(rawDocId, docIdMap)
-        if (!seenDocs.has(fullDocId)) {
-            seenDocs.add(fullDocId)
-            docRefs.push({ fullDocId })
-        }
-        m = docRe.exec(content)
-    }
-
-    // Also match bare `[XXXXXXXX]` patterns (safety net for doc refs).
-    const bareDocRe = /\[([a-f0-9]{8,})\](?!\()/g
-    m = bareDocRe.exec(content)
-    while (m !== null) {
-        const rawDocId = m[1] ?? ''
-        const fullDocId = resolveDocId(rawDocId, docIdMap)
-        if (!seenDocs.has(fullDocId)) {
-            seenDocs.add(fullDocId)
-            docRefs.push({ fullDocId })
-        }
-        m = bareDocRe.exec(content)
+        visit(tree, 'link', (node) => {
+            const title = (node as Link).title
+            if (!title) return
+            const [type, docId, nodeId] = title.split(':')
+            if (type === 'node' && docId && nodeId) {
+                const key = `${docId}:${nodeId}`
+                if (!seenNodes.has(key)) {
+                    seenNodes.add(key)
+                    nodeRefs.push({ fullDocId: docId, nodeId })
+                }
+            } else if (type === 'doc' && docId) {
+                if (!seenDocs.has(docId)) {
+                    seenDocs.add(docId)
+                    docRefs.push({ fullDocId: docId })
+                }
+            }
+        })
+    } catch {
+        // best-effort: fall through, return empty
     }
 
     return { nodeRefs, docRefs }

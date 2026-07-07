@@ -510,7 +510,6 @@ async function getDocOutlines(docIds: string[]): Promise<Map<string, string>> {
             const children = childrenMap.get(nodeId)
             if (children && children.length > 0) {
                 lines.push(`${pad}${idNum} ${node.title}`)
-                lines.push(`${pad}  (目录)`)
                 if (node.prefSummary) {
                     lines.push(`${pad}  ${node.prefSummary}`)
                 }
@@ -526,11 +525,9 @@ async function getDocOutlines(docIds: string[]): Promise<Map<string, string>> {
             render(rootId, 0)
         }
 
-        // Apply same compacting filter as compactDocText
+        // Keep only node-id + title lines (drop summaries for compactness)
         const compacted = lines
-            .filter(
-                (line) => /^\s*\d+\s+\S/.test(line) || line.includes('(目录)')
-            )
+            .filter((line) => /^\s*\d+\s+\S/.test(line))
             .join('\n')
         result.set(docId, compacted)
     }

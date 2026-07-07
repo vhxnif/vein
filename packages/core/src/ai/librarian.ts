@@ -12,7 +12,7 @@ import {
     extractResultText,
     formatSize,
     makeGetDocNodeDetails,
-    makeGetDocStructure,
+    makeGetNodeSummary,
 } from './sub-agents/utils.ts'
 import type { ToolCtx, ToolMeta } from './types.ts'
 
@@ -28,19 +28,19 @@ const PROMPT = `你是一个文档检索 Librarian。直接使用工具搜索、
 
 | 工具 | 用途 | 返回 |
 |------|------|------|
-| searchDocs(query, limit?, offset?) | 关键词搜索文档库 | [{docId, snippet, rank, outline}] |
-| getDocStructure(docId) | 获取文档大纲 | 缩进树：nodeId + title + summary |
-| getDocNodeDetails(docId, nodeId) | 读取节点完整原文 | 节点全文 |
+| searchDocs(query, limit?, offset?) | 关键词搜索文档库 | Markdown 编号列表：docId + rank + snippet + outline |
+| getNodeSummary(docId, nodeId) | 获取节点摘要，快速判断相关性 | Markdown：> title\\nsummary |
+| getDocNodeDetails(docId, nodeId) | 读取节点完整原文 | Markdown：# 标题\\n\\n正文 |
 | reviewResult(query, result, sources) | 验证结果准确性（可选） | 审查 verdict |
 
 ## 流程
 
 1. 分析用户问题，提取核心关键词（空格分隔），调用 searchDocs 搜索
-   - 如果返回空列表 []，直接输出"文档库中未找到相关内容"并停止
+   - 如果返回空结果，直接输出"文档库中未找到相关内容"并停止
 2. 浏览搜索结果中的 snippet + outline，判断哪些文档值得深入阅读
 3. 对值得阅读的文档：
-   - 先用 getDocStructure 看大纲
-   - 用 getDocNodeDetails 精确读取相关章节原文
+   - 先用 getNodeSummary 判断具体节点是否相关
+   - 确认相关后用 getDocNodeDetails 精确读取原文
    - **按需阅读**：只读真正需要的节点，2-3 个节点通常足够
 4. 整理答案，引用原文
    - 按文档逐一列出，标注相关性
@@ -69,8 +69,8 @@ const PROMPT = `你是一个文档检索 Librarian。直接使用工具搜索、
 ### 格式
 - 引用整个文档时使用 **[完整docId]**（无 nodeId）
 - 引用文档中具体段落/节点时使用 **[完整docId:nodeId]**
-- **docId 必须原样完整复制**：searchDocs / getDocStructure 返回的 docId 是完整 32 位字符串，直接复制到引用中，**绝对禁止截断、缩写**
-- **nodeId 即节点编号**：getDocStructure 中每行开头的数字（如 0001、0002）即为 nodeId，直接使用
+- **docId 必须原样完整复制**：searchDocs / getNodeSummary 返回的 docId 是完整 32 位字符串，直接复制到引用中，**绝对禁止截断、缩写**
+- **nodeId 即节点编号**：searchDocs outline / getNodeSummary 中每行开头的数字（如 0001、0002）即为 nodeId，直接使用
 - **方括号必须**
 
 ### 示例
@@ -88,7 +88,7 @@ const PROMPT = `你是一个文档检索 Librarian。直接使用工具搜索、
 ## 约束
 
 - 已获取的信息不要重复获取
-- **批量并发**：同类型的多个 getDocStructure / getDocNodeDetails 放在同一条消息中发出
+- **批量并发**：同类型的多个 getNodeSummary / getDocNodeDetails 放在同一条消息中发出
 - 不要编造文档中不存在的内容`
 
 // ── Tool metadata ─────────────────────────────────────────────
@@ -96,31 +96,16 @@ const PROMPT = `你是一个文档检索 Librarian。直接使用工具搜索、
 const SEARCH_DOCS_META: ToolMeta = {
     stepLabel: (a) => `Searching: "${ellipsis(String(a.query ?? ''), 36)}"...`,
     resultLabel: (text) => {
-        try {
-            const parsed = JSON.parse(text) as Array<{ docId?: string }>
-            if (Array.isArray(parsed)) {
-                if (parsed.length === 0) return 'No results found'
-                return `Found ${parsed.length} doc(s)`
-            }
-        } catch {
-            // ignore
-        }
-        return undefined
+        if (!text || text === '(no results)') return 'No results found'
+        const count = (text.match(/^\d+\.\s\*\*/gm) ?? []).length
+        return count > 0 ? `Found ${count} doc(s)` : undefined
     },
     resultSummary: (raw) => {
-        try {
-            const parsed = JSON.parse(raw) as Array<{ docId?: string }>
-            if (Array.isArray(parsed)) {
-                const ids = parsed
-                    .slice(0, 3)
-                    .map((d) => d.docId?.slice(0, 8) ?? '?')
-                    .join(', ')
-                return `${parsed.length} docs: ${ids}${parsed.length > 3 ? '…' : ''}`
-            }
-        } catch {
-            // ignore
-        }
-        return raw.slice(0, 120)
+        if (!raw || raw === '(no results)') return '0 docs'
+        const ids = [...(raw ?? '').matchAll(/^\d+\.\s\*\*([a-f0-9]+)\*\*/gm)]
+            .slice(0, 3)
+            .map((m) => m[1]?.slice(0, 8) ?? '?')
+        return `${ids.length} docs: ${ids.join(', ') || '...'}`
     },
     logDetail: (a) => `"${ellipsis(String(a.query ?? ''), 60)}"`,
 }
@@ -155,8 +140,7 @@ export function buildTools(
         name: 'searchDocs',
         description:
             '通过空格分隔的关键词搜索文档库。自行分词后传入，如"周期 监测"而非"周期监测"。' +
-            '返回 [{docId, snippet, rank, outline}]，默认 10 条，最多 20 条。' +
-            'snippet 为文档摘要，outline 为文档大纲，结合判断相关性。',
+            '返回 Markdown 编号列表：docId + rank + snippet + outline，默认 10 条，最多 20 条。',
         parameters: Type.Object({
             query: Type.String({
                 description: '空格分隔的搜索关键词，1-3 个核心概念词',
@@ -189,7 +173,7 @@ export function buildTools(
                         maxLimit,
                         offset ?? 0
                     )
-                    if (results.length === 0) return '[]'
+                    if (results.length === 0) return '(no results)'
 
                     // Enrich with snippet
                     const withSnippets = await Promise.all(
@@ -230,14 +214,32 @@ export function buildTools(
                         ...doc,
                         outline: outlineCache.get(doc.docId) ?? '',
                     }))
-                    return JSON.stringify(enriched)
+
+                    // Format as markdown numbered list
+                    const lines: string[] = []
+                    for (const [i, doc] of enriched.entries()) {
+                        lines.push(
+                            `${i + 1}. **${doc.docId}** (rank: ${doc.rank.toFixed(2)})`
+                        )
+                        if (doc.snippet) {
+                            lines.push(`   > ${doc.snippet}`)
+                        }
+                        if (doc.outline) {
+                            lines.push('')
+                            for (const ol of doc.outline.split('\n')) {
+                                lines.push(`   ${ol}`)
+                            }
+                        }
+                        if (i < enriched.length - 1) lines.push('')
+                    }
+                    return lines.join('\n')
                 })
             )
         }),
     }
 
-    // 2. getDocStructure — direct tree render
-    const getDocStructureTool = makeGetDocStructure(ctx)
+    // 2. getNodeSummary — lightweight node summary check
+    const getNodeSummaryTool = makeGetNodeSummary(ctx)
 
     // 3. getDocNodeDetails — direct node fetch
     const getDocNodeDetailsTool = makeGetDocNodeDetails(ctx)
@@ -248,22 +250,14 @@ export function buildTools(
     const entries = [
         { tool: searchDocsTool, meta: SEARCH_DOCS_META },
         {
-            tool: getDocStructureTool,
+            tool: getNodeSummaryTool,
             meta: {
-                stepLabel: () => 'Reading document structure...',
-                resultLabel: (text: string) => {
-                    const firstTitle = text
-                        .split('\n')
-                        .find((l: string) => /^\s*\d+\s+\S/.test(l))
-                        ?.replace(/^\s*\d+\s+/, '')
-                        .trim()
-                    if (firstTitle)
-                        return `"${ellipsis(firstTitle, 40)}" · ${formatSize(text.length)}`
-                    return `Structure · ${formatSize(text.length)}`
-                },
+                stepLabel: (a: Record<string, unknown>) =>
+                    `Checking node ${a.nodeId ?? '?'}...`,
+                resultLabel: (text: string) => `${formatSize(text.length)}`,
                 resultSummary: (raw: string) => `${formatSize(raw.length)}`,
                 logDetail: (a: Record<string, unknown>) =>
-                    `doc=${String(a.docId ?? '').slice(0, 8)}`,
+                    `doc=${String(a.docId ?? '').slice(0, 8)}/${a.nodeId ?? '?'}`,
             } as ToolMeta,
         },
         {

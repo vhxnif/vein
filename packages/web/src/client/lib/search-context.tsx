@@ -235,8 +235,8 @@ function rebuildTurnsFromMessages(messages: any[]): TurnRecord[] {
             const q = String(args.query ?? '')
             return `Searching: "${q.slice(0, 36)}${q.length > 36 ? '...' : ''}"...`
         }
-        if (name === 'getDocStructure') {
-            return 'Reading document structure...'
+        if (name === 'getNodeSummary') {
+            return 'Checking node relevance...'
         }
         if (name === 'getDocNodeDetails') {
             return `Reading node ${args.nodeId ?? '?'}...`
