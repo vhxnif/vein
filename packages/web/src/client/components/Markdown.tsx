@@ -213,11 +213,7 @@ export function Markdown({ children, docIdMap, headingPrefix }: MarkdownProps) {
                             </code>
                         )
                     },
-                    pre: ({ children }) => (
-                        <pre className="code-block my-3 overflow-x-auto touch-pan-x">
-                            {children}
-                        </pre>
-                    ),
+                    pre: ({ children }) => <PreBlock>{children}</PreBlock>,
                     a: ({ children, href }) => {
                         // ReactMarkdown strips custom URL protocols (node://, doc://)
                         // to empty string. We detect refs from the link TEXT + empty href.
@@ -322,6 +318,66 @@ function extractTextContent(children: React.ReactNode): string | undefined {
         return extractTextContent(props.children)
     }
     return undefined
+}
+
+// ── PreBlock ───────────────────────────────────────────────
+
+function PreBlock({ children }: { children: React.ReactNode }) {
+    const [copied, setCopied] = useState(false)
+    const text = extractTextContent(children) ?? ''
+    const onCopy = useCallback(() => {
+        navigator.clipboard.writeText(text).then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+        })
+    }, [text])
+    return (
+        <pre className="code-block group relative my-3 overflow-x-auto touch-pan-x">
+            <button
+                type="button"
+                onClick={onCopy}
+                aria-label={copied ? '已复制' : '复制代码'}
+                className="absolute top-1.5 right-1.5 text-stone hover:text-ink p-1 rounded bg-ivory/80 border border-cream opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+            >
+                {copied ? (
+                    <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    >
+                        <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                ) : (
+                    <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    >
+                        <rect
+                            x="9"
+                            y="9"
+                            width="13"
+                            height="13"
+                            rx="2"
+                            ry="2"
+                        />
+                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                    </svg>
+                )}
+            </button>
+            {children}
+        </pre>
+    )
 }
 
 // ── NodeRefSpan ──────────────────────────────────────────────
