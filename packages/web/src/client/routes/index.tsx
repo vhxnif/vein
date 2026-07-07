@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { annotateRefs, Markdown } from '../components/Markdown.tsx'
+import { Markdown } from '../components/Markdown.tsx'
 import { RunCat } from '../components/RunCat.tsx'
 import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
 import type { SearchResult } from '../lib/api.ts'
@@ -640,11 +640,6 @@ function TurnBlock({
         return m
     }, [result?.docNames])
 
-    const annotatedContent = useMemo(() => {
-        if (!result?.content) return ''
-        return annotateRefs(result.content, docIdMap)
-    }, [result?.content, docIdMap])
-
     const lastBlock = timeline.at(-1)
     const lastIsText = lastBlock?.type === 'text'
     const processBlocks = lastIsText ? timeline.slice(0, -1) : timeline
@@ -727,7 +722,7 @@ function TurnBlock({
                             docIdMap={docIdMap}
                             headingPrefix={`t${turnIndex}`}
                         >
-                            {annotatedContent}
+                            {result.content}
                         </Markdown>
                     </div>
                     {result.review && (

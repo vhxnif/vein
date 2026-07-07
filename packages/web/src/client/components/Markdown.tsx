@@ -1,8 +1,10 @@
 // biome-ignore-all lint/a11y/noStaticElementInteractions: inline hover tooltip triggers
 // biome-ignore-all lint/a11y/useSemanticElements: inline text elements
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
+import { refsPlugin } from '../lib/remark-refs.ts'
 import { DocTooltip } from './DocTooltip.tsx'
 import { NodeTooltip } from './NodeTooltip.tsx'
 
@@ -11,95 +13,17 @@ import { NodeTooltip } from './NodeTooltip.tsx'
  * document hash via docIdMap. Tries exact match first, then first-8-chars
  * fallback (handles LLM output like "f57894882e" where the model truncated
  * the hash to an arbitrary length).
- *
- * Used by annotateRefs, the Markdown component's link handler, and
- * extractRefs in exportHtml — this is the SINGLE shared resolution.
  */
 export function resolveDocId(
     raw: string,
     docIdMap?: Map<string, string>
 ): string {
     if (!docIdMap || docIdMap.size === 0) return raw
-    // Exact match (handles 8-char short IDs and full 32-char hashes that
-    // happen to be in the map)
     const exact = docIdMap.get(raw)
     if (exact) return exact
-    // Fallback: try the first 8 hex chars
     const short = raw.slice(0, 8)
     return docIdMap.get(short) ?? raw
 }
-
-/**
- * Annotate node and document references in markdown content so they become hoverable.
- *
- * Node ref patterns (→ node:// links):
- *   `[docId:nodeId]` — bracketed (per prompt constraint), always matched
- *   `docId:nodeId`   — bare fallback, only when docId is in `docIdMap`
- *
- * Doc ref patterns (→ doc:// links):
- *   `[docId]` — bracketed (full or short hex, no :nodeId), always matched
- *   `**docId**` — bold-wrapped 32+ char hex, always matched
- *
- * Using `docIdMap` as a whitelist for bare-form matching eliminates false
- * positives (e.g. commit hashes, timestamps that happen to match the pattern).
- */
-export function annotateRefs(
-    content: string,
-    docIdMap?: Map<string, string>
-): string {
-    // Build a set of known valid short doc IDs (first 8 hex chars)
-    const validIds = new Set(docIdMap?.keys())
-
-    // Pass 1: bracketed node ref [XXXXX...:YYYY] → node:// link
-    content = content.replace(
-        /\[([a-f0-9]{8,}):(\d{2,5})\]/g,
-        (_, docId: string, nodeId: string) => {
-            const fullDocId = resolveDocId(docId)
-            return `[${fullDocId.slice(0, 8)}:${nodeId}](node://${fullDocId}/${nodeId})`
-        }
-    )
-
-    // Pass 2: bare node ref XXXXXXXX:YYYY (whitelist, not in brackets/links)
-    if (validIds.size > 0) {
-        const idPattern = [...validIds].join('|')
-        const bareRe = new RegExp(
-            `(?<!\\(|\\[)\\b(${idPattern}):(\\d{2,5})\\b(?!\\])`,
-            'g'
-        )
-        content = content.replace(
-            bareRe,
-            (_, docId: string, nodeId: string) => {
-                const fullDocId = resolveDocId(docId)
-                return `[${fullDocId.slice(0, 8)}:${nodeId}](node://${fullDocId}/${nodeId})`
-            }
-        )
-    }
-
-    // Pass 3: bracketed doc ref [XXXXX...] → doc:// link (no :nodeId after hex)
-    // [a-f0-9] doesn't match ':', so [docId:nodeId] won't match — hex stops at ':'
-    content = content.replace(
-        /\[([a-f0-9]{8,})\](?!\()/g,
-        (_, docId: string) => {
-            const fullDocId = resolveDocId(docId)
-            return `[${fullDocId.slice(0, 8)}](doc://${fullDocId})`
-        }
-    )
-
-    // Pass 3b: bold-wrapped doc ref **XXXXX...** → doc:// link (no brackets)
-    // LLMs may output **fullHex** without [] around it
-    content = content.replace(
-        /\*\*([a-f0-9]{32,})\*\*(?!\()/g,
-        (_, docId: string) => {
-            const fullDocId = resolveDocId(docId)
-            return `**[${fullDocId.slice(0, 8)}](doc://${fullDocId})**`
-        }
-    )
-
-    return content
-}
-
-/** @deprecated Use annotateRefs instead */
-export const annotateNodeRefs = annotateRefs
 
 /** Generate consistent heading ID from React children. Must match _headingSlug in index.tsx. */
 // biome-ignore lint/suspicious/noExplicitAny: recursive ReactNode flatten
@@ -140,10 +64,17 @@ export function Markdown({ children, docIdMap, headingPrefix }: MarkdownProps) {
         return count > 1 ? `${base}-${count}` : base
     }
 
+    const remarkPlugins = useMemo(
+        () => [remarkGfm, [refsPlugin, { docIdMap }]],
+        [docIdMap]
+    )
+
     return (
         <div className="markdown-body">
             <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                // biome-ignore lint/suspicious/noExplicitAny: ReactMarkdown plugin tuple typing
+                remarkPlugins={remarkPlugins as any}
+                rehypePlugins={[rehypeRaw]}
                 components={{
                     h1: ({ children }) => (
                         <h1
@@ -214,38 +145,23 @@ export function Markdown({ children, docIdMap, headingPrefix }: MarkdownProps) {
                         )
                     },
                     pre: ({ children }) => <PreBlock>{children}</PreBlock>,
-                    a: ({ children, href }) => {
-                        // ReactMarkdown strips custom URL protocols (node://, doc://)
-                        // to empty string. We detect refs from the link TEXT + empty href.
-                        if (!href || href === '') {
-                            const text = extractTextContent(children)
-                            // Node ref: docId:nodeId pattern (e.g. "738882f0:0002")
-                            const nodeMatch = text?.match(
-                                /^([a-f0-9]{8,}):(\d{2,5})$/
-                            )
-                            if (nodeMatch?.[1] && nodeMatch?.[2]) {
-                                const fullDocId = resolveDocId(
-                                    nodeMatch[1],
-                                    docIdMap
-                                )
+                    a: ({ children, href, title }) => {
+                        // Ref links have empty href + title="node:..." or "doc:..."
+                        if ((!href || href === '') && title) {
+                            const parts = title.split(':')
+                            const type = parts[0]
+                            const fullDocId = parts[1] ?? ''
+                            if (type === 'node' && parts[2]) {
                                 return (
                                     <NodeRefSpan
                                         fullDocId={fullDocId}
-                                        nodeId={nodeMatch[2]}
+                                        nodeId={parts[2]}
                                     >
                                         {children}
                                     </NodeRefSpan>
                                 )
                             }
-                            // Doc ref: bare hex-only text (e.g. "738882f0")
-                            // Only match when docIdMap is available to avoid false positives.
-                            if (
-                                text &&
-                                docIdMap &&
-                                docIdMap.size > 0 &&
-                                /^[a-f0-9]{8,}$/.test(text)
-                            ) {
-                                const fullDocId = resolveDocId(text, docIdMap)
+                            if (type === 'doc') {
                                 return (
                                     <DocRefSpan fullDocId={fullDocId}>
                                         {children}
@@ -286,6 +202,7 @@ export function Markdown({ children, docIdMap, headingPrefix }: MarkdownProps) {
                     ),
                     thead: ({ children }) => <thead>{children}</thead>,
                     tbody: ({ children }) => <tbody>{children}</tbody>,
+                    tr: ({ children }) => <tr>{children}</tr>,
                     th: ({ children }) => (
                         <th className="font-sans text-[8pt] font-semibold text-stone border-b border-cream py-1.5 px-2">
                             {children}
@@ -306,7 +223,7 @@ export function Markdown({ children, docIdMap, headingPrefix }: MarkdownProps) {
 
 // ── Helpers ──────────────────────────────────────────────────
 
-/** Extract plain text from React children for pattern matching. */
+/** Extract plain text from React children for copy functionality. */
 function extractTextContent(children: React.ReactNode): string | undefined {
     if (typeof children === 'string') return children
     if (typeof children === 'number') return String(children)
@@ -404,13 +321,11 @@ function NodeRefSpan({
     }, [])
 
     const handleMouseLeave = useCallback(() => {
-        // Small delay to allow mouse to reach the tooltip
         hideTimerRef.current = setTimeout(() => {
             setShowTooltip(false)
         }, 150)
     }, [])
 
-    // Keep tooltip visible when hovering over it
     const handleTooltipEnter = useCallback(() => {
         if (hideTimerRef.current) {
             clearTimeout(hideTimerRef.current)

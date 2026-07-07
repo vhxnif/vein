@@ -34,8 +34,7 @@ export function extractResultText(
 export function makeGetNodeSummary({ cached, ok, tool }: ToolCtx): any {
     return {
         name: 'getNodeSummary',
-        description:
-            '获取节点摘要用于快速判断相关性。',
+        description: '获取节点摘要用于快速判断相关性。',
         parameters: Type.Object({
             docId: Type.String({ description: '文章Id' }),
             nodeId: Type.String({ description: '文章节点Id' }),
@@ -56,12 +55,11 @@ export function makeGetNodeSummary({ cached, ok, tool }: ToolCtx): any {
                     const raw =
                         (d.summary && d.summary.length < text.length * 0.7
                             ? d.summary
-                            : (d.prefixSummary &&
-                                  d.prefixSummary.length < text.length * 0.7
+                            : d.prefixSummary &&
+                                d.prefixSummary.length < text.length * 0.7
                               ? d.prefixSummary
-                              : '')) ||
-                        text.slice(0, 200) +
-                            (text.length > 200 ? '...' : '')
+                              : '') ||
+                        text.slice(0, 200) + (text.length > 200 ? '...' : '')
                     // Strip redundant ## Title heading
                     const cleaned = raw
                         .replace(/^#{1,2}\s+[^\n]+\n+/s, '')

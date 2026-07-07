@@ -49,9 +49,7 @@ async function searchAndFormat(
         outline: outlineMap.get(doc.docId) ?? '',
     }))
     for (const [i, doc] of enriched.entries()) {
-        lines.push(
-            `${i + 1}. **${doc.docId}** (rank: ${doc.rank.toFixed(2)})`
-        )
+        lines.push(`${i + 1}. **${doc.docId}** (rank: ${doc.rank.toFixed(2)})`)
         if (doc.snippet) {
             lines.push(`   > ${doc.snippet}`)
         }
@@ -82,11 +80,9 @@ async function nodeDetailsAndFormat(
         const raw =
             (d.summary && d.summary.length < text.length * 0.7
                 ? d.summary
-                : (d.prefixSummary &&
-                      d.prefixSummary.length < text.length * 0.7
+                : d.prefixSummary && d.prefixSummary.length < text.length * 0.7
                   ? d.prefixSummary
-                  : '')) ||
-            text.slice(0, 200) + (text.length > 200 ? '...' : '')
+                  : '') || text.slice(0, 200) + (text.length > 200 ? '...' : '')
         const cleaned = raw
             .replace(/^#{1,2}\s+[^\n]+\n+/s, '')
             .replace(/\n+/g, ' ')
@@ -108,10 +104,22 @@ export function register(program: Command) {
         .description(
             'search documents via keyword, get doc structure, or read node details'
         )
-        .argument('[query]', 'keyword search query (optional if --doc-id and --node-id are provided)')
-        .option('--doc-id <id>', 'document ID for node lookup (requires --node-id)')
-        .option('--node-id <id>', 'node ID for detail or summary lookup (requires --doc-id)')
-        .option('--summary', 'get node summary only (used with --doc-id --node-id)')
+        .argument(
+            '[query]',
+            'keyword search query (optional if --doc-id and --node-id are provided)'
+        )
+        .option(
+            '--doc-id <id>',
+            'document ID for node lookup (requires --node-id)'
+        )
+        .option(
+            '--node-id <id>',
+            'node ID for detail or summary lookup (requires --doc-id)'
+        )
+        .option(
+            '--summary',
+            'get node summary only (used with --doc-id --node-id)'
+        )
         .option(
             '--limit <n>',
             'max results for keyword search (default 10, max 20)',
@@ -145,8 +153,11 @@ export function register(program: Command) {
                     )
                 } else if (queryArg) {
                     // Mode: keyword search
-                    const maxLimit = Math.min(parseInt(limit, 10) || 10, 20)
-                    const pageOffset = parseInt(offset, 10) || 0
+                    const maxLimit = Math.min(
+                        Number.parseInt(limit, 10) || 10,
+                        20
+                    )
+                    const pageOffset = Number.parseInt(offset, 10) || 0
                     output = await searchAndFormat(
                         queryArg,
                         maxLimit,
@@ -159,7 +170,7 @@ export function register(program: Command) {
                     process.exit(1)
                 }
 
-                process.stdout.write(output + '\n')
+                process.stdout.write(`${output}\n`)
             } catch (err) {
                 console.error(getErrorMessage(err))
                 process.exit(1)

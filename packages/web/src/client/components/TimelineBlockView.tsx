@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { annotateRefs, Markdown } from './Markdown.tsx'
+import { useEffect, useState } from 'react'
+import { Markdown } from './Markdown.tsx'
 
 // ── Braille spinner (classic single-char) ────────────────────
 
@@ -63,19 +63,15 @@ export function TimelineBlockView({
     block: SharedTimelineBlock
     docIdMap?: Map<string, string>
 }) {
-    const annotatedText = useMemo(() => {
-        const raw =
-            block.type === 'text' || block.type === 'thinking'
-                ? (block.text ?? '')
-                : ''
-        if (!raw || !docIdMap) return raw
-        return annotateRefs(raw, docIdMap)
-    }, [block, docIdMap])
+    const raw =
+        block.type === 'text' || block.type === 'thinking'
+            ? (block.text ?? '')
+            : ''
 
     if (block.type === 'thinking') {
         return (
             <div className="my-2 italic text-stone/70">
-                <Markdown docIdMap={docIdMap}>{annotatedText}</Markdown>
+                <Markdown docIdMap={docIdMap}>{raw}</Markdown>
             </div>
         )
     }
@@ -102,7 +98,7 @@ export function TimelineBlockView({
     }
 
     if (block.type === 'text') {
-        return <Markdown docIdMap={docIdMap}>{annotatedText}</Markdown>
+        return <Markdown docIdMap={docIdMap}>{raw}</Markdown>
     }
 
     return null

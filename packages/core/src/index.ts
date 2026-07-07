@@ -111,8 +111,8 @@ export {
     insertTree,
     listDocuments,
     purgeModelCache,
-    setCachedResponse,
     searchDocsByKeyword,
+    setCachedResponse,
     updateDocFts,
     updateDocMetadata,
 } from './store/index.ts'
