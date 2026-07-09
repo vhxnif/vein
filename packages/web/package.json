@@ -37,6 +37,6 @@
         "@vitejs/plugin-react": "^4.4.1"
     },
     "peerDependencies": {
-        "typescript": "^5"
+        "typescript": "^7"
     }
 }
