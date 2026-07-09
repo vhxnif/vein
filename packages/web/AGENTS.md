@@ -62,3 +62,9 @@ Prefer native CSS pseudo-classes (`:hover`, `:active`) in `styles.css` over Tail
 ### ALWAYS
 
 - `overflow-hidden` on rounded containers with full-width hover child backgrounds
+
+## Verification
+
+- Backend type-check: `bun run --filter @vein/web check`
+- Hex color audit: `bun run lint:hex` from repo root
+- Full build: `bun run --filter @vein/web build`

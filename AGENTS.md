@@ -32,3 +32,9 @@
 ### ALWAYS
 
 - `BEGIN/COMMIT` transactions for multi-table mutations (docs + docs_fts, insertTree + deleteTree)
+
+## Verification
+
+- Type-check all packages: `bun run check`
+- Lint: `bun run lint`
+- Hex color audit (web): `bun run lint:hex`
