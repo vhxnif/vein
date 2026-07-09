@@ -113,8 +113,8 @@ export function register(program: Command) {
             'document ID for node lookup (requires --node-id)'
         )
         .option(
-            '--node-id <id>',
-            'node ID for detail or summary lookup (requires --doc-id)'
+            '--node-id <ids>',
+            'node ID(s) for detail/summary lookup — comma-separated for batch (e.g. 0001,0002,0003). Requires --doc-id'
         )
         .option(
             '--summary',
@@ -145,12 +145,16 @@ export function register(program: Command) {
                 let output: string
 
                 if (docId && nodeId) {
-                    // Mode: node details or summary
-                    output = await nodeDetailsAndFormat(
-                        docId,
-                        nodeId,
-                        summary ?? false
+                    // Mode: node details or summary (supports batch: comma-separated nodeIds)
+                    const nodeIds = nodeId.split(',').map((s: string) => s.trim()).filter(Boolean)
+                    const batch = nodeIds.length > 1
+                    const parts = await Promise.all(
+                        nodeIds.map(async (nid: string) => {
+                            const content = await nodeDetailsAndFormat(docId, nid, summary ?? false)
+                            return batch ? `**${nid}**\n\n${content}` : content
+                        })
                     )
+                    output = parts.join('\n\n---\n\n')
                 } else if (queryArg) {
                     // Mode: keyword search
                     const maxLimit = Math.min(

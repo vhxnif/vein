@@ -55,8 +55,8 @@ Agent 自行分词、判读结果、翻页重试、批量并发请求——全�
 | `vein markdown <files...>` | 导入 Markdown（自动摘要 + 分词索引） |
 | `vein ask "..."` | AI Agent 问答 |
 | `vein search "..."` | 关键词搜索（Markdown 输出，供工具调用） |
-| `vein search --doc-id <id> --node-id <n>` | 节点全文 |
-| `vein search --doc-id <id> --node-id <n> --summary` | 节点摘要 |
+| `vein search --doc-id <id> --node-id <n>` | 节点全文（多节点用逗号分隔）|
+| `vein search --doc-id <id> --node-id <n1,n2,...> --summary` | 节点摘要（支持批量） |
 | `vein web` | 启动 Web UI |
 | `vein browse` | 交互式浏览文档库 |
 | `vein history --last` | 最近问答历史 |
