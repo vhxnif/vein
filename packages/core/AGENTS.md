@@ -1,5 +1,11 @@
 # @vein/core
 
+## Build And Test
+
+- No dedicated build — consumed as TypeScript source via `workspace:*`
+- No dedicated tests — smoke-tested via CLI and Web packages
+- Type-check: `bun run check` from repo root (includes core)
+
 ## Architecture Boundaries
 
 SQL lives in `store/` only.
@@ -66,3 +72,8 @@ Backtick template literals containing backticks (`` `ref reactive` ``) premature
 
 - Use `getRawClient()` for multi-statement transactions (see root contract for `BEGIN/COMMIT` rule)
 - Use `db` for Drizzle ORM operations (`insert`, `update`, `delete`, `select`)
+
+## Verification
+
+- Type-check: `bun run check` from repo root
+- Schema consistency: `config_schema.ts` → `config.schema.json` must stay in sync after adding fields (copy JSON output of `configSchema`)

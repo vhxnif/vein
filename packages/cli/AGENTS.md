@@ -26,3 +26,8 @@
 ### NEVER
 
 - Log to console — all logs go to file via core's logger
+
+## Verification
+
+- Build: `bun run --filter @vein/cli build`
+- Type-check: `bun run --filter @vein/cli check`
