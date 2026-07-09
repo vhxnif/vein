@@ -89,12 +89,34 @@ Options:
 vein -p <project> search --doc-id <完整docId> --node-id <nodeId>
 ```
 
-Returns the full text of a specific node:
+Returns the full text of a specific node (single node):
 
 ```
 # Section Title
 
 Full content text...
+```
+
+**Batch mode** — comma-separated nodeIds for multiple nodes in one call:
+
+```bash
+vein -p <project> search --doc-id <完整docId> --node-id 0001,0002,0003
+```
+
+Batch output prefixes each node with `**nodeId**` and separates with `---`:
+
+```
+**0001**
+
+# Title One
+content...
+
+---
+
+**0002**
+
+# Title Two
+content...
 ```
 
 Use this **only after confirming relevance** via outline or summary.
@@ -111,9 +133,13 @@ Returns a single line:
 > **Section Title** — Brief summary of this section...
 ```
 
-Use this to **quickly check relevance** before pulling full content.
-Much cheaper in tokens than mode 2. Batch multiple `--summary` calls
-concurrently.
+**Batch mode** — pass comma-separated nodeIds:
+
+```bash
+vein -p <project> search --doc-id <完整docId> --node-id 0001,0002,0003 --summary
+```
+
+Batch output prefixes each with `**nodeId**` and `---` separators. Use this to **quickly check relevance** before pulling full content. Much cheaper in tokens than mode 2 — combine with batch to cut round-trips.
 
 ## Strategy
 
