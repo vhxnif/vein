@@ -337,8 +337,8 @@ export function SearchProvider({ children }: { children: ReactNode }) {
         }
         setState((prev) => ({
             ...initialState,
-            sessionId: prev.sessionId,
-            previousTurns: prev.previousTurns,
+            mode: prev.mode,
+            sessionList: prev.sessionList,
         }))
     }, [])
 
@@ -370,12 +370,22 @@ export function SearchProvider({ children }: { children: ReactNode }) {
         // Load latest session content
         fetchLatestSession()
             .then((session) => {
-                if (cancelled || !session) return
+                if (cancelled) return
+                if (!session) {
+                    setState((prev) => ({
+                        ...prev,
+                        sessionId: null,
+                        previousTurns: [],
+                    }))
+                    return
+                }
                 const messages = session.messages as
                     | Array<Record<string, unknown>>
                     | undefined
-                if (!messages || messages.length === 0) return
-                const turns = rebuildTurnsFromMessages(messages)
+                const turns =
+                    messages && messages.length > 0
+                        ? rebuildTurnsFromMessages(messages)
+                        : []
                 setState((prev) => ({
                     ...prev,
                     sessionId: (session.sessionId as string) ?? null,
