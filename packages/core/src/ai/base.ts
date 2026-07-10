@@ -33,6 +33,27 @@ export type {
     Message,
     Tool,
 }
+
+/** Thinking/reasoning level for Agent, mirrors pi-agent-core ThinkingLevel. */
+export type ThinkingLevel =
+    | 'off'
+    | 'minimal'
+    | 'low'
+    | 'medium'
+    | 'high'
+    | 'xhigh'
+    | 'max'
+
+export const THINKING_LEVELS: ThinkingLevel[] = [
+    'off',
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+]
+
 // ── Re-exports for consumers — import from './base.ts' instead of @earendil-works/* ──
 export {
     Agent,

@@ -1,4 +1,4 @@
-import type { KnownProvider } from '../ai/base.ts'
+import type { KnownProvider, ThinkingLevel } from '../ai/base.ts'
 
 export type ModelProvider = {
     provider: KnownProvider
@@ -16,5 +16,5 @@ export type ProjectConfig = {
     /** Optional model for the result reviewer. Falls back to 'model' if not set. */
     reviewer?: ModelProvider
     /** Optional thinking/reasoning level for the main agent. Defaults to 'off' (no thinking). Set to 'high' or 'xhigh' to enable. */
-    thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+    thinkingLevel?: ThinkingLevel
 }

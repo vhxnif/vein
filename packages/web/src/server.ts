@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
-import { logger } from '@vein/core'
+import { logger, THINKING_LEVELS } from '@vein/core'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { projectMiddleware } from './middleware/project.ts'
@@ -46,6 +46,9 @@ app.route('/api/projects/current/history', historyRouter)
 
 // Health check
 app.get('/api/health', (c) => c.json({ status: 'ok' }))
+
+// Thinking levels — static list, no project context needed
+app.get('/api/thinking-levels', (c) => c.json(THINKING_LEVELS))
 
 // ── MIME types ─────────────────────────────────────────────────
 const MIME: Record<string, string> = {

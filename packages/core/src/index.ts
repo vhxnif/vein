@@ -1,5 +1,10 @@
 // ── AI ──────────────────────────────────────────────────────────
-export type { AgentMessage, ContextDef, ToolDef } from './ai/base.ts'
+export type {
+    AgentMessage,
+    ContextDef,
+    ThinkingLevel,
+    ToolDef,
+} from './ai/base.ts'
 export {
     call,
     createSummarizer,
@@ -8,6 +13,7 @@ export {
     listModels,
     listProviders,
     setModelProvider,
+    THINKING_LEVELS,
 } from './ai/base.ts'
 export type {
     LibrarianOption,

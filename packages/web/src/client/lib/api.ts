@@ -164,6 +164,14 @@ export async function createProject(input: {
     return res.json()
 }
 
+// ── Thinking Levels ────────────────────────────────────────────
+
+export async function fetchThinkingLevels(): Promise<string[]> {
+    const res = await fetch('/api/thinking-levels')
+    if (!res.ok) throw new Error('Failed to fetch thinking levels')
+    return res.json()
+}
+
 // ── Config ─────────────────────────────────────────────────────
 
 export async function fetchConfig() {

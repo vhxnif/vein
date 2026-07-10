@@ -3,7 +3,7 @@
 import { logger } from '../config/index.ts'
 import type { ModelProvider } from '../config/type.ts'
 import * as store from '../store/index.ts'
-import type { AgentMessage } from './base.ts'
+import type { AgentMessage, ThinkingLevel } from './base.ts'
 import { Agent, getBuiltinModel, getModelProvider, Type } from './base.ts'
 import type { ReviewResult } from './sub-agents/reviewer.ts'
 import { createReviewResultTool } from './sub-agents/reviewer.ts'
@@ -368,7 +368,7 @@ export function createLibrarianAgent(
     systemPrompt: string,
     tools: any[],
     opts?: {
-        thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+        thinkingLevel?: ThinkingLevel
     }
 ): Agent {
     const provider = getModelProvider()
@@ -559,7 +559,7 @@ export const LIBRARIAN_PROMPT = PROMPT
 export type LibrarianOption = {
     reviewerModel?: ModelProvider
     signal?: AbortSignal
-    thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+    thinkingLevel?: ThinkingLevel
     onThinkingDelta?: (delta: string) => void
     onTextDelta?: (delta: string) => void
     onToolCallStart?: (
