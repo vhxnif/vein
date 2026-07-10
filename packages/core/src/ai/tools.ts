@@ -1,5 +1,6 @@
 import type { ModelProvider } from '../config/type.ts'
 import * as store from '../store/index.ts'
+import type { ThinkingLevel } from './base.ts'
 import type { LibrarianResult, TraceStep } from './librarian.ts'
 
 /**
@@ -40,7 +41,7 @@ type SearchOptions = {
     reviewerModel?: ModelProvider
     onStep?: (label: string) => void
     signal?: AbortSignal
-    thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+    thinkingLevel?: ThinkingLevel
     onThinkingDelta?: (delta: string) => void
     onTextDelta?: (delta: string) => void
     onToolCallStart?: (

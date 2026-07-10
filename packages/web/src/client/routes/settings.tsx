@@ -7,6 +7,7 @@ import {
     fetchConfig,
     fetchModels,
     fetchProviders,
+    fetchThinkingLevels,
     saveConfig,
 } from '../lib/api.ts'
 import { useProject } from '../lib/project.tsx'
@@ -14,15 +15,6 @@ import { useProject } from '../lib/project.tsx'
 export const Route = createFileRoute('/settings')({
     component: SettingsPage,
 })
-
-const THINKING_OPTIONS = [
-    { value: '', label: 'off (default)' },
-    { value: 'minimal', label: 'minimal' },
-    { value: 'low', label: 'low' },
-    { value: 'medium', label: 'medium' },
-    { value: 'high', label: 'high' },
-    { value: 'xhigh', label: 'xhigh' },
-]
 
 function SettingsPage() {
     const { project, projects } = useProject()
@@ -37,6 +29,22 @@ function SettingsPage() {
         queryKey: ['config', project],
         queryFn: () => fetchConfig(),
     })
+
+    const { data: levels = [] } = useQuery({
+        queryKey: ['thinking-levels'],
+        queryFn: fetchThinkingLevels,
+        staleTime: Number.POSITIVE_INFINITY,
+    })
+
+    const thinkingOptions = useMemo(
+        () => [
+            { value: '', label: 'off (default)' },
+            ...levels
+                .filter((l) => l !== 'off')
+                .map((l) => ({ value: l, label: l })),
+        ],
+        [levels]
+    )
 
     const config = configData?.config
     const [name, setName] = useState(config?.name ?? '')
@@ -248,7 +256,7 @@ function SettingsPage() {
                         id="thinkingLevel"
                         value={thinkingLevel}
                         onChange={setThinkingLevel}
-                        options={THINKING_OPTIONS}
+                        options={thinkingOptions}
                     />
                     <p className="font-sans text-[7.5pt] text-stone mt-1">
                         Enables the model to show its reasoning process. Higher

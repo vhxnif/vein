@@ -58,10 +58,12 @@ Prefer native CSS pseudo-classes (`:hover`, `:active`) in `styles.css` over Tail
 - Ring/box-shadow/outline on form controls — border color change only
 - Native `<select>` — always `<SelectField>`
 - Mix `--tint` (cool blue-gray) with warm parchment backgrounds — use warm sand tones
+- **Import runtime values from `@vein/core` in client code** — pulls `node:fs`, `better-sqlite3` into Vite bundle and breaks build. Type-only imports are safe.
 
 ### ALWAYS
 
 - `overflow-hidden` on rounded containers with full-width hover child backgrounds
+- **Client needs runtime data from `@vein/core`?** Expose via HTTP API endpoint (`server.ts`), fetch in client (`lib/api.ts`)
 
 ## Verification
 

@@ -146,11 +146,18 @@ export function register(program: Command) {
 
                 if (docId && nodeId) {
                     // Mode: node details or summary (supports batch: comma-separated nodeIds)
-                    const nodeIds = nodeId.split(',').map((s: string) => s.trim()).filter(Boolean)
+                    const nodeIds = nodeId
+                        .split(',')
+                        .map((s: string) => s.trim())
+                        .filter(Boolean)
                     const batch = nodeIds.length > 1
                     const parts = await Promise.all(
                         nodeIds.map(async (nid: string) => {
-                            const content = await nodeDetailsAndFormat(docId, nid, summary ?? false)
+                            const content = await nodeDetailsAndFormat(
+                                docId,
+                                nid,
+                                summary ?? false
+                            )
                             return batch ? `**${nid}**\n\n${content}` : content
                         })
                     )
