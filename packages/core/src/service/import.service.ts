@@ -94,18 +94,14 @@ async function writeOneDocument(parsed: ParsedFile): Promise<number> {
         await store.deleteDoc(parsed.docId)
     }
     const nodeCount = await store.insertTree([parsed.tree], parsed.docId)
-    await store.insertDoc(
-        parsed.docId,
-        {
-            title: parsed.docName,
-            sourcePath: parsed.relativePath,
-            nodeCount,
-            summaryHash: parsed.combinedSummary
-                ? md5(parsed.combinedSummary)
-                : undefined,
-        },
-        parsed.bodySummary
-    )
+    await store.insertDoc(parsed.docId, {
+        title: parsed.docName,
+        sourcePath: parsed.relativePath,
+        nodeCount,
+        summaryHash: parsed.combinedSummary
+            ? md5(parsed.combinedSummary)
+            : undefined,
+    })
     return nodeCount
 }
 

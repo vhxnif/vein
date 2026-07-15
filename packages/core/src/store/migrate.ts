@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3'
+import { Database } from 'bun:sqlite'
 import { logger } from '../config/index.ts'
 import { schema } from './migrations/sql.ts'
 
@@ -6,8 +6,8 @@ const log = logger.child({ module: 'migrate' })
 
 async function runMigrations(dbPath: string) {
     const db = new Database(dbPath)
-    db.pragma('journal_mode = WAL')
-    db.pragma('foreign_keys = ON')
+    db.run('PRAGMA journal_mode = WAL')
+    db.run('PRAGMA foreign_keys = ON')
 
     // Ensure migration tracking table exists before the loop
     db.exec(`CREATE TABLE IF NOT EXISTS _migrations (

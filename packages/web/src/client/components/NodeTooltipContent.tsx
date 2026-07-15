@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
@@ -15,6 +16,78 @@ import type { NodeInfo } from '../lib/api.ts'
 interface NodeTooltipContentProps {
     nodeId: string
     node: NodeInfo
+}
+
+function TooltipPreBlock({ children }: { children: React.ReactNode }) {
+    const [copied, setCopied] = useState(false)
+    const text = extractTooltipText(children)
+    const onCopy = useCallback(() => {
+        navigator.clipboard.writeText(text).then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+        })
+    }, [text])
+    return (
+        <pre className="code-block group relative my-1.5 overflow-x-auto max-w-full bg-ivory border border-cream/50 rounded-[4pt] p-2 font-mono text-[8pt] leading-relaxed">
+            <button
+                type="button"
+                onClick={onCopy}
+                aria-label={copied ? '已复制' : '复制代码'}
+                className="absolute top-1 right-1 text-stone hover:text-ink p-0.5 rounded bg-ivory/80 border border-cream opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+            >
+                {copied ? (
+                    <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    >
+                        <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                ) : (
+                    <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    >
+                        <rect
+                            x="9"
+                            y="9"
+                            width="13"
+                            height="13"
+                            rx="2"
+                            ry="2"
+                        />
+                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                    </svg>
+                )}
+            </button>
+            {children}
+        </pre>
+    )
+}
+
+function extractTooltipText(children: React.ReactNode): string {
+    if (typeof children === 'string') return children
+    if (typeof children === 'number') return String(children)
+    if (Array.isArray(children))
+        return children.map((c) => extractTooltipText(c) ?? '').join('')
+    if (children && typeof children === 'object' && 'props' in children) {
+        return extractTooltipText(
+            (children as { props: { children?: React.ReactNode } }).props
+                .children
+        )
+    }
+    return ''
 }
 
 export function NodeTooltipContent({ nodeId, node }: NodeTooltipContentProps) {
@@ -91,9 +164,7 @@ export function NodeTooltipContent({ nodeId, node }: NodeTooltipContentProps) {
                             )
                         },
                         pre: ({ children }) => (
-                            <pre className="bg-ivory border border-cream/50 rounded-[4pt] p-2 my-1.5 overflow-x-auto max-w-full font-mono text-[8pt] leading-relaxed">
-                                {children}
-                            </pre>
+                            <TooltipPreBlock>{children}</TooltipPreBlock>
                         ),
                         a: ({ children, href }) => (
                             <a

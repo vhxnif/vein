@@ -80,11 +80,19 @@ async function insertTree<T>(
 
         for (const fn of flatNodes) {
             const nodeId = fn.node.nodeId
+            const json = nodeToJson(fn.node)
             await client.execute({
                 sql: 'INSERT INTO nodes (id, doc_id, data) VALUES (?, ?, ?)',
-                args: [nodeId, docId ?? null, nodeToJson(fn.node)],
+                args: [nodeId, docId ?? null, json],
             })
             indexToId.set(fn.index, nodeId)
+
+            // Also write to nodes_fts for full-text search
+            const d = fn.node.value as { title?: string; text?: string }
+            await client.execute({
+                sql: `INSERT INTO nodes_fts (node_id, doc_id, title, text) VALUES (?, ?, ?, ?)`,
+                args: [nodeId, docId ?? '', d.title ?? '', d.text ?? ''],
+            })
 
             await client.execute({
                 sql: 'INSERT INTO tree_closure (ancestor_id, descendant_id, depth) VALUES (?, ?, 0)',
@@ -136,9 +144,14 @@ async function deleteTree(docId?: string): Promise<void> {
                 sql: 'DELETE FROM nodes WHERE doc_id = ?',
                 args: [docId],
             })
+            await client.execute({
+                sql: 'DELETE FROM nodes_fts WHERE doc_id = ?',
+                args: [docId],
+            })
         } else {
             await client.execute('DELETE FROM tree_closure')
             await client.execute('DELETE FROM nodes')
+            await client.execute('DELETE FROM nodes_fts')
         }
 
         await client.execute('COMMIT')
@@ -625,11 +638,7 @@ async function purgeModelCache(
     return 0
 }
 
-async function insertDoc(
-    id: string,
-    metadata: Record<string, unknown>,
-    summary?: string
-) {
+async function insertDoc(id: string, metadata: Record<string, unknown>) {
     const client = getRawClient()
     try {
         await client.execute('BEGIN')
@@ -638,17 +647,6 @@ async function insertDoc(
             .values({ id, metadata: JSON.stringify(metadata) })
             .onConflictDoNothing()
             .returning()
-
-        if (summary) {
-            await client.execute({
-                sql: `DELETE FROM docs_fts WHERE doc_id = ?`,
-                args: [id],
-            })
-            await client.execute({
-                sql: `INSERT INTO docs_fts (doc_id, summary) VALUES (?, ?)`,
-                args: [id, summary],
-            })
-        }
         await client.execute('COMMIT')
         return result
     } catch (e) {
@@ -674,26 +672,39 @@ async function updateDocMetadata(
         .where(eq(docs.id, docId))
 }
 
-async function updateDocFts(docId: string, segmented: string): Promise<void> {
+async function updateDocFts(docId: string, _segmented: string): Promise<void> {
     const client = getRawClient()
-    await client.execute({
-        sql: `DELETE FROM docs_fts WHERE doc_id = ?`,
+    // Rebuild nodes_fts entries from nodes table data
+    const nodeResult = await client.execute({
+        sql: `SELECT id, data FROM nodes WHERE doc_id = ?`,
         args: [docId],
     })
+    const rows = nodeResult.rows as unknown as { id: string; data: string }[]
+
     await client.execute({
-        sql: `INSERT INTO docs_fts (doc_id, summary) VALUES (?, ?)`,
-        args: [docId, segmented],
+        sql: `DELETE FROM nodes_fts WHERE doc_id = ?`,
+        args: [docId],
     })
+    for (const row of rows) {
+        try {
+            const d = JSON.parse(row.data) as { title?: string; text?: string }
+            await client.execute({
+                sql: `INSERT INTO nodes_fts (node_id, doc_id, title, text) VALUES (?, ?, ?, ?)`,
+                args: [row.id, docId, d.title ?? '', d.text ?? ''],
+            })
+        } catch {
+            /* skip malformed JSON */
+        }
+    }
 }
 
 async function getDocFtsSummary(docId: string): Promise<string | undefined> {
     try {
-        const result = await getRawClient().execute({
-            sql: `SELECT summary FROM docs_fts WHERE doc_id = ?`,
-            args: [docId],
-        })
-        const row = result.rows[0] as { summary: string } | undefined
-        return row?.summary
+        const rootNode = await getNodeDetails<{
+            summary?: string
+            prefixSummary?: string
+        }>(`0000_${docId}`)
+        return rootNode?.summary ?? rootNode?.prefixSummary
     } catch {
         return undefined
     }
@@ -716,7 +727,7 @@ async function deleteDoc(id: string) {
         })
         // Delete FTS entry
         await client.execute({
-            sql: `DELETE FROM docs_fts WHERE doc_id = ?`,
+            sql: `DELETE FROM nodes_fts WHERE doc_id = ?`,
             args: [id],
         })
         // Delete the document itself
@@ -742,9 +753,9 @@ async function searchDocsByKeyword(
 ): Promise<KeywordDocResult[]> {
     const raw = getRawClient()
 
-    // OR semantics: LLM segmentation is non-deterministic and may not align
-    // with the indexed tokens. OR + BM25 ranking gives robust recall while
-    // keeping the most relevant docs at the top via rank ordering.
+    // OR semantics + node-level matching with doc-level grouping.
+    // Each node is indexed independently in nodes_fts; the best-matching
+    // node per document determines the doc's rank.
     const tokens = segmentedQuery.trim().split(/\s+/)
     const ftsQuery =
         tokens.length === 1
@@ -754,9 +765,10 @@ async function searchDocsByKeyword(
     try {
         const result = await raw.execute({
             sql: `
-                SELECT doc_id, rank
-                FROM docs_fts
-                WHERE docs_fts MATCH ?
+                SELECT doc_id, MIN(rank) AS rank
+                FROM nodes_fts
+                WHERE nodes_fts MATCH ?
+                GROUP BY doc_id
                 ORDER BY rank
                 LIMIT ? OFFSET ?
             `,
@@ -898,12 +910,12 @@ async function listDocumentsByKeyword(
             ? `"${tokens[0]}"`
             : tokens.map((t) => `"${t}"`).join(' OR ')
 
-    // Step 1: FTS5 search to get matching docIds with ranks
+    // Step 1: FTS5 search on nodes_fts, group by doc_id
     let matchedIds: string[]
     let total = 0
     try {
         const countResult = await raw.execute({
-            sql: `SELECT COUNT(*) AS count FROM docs_fts WHERE docs_fts MATCH ?`,
+            sql: `SELECT COUNT(DISTINCT doc_id) AS count FROM nodes_fts WHERE nodes_fts MATCH ?`,
             args: [ftsQuery],
         })
         total = (countResult.rows[0] as { count: number })?.count ?? 0
@@ -912,9 +924,10 @@ async function listDocumentsByKeyword(
 
         const result = await raw.execute({
             sql: `
-                SELECT doc_id, rank
-                FROM docs_fts
-                WHERE docs_fts MATCH ?
+                SELECT doc_id, MIN(rank) AS rank
+                FROM nodes_fts
+                WHERE nodes_fts MATCH ?
+                GROUP BY doc_id
                 ORDER BY rank
                 LIMIT ? OFFSET ?
             `,
