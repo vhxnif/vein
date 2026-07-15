@@ -56,6 +56,21 @@ CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
         `.trim(),
     },
     {
+        name: 'v0.1.1_create_nodes_fts.sql',
+        sql: `
+-- Replace doc-level FTS5 with node-level FTS5 for precise text search.
+-- Node titles + full text are indexed; doc-level results are obtained
+-- by grouping node matches by doc_id.
+DROP TABLE IF EXISTS docs_fts;
+CREATE VIRTUAL TABLE nodes_fts USING fts5(
+    node_id,
+    doc_id,
+    title,
+    text
+);
+        `.trim(),
+    },
+    {
         name: 'v0.1.0_strengthen_constraints.sql',
         sql: `
 CREATE INDEX IF NOT EXISTS idx_docs_created_at ON docs(created_at);

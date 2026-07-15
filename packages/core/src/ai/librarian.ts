@@ -175,15 +175,14 @@ export function buildTools(
                     )
                     if (results.length === 0) return '(no results)'
 
-                    // Snippet: use FTS5 summary directly (truncated), no extra DB calls
-                    const withSnippets = results.map((r) => ({
+                    // No per-doc snippet — outline provides enough context for the Agent
+                    const enriched = results.map((r) => ({
                         docId: r.docId,
-                        snippet: r.summary.slice(0, 200),
                         rank: r.rank,
                     }))
 
                     // Enrich with outlines (batch fetch uncached)
-                    const uncachedIds = withSnippets
+                    const uncachedIds = enriched
                         .map((d) => d.docId)
                         .filter((id) => !outlineCache.has(id))
                     if (uncachedIds.length > 0) {
@@ -195,13 +194,10 @@ export function buildTools(
 
                     // Format as markdown numbered list
                     const lines: string[] = []
-                    for (const [i, doc] of withSnippets.entries()) {
+                    for (const [i, doc] of enriched.entries()) {
                         lines.push(
                             `${i + 1}. **${doc.docId}** (rank: ${doc.rank.toFixed(2)})`
                         )
-                        if (doc.snippet) {
-                            lines.push(`   > ${doc.snippet}`)
-                        }
                         const outline = outlineCache.get(doc.docId) ?? ''
                         if (outline) {
                             lines.push('')
@@ -209,7 +205,7 @@ export function buildTools(
                                 lines.push(`   ${ol}`)
                             }
                         }
-                        if (i < withSnippets.length - 1) lines.push('')
+                        if (i < enriched.length - 1) lines.push('')
                     }
                     return lines.join('\n')
                 })
