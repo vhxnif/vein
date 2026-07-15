@@ -8,7 +8,7 @@
 <p align="center">
   <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-blue" />
   <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
-  <img alt="Node" src="https://img.shields.io/badge/node-%3E%3D18-brightgreen" />
+  <img alt="Bun" src="https://img.shields.io/badge/bun-%3E%3D1.0-brightgreen" />
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 
 ## 快速开始
 
-**前置**：Node.js ≥ 18、Bun ≥ 1.0、一个 AI API Key。
+**前置**：Bun ≥ 1.0、一个 AI API Key。
 
 ```bash
 git clone https://github.com/vhxnif/vein.git && cd vein

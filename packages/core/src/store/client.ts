@@ -1,11 +1,11 @@
 import process from 'node:process'
-import Database from 'better-sqlite3'
-import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { Database } from 'bun:sqlite'
+import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite'
+import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { resolveProjectRoot } from '../config/index.ts'
 import * as schema from './schema.ts'
 
-export type { BetterSQLite3Database }
+export type { BunSQLiteDatabase }
 
 type RawClient = {
     execute(sqlOrParams: string | { sql: string; args?: unknown[] }): Promise<{
@@ -13,7 +13,7 @@ type RawClient = {
     }>
 }
 
-function createRawWrapper(db: Database.Database): RawClient {
+function createRawWrapper(db: Database): RawClient {
     return {
         async execute(sqlOrParams) {
             if (typeof sqlOrParams === 'string') {
@@ -25,7 +25,9 @@ function createRawWrapper(db: Database.Database): RawClient {
                 /^\s*SELECT\b/i.test(sqlOrParams.sql) ||
                 /\bRETURNING\b/i.test(sqlOrParams.sql)
             const stmt = db.prepare(sqlOrParams.sql)
-            const args = sqlOrParams.args ?? []
+            // ponytail: cast args to any[] — bun:sqlite's SQLQueryBindings union is narrower than unknown[]
+            // the actual validation happens at SQLite level, so this is safe
+            const args = (sqlOrParams.args ?? []) as any[]
             if (returnsRows) {
                 return { rows: stmt.all(...args) }
             }
@@ -37,8 +39,8 @@ function createRawWrapper(db: Database.Database): RawClient {
 
 function createDb(dbPath: string) {
     const db = new Database(dbPath)
-    db.pragma('journal_mode = WAL')
-    db.pragma('foreign_keys = ON')
+    db.run('PRAGMA journal_mode = WAL')
+    db.run('PRAGMA foreign_keys = ON')
 
     const raw = createRawWrapper(db)
     const drizzleDb = drizzle(db, { schema })
@@ -79,7 +81,7 @@ function getRawClient(): RawClient {
     return getInstance().raw
 }
 
-function getNativeDb(): Database.Database {
+function getNativeDb(): Database {
     return getInstance().native
 }
 
