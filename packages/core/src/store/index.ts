@@ -733,6 +733,7 @@ async function deleteDoc(id: string) {
 type KeywordDocResult = {
     docId: string
     rank: number
+    summary: string
 }
 
 async function searchDocsByKeyword(
@@ -754,7 +755,7 @@ async function searchDocsByKeyword(
     try {
         const result = await raw.execute({
             sql: `
-                SELECT doc_id, rank
+                SELECT doc_id, rank, summary
                 FROM docs_fts
                 WHERE docs_fts MATCH ?
                 ORDER BY rank
@@ -765,10 +766,12 @@ async function searchDocsByKeyword(
         const rows = result.rows as Array<{
             doc_id: string
             rank: number
+            summary: string
         }>
         return rows.map((r) => ({
             docId: r.doc_id,
             rank: r.rank,
+            summary: r.summary ?? '',
         }))
     } catch {
         return []

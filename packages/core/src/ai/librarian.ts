@@ -175,29 +175,12 @@ export function buildTools(
                     )
                     if (results.length === 0) return '(no results)'
 
-                    // Enrich with snippet
-                    const withSnippets = await Promise.all(
-                        results.map(async (r) => {
-                            let snippet = ''
-                            try {
-                                const rootNode = await store.getNodeDetails<{
-                                    summary?: string
-                                    prefixSummary?: string
-                                }>(`0000_${r.docId}`)
-                                snippet =
-                                    rootNode?.summary ??
-                                    rootNode?.prefixSummary ??
-                                    ''
-                            } catch {
-                                // best-effort
-                            }
-                            return {
-                                docId: r.docId,
-                                snippet,
-                                rank: r.rank,
-                            }
-                        })
-                    )
+                    // Snippet: use FTS5 summary directly (truncated), no extra DB calls
+                    const withSnippets = results.map((r) => ({
+                        docId: r.docId,
+                        snippet: r.summary.slice(0, 200),
+                        rank: r.rank,
+                    }))
 
                     // Enrich with outlines (batch fetch uncached)
                     const uncachedIds = withSnippets
@@ -210,27 +193,23 @@ export function buildTools(
                         }
                     }
 
-                    const enriched = withSnippets.map((doc) => ({
-                        ...doc,
-                        outline: outlineCache.get(doc.docId) ?? '',
-                    }))
-
                     // Format as markdown numbered list
                     const lines: string[] = []
-                    for (const [i, doc] of enriched.entries()) {
+                    for (const [i, doc] of withSnippets.entries()) {
                         lines.push(
                             `${i + 1}. **${doc.docId}** (rank: ${doc.rank.toFixed(2)})`
                         )
                         if (doc.snippet) {
                             lines.push(`   > ${doc.snippet}`)
                         }
-                        if (doc.outline) {
+                        const outline = outlineCache.get(doc.docId) ?? ''
+                        if (outline) {
                             lines.push('')
-                            for (const ol of doc.outline.split('\n')) {
+                            for (const ol of outline.split('\n')) {
                                 lines.push(`   ${ol}`)
                             }
                         }
-                        if (i < enriched.length - 1) lines.push('')
+                        if (i < withSnippets.length - 1) lines.push('')
                     }
                     return lines.join('\n')
                 })
