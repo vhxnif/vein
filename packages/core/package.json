@@ -7,8 +7,8 @@
         ".": "./src/index.ts"
     },
     "dependencies": {
-        "@earendil-works/pi-agent-core": "^0.80.7",
-        "@earendil-works/pi-ai": "^0.80.7",
+        "@earendil-works/pi-agent-core": "^0.80.10",
+        "@earendil-works/pi-ai": "^0.80.10",
         "drizzle-orm": "^0.45.2",
         "pino": "^10.3.1"
     },
