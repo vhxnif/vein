@@ -181,8 +181,11 @@ export function register(program: Command) {
                     spawnArgs = args
                 }
 
+                // On Windows, inheriting stdio forces a new console window for the
+                // detached Bun process. Use 'ignore' to let it run truly in the
+                // background; logs are written to ~/.config/vein/logs by the server.
                 const child = spawn(spawnCmd, spawnArgs, {
-                    stdio: ['ignore', 'inherit', 'inherit'],
+                    stdio: isWin ? 'ignore' : ['ignore', 'inherit', 'inherit'],
                     env,
                     detached: true,
                     shell: !isWin,
