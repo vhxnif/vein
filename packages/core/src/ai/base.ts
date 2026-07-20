@@ -24,6 +24,7 @@ import {
 
 import { logger } from '../config/index.ts'
 import type { ModelProvider } from '../config/type.ts'
+import { isProviderConfigured } from './provider-env.ts'
 
 export type {
     AgentMessage,
@@ -182,9 +183,16 @@ function createSummarizer(provider?: ModelProvider) {
     }
 }
 
-/** List available AI providers. */
-export function listProviders(): string[] {
-    return getBuiltinProviders() as string[]
+/** List available AI providers that have credentials configured. */
+export async function listProviders(): Promise<string[]> {
+    const providers = getBuiltinProviders() as string[]
+    const results = await Promise.all(
+        providers.map(async (provider) => ({
+            provider,
+            ok: await isProviderConfigured(provider),
+        }))
+    )
+    return results.filter((r) => r.ok).map((r) => r.provider)
 }
 
 /** List available models for a given provider. */

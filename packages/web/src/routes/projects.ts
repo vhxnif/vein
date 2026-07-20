@@ -126,8 +126,8 @@ projectsRouter.delete('/:name', async (c) => {
 })
 
 // ── GET /api/models/providers ────────────────────────────────────
-modelsRouter.get('/providers', (c) => {
-    const providers = listProviders()
+modelsRouter.get('/providers', async (c) => {
+    const providers = await listProviders()
     return c.json({ providers })
 })
 
