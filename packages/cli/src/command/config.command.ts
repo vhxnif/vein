@@ -44,9 +44,10 @@ async function pickModel(
     if (action === 'keep' || typeof action !== 'string') return current
     if (action === 'remove') return undefined
 
+    const providers = await listProviders()
     const provider = (await select({
         message: 'Provider:',
-        options: listProviders().map((p) => ({
+        options: providers.map((p) => ({
             value: p as string,
             label: p,
         })),

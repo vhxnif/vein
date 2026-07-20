@@ -58,9 +58,10 @@ export function register(program: Command) {
                 projectName = raw
             }
 
+            const providers = await listProviders()
             const rawProvider = await select({
                 message: 'Default AI provider:',
-                options: listProviders().map((p) => ({
+                options: providers.map((p) => ({
                     value: p as string,
                     label: p,
                 })),

@@ -476,9 +476,7 @@ function NodeContent({ docId, nodeId }: { docId: string; nodeId: string }) {
                     <h4 className="font-sans text-[8pt] font-semibold text-olive uppercase tracking-wide mb-2">
                         Summary
                     </h4>
-                    <p className="font-serif text-[9.5pt] text-near-black leading-relaxed">
-                        {node.summary}
-                    </p>
+                    <Markdown>{node.summary}</Markdown>
                 </div>
             )}
 
