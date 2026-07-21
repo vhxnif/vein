@@ -1,9 +1,9 @@
-import { execSync, spawn } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { type ChildProcess, execSync, spawn } from 'node:child_process'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { APP_NAME } from '@vein/core'
+import { $ } from 'bun'
 import type { Command } from 'commander'
 
 const CONFIG_DIR = path.join(process.env.HOME ?? '~', '.config', APP_NAME)
@@ -30,43 +30,6 @@ function isAlive(pid: number): boolean {
         return true
     } catch {
         return false
-    }
-}
-
-// ponytail: PATH scan avoids where.exe which itself can flash a console window
-function findWindowsExe(command: string): string | null {
-    const pathext = (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD')
-        .toLowerCase()
-        .split(';')
-    const paths = (process.env.PATH || '').split(path.delimiter)
-    for (const dir of paths) {
-        for (const ext of pathext) {
-            const fullPath = path.join(dir, command + ext)
-            if (existsSync(fullPath)) return fullPath
-        }
-    }
-    return null
-}
-
-/**
- * Parse a .cmd shim to extract the runtime executable and script path.
- * Bun/npm shims are one-liners: @"<exe>" "<script>" %*
- * Spawning the runtime directly avoids cmd.exe → grandchild console windows.
- */
-function parseCmdShim(cmdPath: string): { exe: string; script: string } | null {
-    try {
-        const raw = readFileSync(cmdPath, 'utf-8')
-        const tokens = raw.match(/"([^"]+)"/g)
-        if (!tokens || tokens.length < 2) return null
-        const binDir = path.dirname(cmdPath)
-        const resolveToken = (t: string) =>
-            t.replace(/"/g, '').replace(/%~dp0/gi, binDir)
-        return {
-            exe: resolveToken(tokens[0]!),
-            script: resolveToken(tokens[1]!),
-        }
-    } catch {
-        return null
     }
 }
 
@@ -159,50 +122,37 @@ export function register(program: Command) {
                 }
                 if (opts.port) env.PORT = opts.port
 
-                // On Windows, parse the .cmd shim and spawn the runtime directly.
-                // Spawning the .cmd goes through cmd.exe which can create a separate
-                // console window for the grandchild process even with windowsHide.
-                const isWin = process.platform === 'win32'
-                let spawnCmd: string
-                let spawnArgs: string[]
+                let pid: number | string
 
+                const isWin = process.platform === 'win32'
+                let child: ChildProcess | undefined
                 if (isWin) {
-                    const cmdPath = findWindowsExe('vein-web')
-                    const shim = cmdPath ? parseCmdShim(cmdPath) : null
-                    if (shim && existsSync(shim.script)) {
-                        spawnCmd = shim.exe
-                        spawnArgs = [shim.script, ...args]
-                    } else {
-                        spawnCmd = cmdPath ?? 'vein-web'
-                        spawnArgs = args
-                    }
+                    pid =
+                        await $`powershell -c "(Start-Process vein-web -WindowStyle Hidden -PassThru).Id"`
+                            .text()
+                            .then((it) => it.trim())
                 } else {
-                    spawnCmd = 'vein-web'
-                    spawnArgs = args
+                    child = spawn('vein-web', args, {
+                        stdio: 'ignore',
+                        env,
+                        detached: true,
+                    })
+                    pid = child.pid!
                 }
 
-                // On Windows, inheriting stdio forces a new console window for the
-                // detached Bun process. Use 'ignore' to let it run truly in the
-                // background; logs are written to ~/.config/vein/logs by the server.
-                const child = spawn(spawnCmd, spawnArgs, {
-                    stdio: isWin ? 'ignore' : ['ignore', 'inherit', 'inherit'],
-                    env,
-                    detached: true,
-                    shell: !isWin,
-                    ...(isWin ? { windowsHide: true } : {}),
-                })
-
                 await ensureConfigDir()
-                await writeFile(PID_FILE, String(child.pid!))
+                await writeFile(PID_FILE, String(pid))
 
-                console.log(`Vein Web server started (PID ${child.pid})`)
+                console.log(`Vein Web server started (PID ${pid})`)
                 console.log(`  http://localhost:${opts.port || '3000'}`)
                 console.log(`  Stop with: vein web --stop`)
                 console.log(`  PID file: ${PID_FILE}`)
 
                 // Brief wait so vein-web's startup log lands before shell prompt
-                await new Promise((r) => setTimeout(r, 300))
-                child.unref()
+                await new Promise((r) => setTimeout(r, 500))
+                if (child) {
+                    child.unref()
+                }
             }
         )
 }
