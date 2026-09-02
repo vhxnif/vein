@@ -123,13 +123,15 @@ function HomePage() {
             {/* ── Main: conversation ──────────────── */}
             <div className="flex flex-1 min-w-0 md:px-4">
                 <div className="flex flex-col w-full max-w-[780px] mx-auto h-full min-h-0">
-                    {/* Mobile top bar */}
+                    {/* Mobile top bar — title shows the query of the turn at
+                        the top of the viewport while scrolling */}
                     <MobileTopBar
                         project={project}
                         sessions={sessionList}
                         currentId={sessionId}
                         onSwitch={switchSession}
                         onNew={newSession}
+                        activeQuery={stickyQuery}
                     />
 
                     {/* Conversation */}
@@ -137,7 +139,8 @@ function HomePage() {
                         ref={scrollContainerRef}
                         className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col"
                     >
-                        {/* Sticky query header — desktop only */}
+                        {/* Sticky query header — desktop only (mobile shows the
+                            current query in the fixed top bar instead) */}
                         <div
                             className={`hidden md:block sticky top-0 z-10 bg-parchment/95 backdrop-blur-sm border-b border-cream/50 transition-opacity duration-150 ${stickyQuery ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                         >
@@ -469,6 +472,7 @@ function MobileTopBar({
     currentId,
     onSwitch,
     onNew,
+    activeQuery,
 }: {
     project: string | null
     sessions: Array<{
@@ -480,11 +484,15 @@ function MobileTopBar({
     currentId: string | null
     onSwitch: (id: string) => Promise<void>
     onNew: () => void
+    /** Query of the turn currently at the top of the viewport, while scrolling */
+    activeQuery?: string
 }) {
     const [menuOpen, setMenuOpen] = useState(false)
     const barRef = useRef<HTMLDivElement>(null)
     const current = sessions.find((s) => s.sessionId === currentId)
-    const label = current ? current.summary.slice(0, 30) : (project ?? 'Vein')
+    // While scrolling, the top bar shows the query being read instead of the
+    // session label — matches how the desktop sticky header behaves.
+    const label = activeQuery || (current ? current.summary.slice(0, 30) : (project ?? 'Vein'))
 
     // Close nav menu when tapping outside / Escape
     useEffect(() => {
