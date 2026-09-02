@@ -225,7 +225,8 @@ body::before {
 
 /* Safe area for mobile bottom bar */
 .safe-area-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 8px);
+    /* Half the home-indicator inset — full 34px reads as too much whitespace */
+    padding-bottom: max(8px, calc(env(safe-area-inset-bottom) / 2));
 }
 
 /* ── Kami Components (Tailwind-compatible utility classes) ── */
@@ -306,6 +307,18 @@ body::before {
     line-height: 1.4;
     padding: 12pt 16pt;
     overflow-x: auto;
+}
+
+/*
+ * Horizontally-scrollable blocks (code, tables) nested in a vertical page.
+ * Allow the browser to arbitrate gesture direction: horizontal drags pan the
+ * block, vertical drags scroll the page. pan-x alone would swallow vertical
+ * drags on mobile; leaving it unset (auto) also risks gesture capture quirks
+ * in some mobile WebViews.
+ */
+.code-block,
+.md-scroll-x {
+    touch-action: pan-x pan-y;
 }
 
 /* Buttons */

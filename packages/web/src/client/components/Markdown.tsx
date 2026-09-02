@@ -194,7 +194,7 @@ export function Markdown({ children, docIdMap, headingPrefix }: MarkdownProps) {
                         />
                     ),
                     table: ({ children }) => (
-                        <div className="overflow-x-auto max-w-full my-3 touch-pan-x">
+                        <div className="md-scroll-x overflow-x-auto max-w-full my-3">
                             <table className="w-full text-left border-collapse">
                                 {children}
                             </table>
@@ -249,7 +249,7 @@ function PreBlock({ children }: { children: React.ReactNode }) {
         })
     }, [text])
     return (
-        <pre className="code-block group relative my-3 overflow-x-auto touch-pan-x">
+        <pre className="code-block group relative my-3 overflow-x-auto">
             <button
                 type="button"
                 onClick={onCopy}

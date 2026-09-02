@@ -338,7 +338,6 @@ export function SearchProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({
             ...initialState,
             mode: prev.mode,
-            sessionList: prev.sessionList,
         }))
     }, [])
 
