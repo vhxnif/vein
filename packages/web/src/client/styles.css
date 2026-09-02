@@ -225,7 +225,8 @@ body::before {
 
 /* Safe area for mobile bottom bar */
 .safe-area-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 8px);
+    /* Half the home-indicator inset — full 34px reads as too much whitespace */
+    padding-bottom: max(8px, calc(env(safe-area-inset-bottom) / 2));
 }
 
 /* ── Kami Components (Tailwind-compatible utility classes) ── */

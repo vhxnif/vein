@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Markdown } from '../components/Markdown.tsx'
+import { NAV_ITEMS } from '../components/Layout.tsx'
 import { RunCat } from '../components/RunCat.tsx'
 import { TimelineBlockView } from '../components/TimelineBlockView.tsx'
 import type { SearchResult } from '../lib/api.ts'
@@ -97,16 +98,19 @@ function HomePage() {
     }
 
     useEffect(() => {
-        inputRef.current?.focus()
+        // Only auto-focus on desktop — on phones focusing on entry pops the
+        // keyboard and covers the view.
+        if (window.innerWidth >= 768) inputRef.current?.focus()
     }, [])
     useEffect(() => {
-        if (!searching && result) inputRef.current?.focus()
+        if (!searching && result && window.innerWidth >= 768)
+            inputRef.current?.focus()
     }, [searching, result])
 
     const hasAnyContent = previousTurns.length > 0 || query
 
     return (
-        <div className="flex h-dvh md:h-screen">
+        <div className="flex h-full min-h-0 md:h-screen">
             {/* ── Desktop: Session sidebar ────────── */}
             <SessionSidebar
                 project={project}
@@ -118,7 +122,7 @@ function HomePage() {
 
             {/* ── Main: conversation ──────────────── */}
             <div className="flex flex-1 min-w-0 md:px-4">
-                <div className="flex flex-col w-full max-w-[780px] mx-auto h-dvh md:h-screen">
+                <div className="flex flex-col w-full max-w-[780px] mx-auto h-full min-h-0">
                     {/* Mobile top bar */}
                     <MobileTopBar
                         project={project}
@@ -145,38 +149,33 @@ function HomePage() {
                         </div>
 
                         <div
-                            className={`flex flex-col px-4 pb-4 min-h-full min-w-0 ${hasAnyContent || searching ? 'pt-6 md:pt-16' : ''}`}
+                            className={`flex flex-col px-4 pb-2 min-h-full min-w-0 ${hasAnyContent || searching ? 'pt-6 md:pt-16' : ''}`}
                         >
                             {!hasAnyContent && !searching && (
-                                <div className="flex-1 flex flex-col">
-                                    {/* Top 50% — input sits at bottom of this, touching midline */}
-                                    <div className="h-1/2 flex flex-col justify-end">
-                                        <div className="w-full max-w-[600px] mx-auto px-4">
-                                            <p className="font-serif text-[11pt] text-stone italic text-center mb-6">
-                                                Ask anything about your
-                                                documents
-                                            </p>
-                                            <input
-                                                ref={inputRef}
-                                                type="text"
-                                                value={input}
-                                                onChange={(e) =>
-                                                    setInput(
-                                                        e.currentTarget.value
-                                                    )
-                                                }
-                                                onKeyDown={handleKeyDown}
-                                                placeholder="Type your question..."
-                                                className="w-full bg-ivory ring-warm rounded-[8pt] px-[24pt] py-[16pt]
-                                                           font-serif text-[11pt] leading-relaxed text-near-black
-                                                           placeholder:text-stone outline-none
-                                                           ring-ink-focus transition-shadow"
-                                                disabled={searching}
-                                            />
-                                        </div>
+                                <div className="flex-1 flex flex-col justify-center">
+                                    <div className="w-full max-w-[600px] mx-auto px-4">
+                                        <p className="font-serif text-[11pt] text-stone italic text-center mb-4">
+                                            Ask anything about your
+                                            documents
+                                        </p>
+                                        <input
+                                            ref={inputRef}
+                                            type="text"
+                                            value={input}
+                                            onChange={(e) =>
+                                                setInput(
+                                                    e.currentTarget.value
+                                                )
+                                            }
+                                            onKeyDown={handleKeyDown}
+                                            placeholder="Type your question..."
+                                            className="w-full bg-ivory ring-warm rounded-[8pt] px-[24pt] py-[12pt]
+                                                       font-serif text-[11pt] leading-relaxed text-near-black
+                                                       placeholder:text-stone outline-none
+                                                       ring-ink-focus transition-shadow"
+                                            disabled={searching}
+                                        />
                                     </div>
-                                    {/* Bottom 50% — empty */}
-                                    <div className="h-1/2" />
                                 </div>
                             )}
                             {previousTurns.map((turn, i) => (
@@ -213,9 +212,9 @@ function HomePage() {
 
                     {/* Input (bottom, only when content exists) */}
                     {hasAnyContent && (
-                        <div className="flex-shrink-0 px-4 pb-6 pt-3">
+                        <div className="flex-shrink-0 px-4 pt-2 pb-[max(1rem,calc(env(safe-area-inset-bottom)/2))]">
                             <div
-                                className={`h-6 mb-2 flex items-center gap-2 transition-opacity duration-200 ${searching ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                                className={`${searching ? 'flex' : 'hidden'} h-6 mb-2 items-center gap-2`}
                             >
                                 <RunCat size={16} />
                                 <span className="font-sans text-[8pt] text-olive">
@@ -243,7 +242,7 @@ function HomePage() {
                                 }
                                 onKeyDown={handleKeyDown}
                                 placeholder="Type your question..."
-                                className="w-full bg-ivory ring-warm rounded-[8pt] px-[24pt] py-[16pt]
+                                className="w-full bg-ivory ring-warm rounded-[8pt] px-[24pt] py-[12pt]
                                            font-serif text-[11pt] leading-relaxed text-near-black
                                            placeholder:text-stone outline-none
                                            ring-ink-focus transition-shadow"
@@ -482,14 +481,86 @@ function MobileTopBar({
     onSwitch: (id: string) => Promise<void>
     onNew: () => void
 }) {
+    const [menuOpen, setMenuOpen] = useState(false)
+    const barRef = useRef<HTMLDivElement>(null)
     const current = sessions.find((s) => s.sessionId === currentId)
     const label = current ? current.summary.slice(0, 30) : (project ?? 'Vein')
 
+    // Close nav menu when tapping outside / Escape
+    useEffect(() => {
+        if (!menuOpen) return
+        const onDown = (e: MouseEvent) => {
+            if (barRef.current && !barRef.current.contains(e.target as Node))
+                setMenuOpen(false)
+        }
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setMenuOpen(false)
+        }
+        document.addEventListener('mousedown', onDown)
+        document.addEventListener('keydown', onKey)
+        return () => {
+            document.removeEventListener('mousedown', onDown)
+            document.removeEventListener('keydown', onKey)
+        }
+    }, [menuOpen])
+
     return (
-        <div className="md:hidden flex-shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-cream/50 bg-parchment">
-            <span className="font-serif text-[11pt] font-medium text-ink truncate max-w-[70%]">
-                {label}
-            </span>
+        <div
+            ref={barRef}
+            className="md:hidden flex-shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-cream/50 bg-parchment"
+        >
+            <div className="flex items-center min-w-0 gap-1.5">
+                {/* Nav menu (top-left) — opens page navigation */}
+                <div className="relative flex-shrink-0">
+                    <button
+                        type="button"
+                        className="flex items-center justify-center w-9 h-9 rounded-[6pt]
+                                   text-stone hover:text-ink hover:bg-sand
+                                   focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2
+                                   transition-colors"
+                        aria-label="Menu"
+                        aria-expanded={menuOpen}
+                        aria-haspopup="true"
+                        onClick={() => setMenuOpen((v) => !v)}
+                    >
+                        <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                        >
+                            <line x1="4" y1="7" x2="20" y2="7" />
+                            <line x1="4" y1="12" x2="20" y2="12" />
+                            <line x1="4" y1="17" x2="20" y2="17" />
+                        </svg>
+                    </button>
+                    {menuOpen && (
+                        <div
+                            className="absolute top-full left-0 mt-1 w-44 bg-ivory ring-warm rounded-[8pt] py-1 px-1 z-50 shadow-sm overflow-hidden
+                                       animate-[fadeIn_150ms_ease]"
+                        >
+                            {NAV_ITEMS.map((item) => (
+                                <Link
+                                    key={item.href}
+                                    to={item.href}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[4pt] font-sans text-[10pt] text-olive hover:bg-sand hover:text-ink transition-colors no-underline"
+                                    onClick={() => setMenuOpen(false)}
+                                >
+                                    {item.icon}
+                                    <span className="truncate">
+                                        {item.label}
+                                    </span>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <span className="font-serif text-[11pt] font-medium text-ink truncate">
+                    {label}
+                </span>
+            </div>
             <SessionSwitcher
                 sessions={sessions}
                 currentId={currentId}
