@@ -131,7 +131,7 @@ function HomePage() {
                     {/* Conversation */}
                     <div
                         ref={scrollContainerRef}
-                        className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col touch-pan-y"
+                        className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col"
                     >
                         {/* Sticky query header — desktop only */}
                         <div

@@ -308,6 +308,18 @@ body::before {
     overflow-x: auto;
 }
 
+/*
+ * Horizontally-scrollable blocks (code, tables) nested in a vertical page.
+ * Allow the browser to arbitrate gesture direction: horizontal drags pan the
+ * block, vertical drags scroll the page. pan-x alone would swallow vertical
+ * drags on mobile; leaving it unset (auto) also risks gesture capture quirks
+ * in some mobile WebViews.
+ */
+.code-block,
+.md-scroll-x {
+    touch-action: pan-x pan-y;
+}
+
 /* Buttons */
 .btn-primary {
     background: var(--ink-blue);
