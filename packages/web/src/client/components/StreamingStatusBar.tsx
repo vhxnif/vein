@@ -1,14 +1,17 @@
 import { useSearch } from '../lib/search-context.tsx'
+import { useLocation } from '@tanstack/react-router'
 import { RunCat } from './RunCat.tsx'
 
 /**
- * Streaming status bar — rendered in Layout between <main> and <nav>
- * so it's always visible above the tab bar without sticky tricks.
+ * Streaming status bar — rendered in Layout below <main>.
+ * The Ask page renders its own status row above the input, so this is
+ * skipped there to avoid a duplicate RunCat + divider at the screen bottom.
  */
 export function StreamingStatusBar() {
     const { searching, elapsed, timeline } = useSearch()
+    const { pathname } = useLocation()
 
-    if (!searching) return null
+    if (!searching || pathname === '/') return null
 
     const runningCount = timeline.filter(
         (b) => b.type === 'tool' && b.status === 'running'
