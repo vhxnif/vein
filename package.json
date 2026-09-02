@@ -3,15 +3,13 @@
     "version": "0.1.0",
     "private": true,
     "type": "module",
-    "workspaces": [
-        "packages/*"
-    ],
+    "workspaces": ["packages/*"],
     "scripts": {
         "build": "bun run --filter @vein/cli build",
         "link": "bun run --filter @vein/cli build && bun run --filter @vein/cli link && bun run --filter @vein/web build && bun run --filter @vein/web link",
         "unlink": "bun run --filter @vein/cli unlink && bun run --filter @vein/web unlink",
         "dev:web": "bun run --filter @vein/web build:backend && bun run --filter @vein/web start",
-        "build:web": "bun run --filter @vein/web build",
+        "build:web": "bun run --filter @vein/cli build && bun run --filter @vein/web build",
         "check": "tsc --noEmit",
         "lint": "bunx --bun @biomejs/biome lint",
         "lint:fix": "bunx --bun @biomejs/biome lint --write .",
