@@ -13,7 +13,7 @@
 | `@vein/cli` | `packages/cli/` | Command parsing + I/O + result display |
 | `@vein/web` | `packages/web/` | Hono REST API + React SPA |
 
-- Import only from `@vein/core` single entry, no sub-paths
+- Import only from `@vein/core` single entry, no sub-paths (see NEVER)
 - `resolveProjectRoot()` for all project path resolution (supports `--project` flag)
 - Web UI tokens: `DESIGN.md`
 
