@@ -2,78 +2,65 @@
 
 ## Build And Test
 
-- No dedicated build — consumed as TypeScript source via `workspace:*`
-- No dedicated tests — smoke-tested via CLI and Web packages
-- Type-check: `bun run check` from repo root (includes core)
+- No dedicated build or tests — consumed as TypeScript source via `workspace:*`; smoke-tested through CLI and Web packages.
 
 ## Architecture Boundaries
 
-SQL lives in `store/` only.
+- SQL lives in `store/` only.
 
 ## Coding Conventions
 
 ### New Model Config Field — Checklist
 
-6 locations:
+6 locations (paths repo-root-relative):
 
-1. `config/type.ts` — add `fieldName?: ModelProvider` to `ProjectConfig`
-2. `store/migrations/config_schema.ts` — add property to JSON Schema
-3. `cli/command/config.command.ts` — display row + menu option + switch case
-4. `cli/command/ask.command.ts` — pass `fieldName: config.fieldName` to `searchDocuments()`
-5. `web/routes/search.ts` — same as above
-6. `librarian.ts` — `buildTools()` and `librarian()` opts, thread to target tool
+1. `packages/core/src/config/type.ts` — add `fieldName?: ModelProvider` to `ProjectConfig`
+2. `packages/core/src/store/migrations/config_schema.ts` — add property to `configSchema`
+3. `packages/cli/src/command/config.command.ts` — display row + menu option + switch case
+4. `packages/cli/src/command/ask.command.ts` — pass `fieldName: config.fieldName` to `searchDocuments()`
+5. `packages/web/src/routes/search.ts` — same as above
+6. `packages/core/src/ai/librarian.ts` — `buildTools()` and `librarian()` opts, thread to target tool
 
 ### ToolMeta
 
-Meta lives alongside `create*Tool()` in the same file. No separate registry. If a tool moves files, its meta moves with it.
-
-### Agent Event Ordering
-
-`beforeToolCall` is async — `tool_execution_start` may fire before it resolves. First tool start log shows `stepCount: 0`. Budget enforcement (synchronous inside `beforeToolCall`) is unaffected.
+`ToolMeta` consts live alongside their tool assembly in the same file (`SEARCH_DOCS_META`, `GET_REVIEW_SOURCE_META`). No registry module; `buildTools()` collects them.
 
 ### Store / DB
 
-Two database clients coexist; using the wrong one breaks transactions or raw SQL:
+Two database clients coexist; wrong choice breaks transactions or raw SQL:
 
-- **`db`** — Drizzle ORM proxy (lazy singleton, resolves project root at call time). Use for ORM queries, `onConflictDoUpdate`, `onConflictDoNothing`, Drizzle `sql` templates.
-- **`getRawClient()`** — Raw SQL wrapper around better-sqlite3. Use for transactions (`BEGIN`/`COMMIT`/`ROLLBACK`), `json_extract`, manual `?` placeholders.
+- **`db`** — Drizzle ORM proxy over `bun:sqlite` (lazy singleton, resolves project root at call time). Use for ORM queries, `onConflictDoUpdate`/`DoNothing`, Drizzle `sql` templates.
+- **`getRawClient()`** — raw SQL wrapper over `bun:sqlite`. Use for transactions (`BEGIN`/`COMMIT`/`ROLLBACK`), `json_extract`, manual `?` placeholders.
 
-**Transactions must use `getRawClient()`** — `db` is a Proxy over Drizzle and cannot execute raw `BEGIN`/`COMMIT`.
+**`db` cannot run raw `BEGIN`/`COMMIT`** — it's a Drizzle proxy. Multi-statement transactions require `getRawClient()`; ORM ops require `db`. Never feed Drizzle `sql` templates into `getRawClient().execute()` (expects `?` placeholders).
 
 ## Traps & Non-Obvious Behaviors
 
-### DeepSeek
+### Agent instrumentation
 
-- **Structured templates suppress reasoning**: Explicit Markdown section headers make the model fill sections directly. Pure negative constraints ("return JSON") cause long reasoning chains.
-- **Agent API vs `call()`**: Both use `complete()` underneath. Output differences come solely from prompt structure.
+- `beforeToolCall` is async — `tool_execution_start` may log before it resolves; first tool-start log shows `stepCount: 0`. Budget enforcement (synchronous inside the hook) is unaffected.
+- **Budget must live in the `beforeToolCall` hook** with `{ block: true, reason }` — prompt-level limits are unreliable.
+- Reviewer sub-agent ids are `0001: section title` — use `normalizeNodeId()` for the numeric prefix.
 
-### Agent Hardening
+### DeepSeek prompting
 
-- **Budget MUST be in `beforeToolCall` hook** with `{ block: true, reason: '...' }` — prompt-level limits are unreliable.
-- **`reviewResult` sources**: sub-agent returns `0001: section title`. Use `normalizeNodeId()` to extract numeric prefix.
+- Explicit Markdown section headers make the model fill sections directly; pure negative constraints ("return JSON") cause long reasoning chains.
+- `Agent` API and `call()` share `complete()` underneath — output differences come from prompt structure alone.
+- Don't echo internal constraints in prompts (model may repeat them verbatim) — abstract descriptions + `sanitizeAnswer()`.
+- Soft limits become hard limits ("suggest ≤5 docs" → rigid batching). Use "select all possibly-relevant docs in one batch".
 
-### Prompt Authoring
+### Template literals
 
-- **Don't leak internal constraints**: Model may verbatim repeat prompt text. Use abstract descriptions + `sanitizeAnswer()`.
-- **Soft limits become hard limits**: "Suggest ≤5 docs" causes rigid batching. Use "select all possibly-relevant docs in one batch".
-
-### Template Literal Trap
-
-Backtick template literals containing backticks (`` `ref reactive` ``) prematurely close the template. Use guillemets (「」) for code examples inside prompt strings.
+Backtick template literals containing raw backticks close the template early — escape them (`\``) inside prompt strings, as in the reviewer prompt.
 
 ## Safety Rails
 
 ### NEVER
 
 - Use `db` for raw `BEGIN`/`COMMIT`/`ROLLBACK` transactions
-- Use Drizzle `sql` tagged templates inside `getRawClient().execute()` — raw wrapper expects `?` placeholders, not Drizzle SQL fragments
+- Use Drizzle `sql` tagged templates inside `getRawClient().execute()`
 
 ### ALWAYS
 
-- Use `getRawClient()` for multi-statement transactions (see root contract for `BEGIN/COMMIT` rule)
-- Use `db` for Drizzle ORM operations (`insert`, `update`, `delete`, `select`)
-
-## Verification
-
-- Type-check: `bun run check` from repo root
-- Schema consistency: `config_schema.ts` → `config.schema.json` must stay in sync after adding fields (copy JSON output of `configSchema`)
+- `getRawClient()` for multi-statement transactions (see root contract)
+- `db` for Drizzle ORM operations (`insert`, `update`, `delete`, `select`)
