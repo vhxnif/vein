@@ -4,7 +4,7 @@
 
 import { logger } from '../config/index.ts'
 import type { AgentMessage } from './base.ts'
-import { Agent, getBuiltinModel, getModelProvider } from './base.ts'
+import { Agent, getBuiltinModel, getModelProvider, streamSimple } from './base.ts'
 import type { LibrarianOption, LibrarianResult } from './librarian.ts'
 import {
     buildTools,
@@ -56,6 +56,7 @@ export class LibrarianSession {
             this._queryCount = snap.queryCount
 
             this.agent = new Agent({
+                streamFn: streamSimple,
                 initialState: {
                     systemPrompt: LIBRARIAN_PROMPT,
                     model: getBuiltinModel(

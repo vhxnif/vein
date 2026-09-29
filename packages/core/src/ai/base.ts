@@ -2,6 +2,10 @@
 // ── Pi SDK imports (centralized barrel — update here on breaking changes) ──
 // complete: still in compat (not yet deprecated)
 
+import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import process from 'node:process'
 import {
     Agent,
     type AgentMessage,
@@ -14,9 +18,10 @@ import {
     type Tool,
     Type,
 } from '@earendil-works/pi-ai'
-import { complete } from '@earendil-works/pi-ai/compat'
+import { complete, streamSimple } from '@earendil-works/pi-ai/compat'
 // getBuiltin*: non-deprecated replacements for getModel/getModels/getProviders
 import {
+    builtinProviders,
     getBuiltinModel,
     getBuiltinModels,
     getBuiltinProviders,
@@ -24,7 +29,6 @@ import {
 
 import { logger } from '../config/index.ts'
 import type { ModelProvider } from '../config/type.ts'
-import { isProviderConfigured } from './provider-env.ts'
 
 export type {
     AgentMessage,
@@ -62,6 +66,7 @@ export {
     getBuiltinModel,
     getBuiltinModels,
     getBuiltinProviders,
+    streamSimple,
     Type,
 }
 
@@ -180,6 +185,35 @@ function createSummarizer(provider?: ModelProvider) {
             ],
         })
         return msg.content.findLast((it) => it.type === 'text')?.text ?? ''
+    }
+}
+
+function expandTilde(path: string): string {
+    if (path.startsWith('~/')) return join(homedir(), path.slice(2))
+    return path
+}
+
+const authCtx = {
+    env: async (name: string) => process.env[name],
+    fileExists: async (path: string) => existsSync(expandTilde(path)),
+}
+
+/**
+ * Check whether a provider has detectable credentials in the environment.
+ * Uses the provider's own auth resolution, so it stays in sync with pi-ai.
+ */
+async function isProviderConfigured(provider: string): Promise<boolean> {
+    const p = builtinProviders().find((p) => p.id === provider)
+    if (!p?.auth.apiKey?.resolve) return false
+    try {
+        const result = await p.auth.apiKey.resolve({
+            ctx: authCtx,
+            credential: undefined,
+            signal: new AbortController().signal,
+        })
+        return result !== undefined
+    } catch {
+        return false
     }
 }
 

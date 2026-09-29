@@ -28,10 +28,10 @@ The current Pi import surface used by Vein lives in `packages/core/src/ai/base.t
 
 | Import source | What we use | Notes |
 |---|---|---|
-| `pi-ai/compat` | `complete` | Old global API, still here as of 0.80.x |
-| `pi-ai/providers/all` | `getBuiltinModel`, `getBuiltinModels`, `getBuiltinProviders` | Non-deprecated replacements for `getModel`/`getModels`/`getProviders` |
+| `pi-ai/compat` | `complete`, `streamSimple` | Old global API, still here as of 0.87.x |
+| `pi-ai/providers/all` | `builtinProviders`, `getBuiltinModel`, `getBuiltinModels`, `getBuiltinProviders` | Non-deprecated replacements for `getModel`/`getModels`/`getProviders` |
 | `pi-ai` (root) | `Type`, `KnownProvider`, `Message`, `Tool` | Types and schema builder, stable |
-| `pi-agent-core` (root) | `Agent`, `AgentMessage`, `AgentTool`, `AgentToolResult` | Stable |
+| `pi-agent-core` (root) | `Agent`, `AgentMessage`, `AgentTool`, `AgentToolResult` | `AgentOptions.streamFn` is required as of 0.87.1 — pass `streamSimple` |
 
 ### 3. Update package.json
 
@@ -84,3 +84,4 @@ bun run --filter @vein/cli build
 - **0.80.3 → 0.80.6** (Jul 2026): No breaking changes. New: `max` thinking level (added across all thinkingLevel type unions), input-based pricing tiers, `before_provider_headers` hook, `InlineExtension`, `agent_settled` events, public SDK model-resolution exports.
 - **0.80.6 → 0.80.7** (Jul 2026): No breaking changes for vein. Breaking upstream: `sendSessionIdHeader` → `sessionAffinityFormat` (not used by vein). New: dynamic tool loading, Ctrl+X message copy, Fable 5 xhigh/max thinking, `toolChoice` for OpenAI/Codex Responses.
 - **0.80.7 → 0.80.10** (Jul 2026): No breaking changes for vein. Breaking upstream (0.80.8): `AuthStorage`/`ModelRegistry` → `ModelRuntime` (not used by vein). New (0.80.9): Kimi K3, deferred tool loading, removed old Grok 3/4.20 models. Fix (0.80.10): restored xAI models.
+- **0.80.10 → 0.87.1** (Sep 2026): `AgentOptions.streamFn` is now required — pass `streamSimple` from `/compat` (it normalizes the `TranscriptContext` the agent supplies, so it is idempotent). `auth.apiKey.resolve()` now requires a `signal`; added an `AbortController` signal in `isProviderConfigured`. Inlined `provider-env.ts` into `base.ts` so it is the **only** file importing `@earendil-works/*`. TypeBox aliases upgraded to 1.3.7 (only `Type.String/Object/Optional/Number` used, all safe). Other breaking upstream changes affect extensions/`ModelRegistry`/`SessionManager`/custom providers only (not used by vein).

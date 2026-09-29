@@ -4,7 +4,13 @@ import { logger } from '../config/index.ts'
 import type { ModelProvider } from '../config/type.ts'
 import * as store from '../store/index.ts'
 import type { AgentMessage, ThinkingLevel } from './base.ts'
-import { Agent, getBuiltinModel, getModelProvider, Type } from './base.ts'
+import {
+    Agent,
+    getBuiltinModel,
+    getModelProvider,
+    streamSimple,
+    Type,
+} from './base.ts'
 import type { ReviewResult } from './sub-agents/reviewer.ts'
 import { createReviewResultTool } from './sub-agents/reviewer.ts'
 import {
@@ -357,6 +363,7 @@ export function createLibrarianAgent(
     let mainToolCallCount = 0
 
     const agent = new Agent({
+        streamFn: streamSimple,
         initialState: {
             systemPrompt,
             model,
